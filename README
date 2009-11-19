@@ -1,0 +1,110 @@
+
+Forks version 0.04
+========================
+
+Forks provides drop-in replacements for the Perl
+fork(), wait(), and waitpid() functions to provide
+additional features for spawning background processes
+and managing them, including:
+
+   *  forking to shell command or subroutine
+
+      can specify a shell command or a Perl subroutine
+      (name or code reference) to invoke in the child
+      process
+
+   *  setting deadlines
+
+      can specify a deadline (in relative or absolute
+      time) for a background process to complete. 
+      The background process will be killed if it does
+      not complete by the deadline.
+
+   *  throttling
+
+      Limiting the number of simultaneous processes.
+      Callers can install their own functions to determine
+      when the system is too busy to launch another
+      job.
+
+   *  dependencies
+
+      Jobs can be specified to wait until other jobs
+      have started and/or completed before they can begin.
+
+   *  deferred jobs
+
+      Jobs can be specified to start at some specific time in
+      the future, or to be launched under some specific
+      future conditions. Arbitrary priorities can be
+      assigned to jobs so that more urgent jobs will be
+      launched first
+
+   *  access to standard child filehandles
+
+      Parent process can have access to STDIN, STDOUT,
+      and STDERR filehandles of child processes to
+      facilitate interprocess communication
+      
+   *  operating system features
+
+      On some operating systems, the priority and CPU affinity
+      of the child processes can be set.
+
+
+INSTALLATION
+
+The typical installation recipe
+
+   perl Makefile.PL
+   make
+   make test
+   make install
+
+usually works. A few of the tests are subject to some
+hard-to-investigate race conditions and may fail
+intermittently. Running "make test" again or installing
+the "Time::HiRes" module may increase the chance of
+passing the test phase.
+
+In many tests, long delays are induced so that various
+timing conditions can be validated. You should not infer
+from the long running time of the tests that this module
+will degrade your scripts' performance.
+
+
+DEPENDENCIES
+
+This module requires these other modules and libraries,
+all included with the standard distribution:
+
+    Carp
+    Exporter
+    POSIX
+    File::Path
+    IO::Handle
+
+Forks recommends and will make use of the following 
+modules if they are installed, but will still be able
+to perform all of its functions without using them:
+
+    Time::HiRes
+    Win32::Process [XXX]
+
+
+WINDOWS
+
+This module contains many known issues when it is
+used with Windows systems. See the  README.windows
+file for important information.
+
+
+COPYRIGHT AND LICENCE
+
+Copyright (c) 2009, Marty O'Brien.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
+
+
