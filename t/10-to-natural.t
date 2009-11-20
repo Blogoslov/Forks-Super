@@ -21,7 +21,7 @@ if ($pid == 0) {
 }
 ok(_isValidPid($pid), "pid $pid shows child proc");
 ok($$ == $Forks::Super::MAIN_PID, "parent pid $$ is current pid");
-my $job = Forks::Super::Job::_get($pid);
+my $job = Forks::Super::Job::get($pid);
 ok(defined $job, "got Forks::Super::Job object $job");
 ok($job->{style} eq "natural", "natural style");
 ok($job->{state} eq "ACTIVE", "active state");

@@ -24,7 +24,7 @@ ok($p == -1, "wait after waitall returns -1==$p");
 ok($t >= 5 && $t <= 6, "took ${t}s expected 5-6");
 
 foreach my $pid (@pid) {
-  my $j = Forks::Super::Job::_get($pid);
+  my $j = Forks::Super::Job::get($pid);
   ok(defined $j);
   ok($j->{real_pid} == $pid);
   ok($j->{state} eq "REAPED");

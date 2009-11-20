@@ -4,14 +4,14 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.04
+0.05
 
 =head1 SYNOPSIS
 
     use Forks;
 
     $pid = Forks::Super::fork( \%options );  # see Forks
-    $job = Forks::Super::Job::_get($pid);
+    $job = Forks::Super::Job::get($pid);
     print "Current job state is $job->{state}\n";
     print "Job was created at ", scalar localtime($job->{created}), "\n";
 
@@ -31,8 +31,8 @@ to be created.
 
 =head1 ATTRIBUTES
 
-Use the C<Forks::Super::Job::_get> method to obtain a Forks::Super::Job object for
-examination. The C<Forks::Super::Job::_get> method takes a process ID or
+Use the C<Forks::Super::Job::get> method to obtain a Forks::Super::Job object for
+examination. The C<Forks::Super::Job::get> method takes a process ID or
 job ID as an input (a value that may have been returned from a previous
 call to C<Forks::Super::fork> and returns a reference to a C<Forks::Super::Job>
 object, or C<undef> if the process ID or job ID was not associated

@@ -26,9 +26,9 @@ my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, queue_priority =>
 my $pid3 = fork { sub => sub { }, queue_priority => 5 };
 $t = time - $t;
 ok($t <= 1, "quick return for queued job");
-my $j1 = Forks::Super::Job::_get($pid1);
-my $j2 = Forks::Super::Job::_get($pid2);
-my $j3 = Forks::Super::Job::_get($pid3);
+my $j1 = Forks::Super::Job::get($pid1);
+my $j2 = Forks::Super::Job::get($pid2);
+my $j3 = Forks::Super::Job::get($pid3);
 
 ok($j1->{state} eq "ACTIVE", "first job active");
 ok($j2->{state} eq "DEFERRED", "second job deferred");
@@ -43,14 +43,14 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "block";
 $pid1 = fork { sub => sub { sleep 5 } };
 ok(_isValidPid($pid1), "job 1 started");
-$j1 = Forks::Super::Job::_get($pid1);
+$j1 = Forks::Super::Job::get($pid1);
 
 $t = time;
 $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1 };
-$j2 = Forks::Super::Job::_get($pid2);
+$j2 = Forks::Super::Job::get($pid2);
 ok($j1->{state} eq "COMPLETE", "job 1 complete when job 2 starts");
 $pid3 = fork { sub => sub { } };
-$j3 = Forks::Super::Job::_get($pid3);
+$j3 = Forks::Super::Job::get($pid3);
 $t = time - $t;
 ok($t >= 5, "job 2 took 5s to start");
 
@@ -67,21 +67,21 @@ $Forks::Super::ON_BUSY = "queue";
 
 ok( _isValidPid(  fork( {sub => sub { sleep 2 }} ) ) );
 $pid1 = fork { sub => sub { sleep 3 } };
-$j1 = Forks::Super::Job::_get($pid1);
+$j1 = Forks::Super::Job::get($pid1);
 ok($j1->{state} eq "ACTIVE", "first job running");
 
 $pid2 = fork { sub => sub { sleep 3 }, queue_priority => 0 };
-$j2 = Forks::Super::Job::_get($pid2);
+$j2 = Forks::Super::Job::get($pid2);
 ok($j2->{state} eq "DEFERRED", "job 2 waiting");
 
 $pid3 = fork { sub => sub { sleep 1 }, depend_on => $pid2, 
 	       queue_priority => 1 };
-$j3 = Forks::Super::Job::_get($pid3);
+$j3 = Forks::Super::Job::get($pid3);
 ok($j3->{state} eq "DEFERRED", "job 3 waiting");
 
 my $pid4 = fork { sub => sub { sleep 2 }, 
 		  depend_start => $pid2, queue_priority => -1 };
-my $j4 = Forks::Super::Job::_get($pid4);
+my $j4 = Forks::Super::Job::get($pid4);
 ok($j4->{state} eq "DEFERRED", "job 4 waiting");
 
 # without calling run_queue(), first set of jobs might 

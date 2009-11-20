@@ -4,7 +4,6 @@ lib/Forks/Super.pm
 lib/Forks/Super/Job.pod
 Makefile.PL
 MANIFEST
-perl.exe.stackdump
 README
 README.windows
 t/00--pretest-message.t

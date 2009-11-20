@@ -7,11 +7,11 @@ use File::Path;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
-our @EXPORT_OK = qw(_isValidPid);
+our @EXPORT_OK = qw(_isValidPid pause);
 our %EXPORT_TAGS = ( 'test' =>  [ @EXPORT, '_isValidPid' ],
 		     'Win32' => [ @EXPORT, '_isValidPid' ]);
 
@@ -27,7 +27,7 @@ $Forks::Super::MAX_LOAD = 0;
 $Forks::Super::DEBUG = 0;
 
 open(Forks::Super::DEBUG, '>&', STDERR) or *Forks::Super::DEBUG = *STDERR 
-  or carp "Debugging not available in Forks module!\n";
+  or carp "Debugging not available in Forks::Super module!\n";
 $Forks::Super::ON_BUSY = 'block';
 $Forks::Super::CHILD_FORK_OK = 0;
 $Forks::Super::QUEUE_MONITOR_FREQ = 30;
@@ -35,7 +35,7 @@ $Forks::Super::REAP_NOTHING_MSGS = 0;
 $Forks::Super::NUM_PAUSE_CALLS = 0;
 $Forks::Super::NEXT_DEFERRED_ID = -100000;
 %Forks::Super::CONFIG = ();          # XXX - run some configuration to see
-                              #       what functionality is available
+                                     #       what functionality is available
 
 my $z = eval { getpgrp() };
 if ($@) { $Forks::Super::CONFIG{getpgrp} = 0 } else { $Forks::Super::CONFIG{getpgrp} = 1 };
@@ -82,9 +82,7 @@ sub wait {
   return Forks::Super::waitpid(-1,0);
 }
 
-#
-# McCabe 29
-#
+# (McCabe score on this subroutine is 29)
 sub waitpid {
   my ($target,$flags,@dummy) = @_;
   _handle_CHLD(-1) if $^O eq "MSWin32";
@@ -722,7 +720,7 @@ use Carp;
 use IO::Handle;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 
 $Forks::Super::Job::DEFAULT_QUEUE_PRIORITY = 0;
@@ -973,7 +971,7 @@ sub launch {
 }
 
 # returns a Forks::Super::Job object with the given identifier
-sub _get {
+sub get {
   my $id = shift;
   return $Forks::Super::ALL_JOBS{$id} if defined $Forks::Super::ALL_JOBS{$id};
   my @j = grep { defined $_->{pid}  &&  $_->{pid}==$id } @Forks::Super::ALL_JOBS;
@@ -1223,7 +1221,7 @@ sub END_cleanup {
     if (defined @Forks::Super::FH_FILES) {
       foreach my $fh_file (@Forks::Super::FH_FILES) {
 	unless (unlink $fh_file) {
-	  warn "Forks END: possible issue removing temp file $fh_file: $!\n";
+	  warn "Forks::Super END: possible issue removing temp file $fh_file: $!\n";
 	}
       }
     }
@@ -1641,15 +1639,15 @@ __END__
 
 =head1 NAME
 
-Forks - extensions and convenience methods for managing background processes.
+Forks::Super - extensions and convenience methods for managing background processes.
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =head1 SYNOPSIS
 
-    use Forks;
+    use Forks::Super;
 
     # familiar use - parent return PID>0, child returns zero
     $pid = fork();
@@ -2399,7 +2397,7 @@ finish and are reaped. These frequent interruptions can
 affect the execution of your program. For example, in
 this script:
 
-    1: use Forks;
+    1: use Forks::Super;
     2: fork(sub => sub { sleep 2 });
     3: sleep 5;
     4: # ... program continues ...

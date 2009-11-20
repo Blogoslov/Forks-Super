@@ -19,7 +19,7 @@ ok(_isValidPid($pid1) and _isValidPid($pid2));
 my $pid3 = fork { sub => sub { sleep 5 } };
 ok(@Forks::Super::QUEUE == 1);
 ok($pid3 < -10000);
-my $j = Forks::Super::Job::_get($pid3);
+my $j = Forks::Super::Job::get($pid3);
 ok(defined $j);
 ok($j->{state} eq "DEFERRED");
 
@@ -51,9 +51,9 @@ ok($ordinary > $mild && $mild > $urgent);
 
 waitall;
 
-my $jo = Forks::Super::Job::_get($ordinary);
-my $jm = Forks::Super::Job::_get($mild);
-my $ju = Forks::Super::Job::_get($urgent);
+my $jo = Forks::Super::Job::get($ordinary);
+my $jm = Forks::Super::Job::get($mild);
+my $ju = Forks::Super::Job::get($urgent);
 
 ok($jo->{state} eq "REAPED" and $jm->{state} eq "REAPED" and $ju->{state} eq "REAPED");
 if (Forks::Super::CONFIG("Time::HiRes")) {

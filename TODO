@@ -14,7 +14,7 @@ Possible TODOs:
 		pass standard input to the child in a list at fork time.
                 This seems more satisfactory for a  cmd  style fork that
                 possibly can't wait for the parent to write to 
-                Forks::CHILD_STDIN{$pid}.
+                Forks::Super::CHILD_STDIN{$pid}.
 
          fork { stdout => \@output, stderr => \@error }
 
@@ -25,7 +25,7 @@ Possible TODOs:
          fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
 
 		open input and output filehandles in the child with the given names,
-		accessible in the parent at something like $Forks::filehandles{$pid}{X}
+		accessible in the parent at something like $Forks::Super::filehandles{$pid}{X}
 
          incorporate CPU load into system busy-ness calc (see Parallel::ForkControl)
 
@@ -53,7 +53,7 @@ Possible TODOs:
 
          fork { debug => $boolean }
 
-                override $Forks::DEBUG for this job
+                override $Forks::Super::DEBUG for this job
 
          fork { cpu_affinity => $bitmask }
 
@@ -82,4 +82,8 @@ Possible TODOs:
 	 fork { name => $name }
 
 		Change ps() listing as in Parallel::ForkControl, or give
-		another way to lookup a job object from Forks::Job::_get.
+		another way to lookup a job object from Forks::Super::Job::get.
+
+         support some more configuration in import
+
+                use Forks::Super MAX_PROC => 5, CHILD_FORK_OK => -1, ... ;

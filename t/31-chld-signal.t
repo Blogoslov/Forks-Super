@@ -37,7 +37,7 @@ if (defined $pid && $pid == 0) {
   Forks::Super::child_exit 0;
 }
 ok(defined $pid && _isValidPid($pid), "valid pid $pid");
-my $j = Forks::Super::Job::_get($pid);
+my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 my $t = time;
 sleep 6;   # ACK! sleep can be interrupted by CHLD signal!
@@ -72,7 +72,7 @@ if (defined $pid && $pid == 0) {
   Forks::Super::child_exit 0;
 }
 ok(defined $pid && _isValidPid($pid), "valid pid $pid");
-$j = Forks::Super::Job::_get($pid);
+$j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 $t = time;
 Forks::Super::pause 6;   # ACK! sleep can be interrupted by CHLD signal!

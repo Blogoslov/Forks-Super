@@ -48,7 +48,7 @@ sub try_to_fork_from_child {
     Forks::Super::child_exit 23;
   }
   if (_isValidPid($child_fork_pid)) {
-    my $j = Forks::Super::Job::_get($child_fork_pid);
+    my $j = Forks::Super::Job::get($child_fork_pid);
     if (not defined $j) {
       # normal (CORE::) fork. No child job created.
       Forks::Super::child_exit 25;
