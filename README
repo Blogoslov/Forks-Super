@@ -1,8 +1,8 @@
 
-Forks version 0.04
-========================
+Forks::Super version 0.06
+=========================
 
-Forks provides drop-in replacements for the Perl
+Forks::Super provides drop-in replacements for the Perl
 fork(), wait(), and waitpid() functions to provide
 additional features for spawning background processes
 and managing them, including:
@@ -84,13 +84,11 @@ all included with the standard distribution:
     File::Path
     IO::Handle
 
-Forks recommends and will make use of the following 
+Forks::Super recommends and will make use of the following 
 modules if they are installed, but will still be able
 to perform all of its functions without using them:
 
     Time::HiRes
-    Win32::Process [XXX]
-
 
 WINDOWS
 

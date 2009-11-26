@@ -3,7 +3,10 @@ use POSIX ':sys_wait_h';
 use Test::More tests => 143;
 use strict;
 use warnings;
-alarm 90;$SIG{ALRM}=sub{die "Timeout\n"};
+
+if (Forks::Super::CONFIG("alarm")) {
+  alarm 90;$SIG{ALRM}=sub{die "Timeout\n"};
+}
 
 #
 # tests the Forks::Super::waitpid call.
@@ -16,18 +19,18 @@ my $t = time;
 my $p = waitpid $pid, WNOHANG;
 $t = time - $t;
 my $s = $?;
-ok(_isValidPid($pid));
+ok(isValidPid($pid), "fork successful");
 ok($p == $pid, "waitpid on $pid returns $p");
-ok($t <= 1);
-ok($s == 512);
+ok($t <= 1, "no delay for waitpid call");
+ok($s == 512, "waitpid captured exit status");
 
 ############################################
 
 $pid = fork { 'sub' => sub { sleep 3; exit 3 } };
-ok(_isValidPid($pid));
+ok(isValidPid($pid), "fork successful");
 $t = time;
 $p = waitpid $pid,WNOHANG;
-ok($p == -1);
+ok($p == -1, "non-blocking waitpid returned -1");
 ok(-1 == waitpid ($pid + 10, WNOHANG), "return -1 for invalid target");
 ok(-1 == waitpid ($pid + 10, 0), "fast return -1 for invalid target");
 $t = time - $t;
@@ -36,9 +39,9 @@ $t = time;
 $p = waitpid $pid, 0;
 $t = time - $t;
 $s = $?;
-ok($p==$pid);
+ok($p==$pid, "blocking waitpid returned real pid");
 ok($t >= 3, "blocked return");
-ok($s == 768);
+ok($s == 768, "waitpid captured exit status");
 
 ############################################
 
@@ -46,7 +49,7 @@ my %x;
 $Forks::Super::MAX_PROC = 100;
 for (my $i=0; $i<20; $i++) {
   my $pid = fork { 'sub' => sub { my $d=int(2+8*rand); sleep $d; exit $i } };
-  ok(_isValidPid($pid), "Launched $pid");
+  ok(isValidPid($pid), "Launched $pid");
   $x{$pid} = $i;
 }
 $t = time;
@@ -60,7 +63,7 @@ while (0 < scalar keys %x) {
     } else {
       $p = waitpid $pid, WNOHANG;
     }
-    if (_isValidPid($p)) {
+    if (isValidPid($p)) {
       ok($p == $pid, "Reaped $p");
       ok($? >> 8 == $x{$p}, "$p correct exit code $x{$p}");
       delete $x{$p};
@@ -71,7 +74,7 @@ while (0 < scalar keys %x) {
 }
 
 $t = time - $t;
-ok($t >= 6 && $t <= 10);
+ok($t >= 6 && $t <= 10, "waitpid on multi-procs took ${t}s, expected 6-10s");
 $t = time;
 
 for (my $i=0; $i<5; $i++) {
@@ -80,7 +83,7 @@ for (my $i=0; $i<5; $i++) {
 }
 $t = time - $t;
 
-ok($t <= 1);
+ok($t <= 1, "waitpid on nothing caused no delay");
 
 ############################################
 
@@ -97,13 +100,15 @@ for (my $i=0; $i<20; $i++) {
   my $pid = fork { 'sub' => sub { srand();
 				  my $d=int(2+8*rand);
 				  sleep $d; exit $i } };
-  ok(_isValidPid($pid), "Launched $pid");
+  ok(isValidPid($pid), "Launched $pid");
   $x{$pid} = $i;
 }
 
 $t = time;
 SKIP: {
-  skip "Can't test waitpid on pgid on Win32", 44 if $^O eq "MSWin32";
+  if (!Forks::Super::CONFIG("getpgrp")) {
+    skip "$^O,$]: Can't test waitpid on pgid", 44;
+  }
 
   my $pgid = getpgrp();
   my $bogus_pgid = $pgid + 175;
@@ -126,8 +131,9 @@ SKIP: {
     }
     if ($p == -1 && $z <= 0.5) {
       ok(0, "waitpid did not block $z");
+      if ($z > 0.4) { delete $x{(keys%x)[0]}  }
     } elsif (defined $x{$p}) {
-      ok(_isValidPid($p), "Reaped $p");
+      ok(isValidPid($p), "Reaped $p");
       ok($? >> 8 == $x{$p}, "$p correct exit code $x{$p}");
       delete $x{$p};
     } else {

@@ -10,16 +10,16 @@ BEGIN {
 	use_ok('Forks::Super');
 }
 
-ok(\&Forks::Super::fork ne \&CORE::fork);
-ok(\&fork eq \&Forks::Super::fork);
+ok(\&Forks::Super::fork ne \&CORE::fork, "CORE::fork != default fork");
+ok(\&fork eq \&Forks::Super::fork, "fork exported to default namespace");
 
-ok(\&wait ne \&CORE::wait);
-ok(\&wait eq \&Forks::Super::wait);
+ok(\&wait ne \&CORE::wait, "default wait != CORE::wait");
+ok(\&wait eq \&Forks::Super::wait, "wait exported to default namespace");
 
-ok(\&waitpid ne \&CORE::waitpid);
-ok(\&waitpid eq \&Forks::Super::waitpid);
+ok(\&waitpid ne \&CORE::waitpid, "default waitpid != CORE::waitpid");
+ok(\&waitpid eq \&Forks::Super::waitpid, "waitpid exported to default namespace");
 
-ok(\&waitall eq \&Forks::Super::waitall);
+ok(\&waitall eq \&Forks::Super::waitall, "waitall exported to default namespace");
 
 my $t = fork {'__test' => 14}  ;
 ok($t == 14, "fork invokes Forks::Super::fork, not CORE::fork");

@@ -23,14 +23,15 @@ my $pid1 = fork { 'sub' => $sleepy };
 my $pid2 = fork { 'sub' => $sleepy };
 my $pid3 = fork { 'sub' => $sleepy };
 $t = time - $t;
-ok($t <= 1);
-ok(_isValidPid($pid1) && _isValidPid($pid2) && _isValidPid($pid3));
+ok($t <= 1, "three forks with no delay");
+ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
+   "forks successful");
 
 $t = time;
 my $pid4 = fork { 'sub' => $sleepy };
 $t = time - $t;
-ok($t >= 2);
-ok(_isValidPid($pid4), "blocking fork returns valid pid $pid4");
+ok($t >= 2, "blocked fork");
+ok(isValidPid($pid4), "blocking fork returns valid pid $pid4");
 waitall;
 
 #######################################################
@@ -41,8 +42,9 @@ $pid1 = fork { 'sub' => $sleepy };  # ok 1/3
 $pid2 = fork { 'sub' => $sleepy };  # ok 2/3
 $pid3 = fork { 'sub' => $sleepy };  # ok 3/3
 $t = time - $t;
-ok($t <= 1);
-ok(_isValidPid($pid1) && _isValidPid($pid2) && _isValidPid($pid3));
+ok($t <= 1, "three forks no delay");
+ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
+   "three successful forks");
 
 
 $t = time;
@@ -50,7 +52,7 @@ $pid4 = fork { 'sub' => $sleepy };     # should fail .. already 3 procs
 my $pid5 = fork { 'sub' => $sleepy };  # should fail
 my $u = time - $t;
 ok($u <= 1, "Took ${u}s expected fast fail 0-1s");
-ok(!_isValidPid($pid4) && !_isValidPid($pid5));
+ok(!isValidPid($pid4) && !isValidPid($pid5), "failed forks");
 waitall;
 $t = time - $t;
 

@@ -1,12 +1,12 @@
 
-README.windows file for Forks module
-====================================
+README.windows file for Forks::Super module
+===========================================
 
 Many standard functions of Perl are not
 supported or not completely supported in
 most of the ports to Windows, including
 many features that would be useful to the
-Forks module.
+Forks::Super module.
 
 1. Process groups and pseudo-process IDs
 
@@ -14,14 +14,14 @@ On Un*x systems, a process group is identified
 with a negative value. In a Perl script, it can
 be obtained with the getpgrp() function or set
 with the setpgrp() function. A process group can
-be used as an argument to  Forks::waitpid  to wait
+be used as an argument to  Forks::Super::waitpid  to wait
 on any process that belongs to a process group.
 
 In Windows, the getpgrp() and setpgrp() functions
 are usually not supported, and the Perl  fork
 call will usually return a negative value that
 represents a psuedo-process id. On a Windows system,
-calling  Forks::waitpid  with a negative value on
+calling  Forks::Super::waitpid  with a negative value on
 a Windows system will be interpreted as waiting 
 on a single child process with the specified 
 pseudo-process ID.
@@ -36,7 +36,7 @@ are often not supported on Windows. There are
 equivalent ways of getting and setting process
 priority in Windows, but they are not very well
 implemented in the current version of this module,
-and so calling  Forks::fork  with an  os_priority
+and so calling  Forks::Super::fork  with an  os_priority
 option in Windows may have no effect.
 
 A future release of this module should make this
@@ -46,7 +46,7 @@ Win32::Process .
 
 3. Signal handling
 
-The Forks module provides features such as job
+The Forks::Super module provides features such as job
 throttling (limiting the number of simultaneous
 background proceses that can be running), job
 dependencies (where one job will not start until
@@ -55,18 +55,18 @@ finished), and job deferral (scheduling a job to
 start at a future time). When a child process
 finishes, this is often a trigger for other
 child processes to begin. So it is important for
-the Forks module to be able to detect when a
+the Forks::Super module to be able to detect when a
 child process has finished.
 
 On POSIX systems, child processes send a SIGCHLD
 signal to the parent process when they complete.
-The Forks module will install a SIGCHLD handler
+The Forks::Super module will install a SIGCHLD handler
 that will manage cleanup of completed child
 processes and attempt to dispatch the jobs that
 are deferred. A SIGUSR1 handler may also be
 installed. The SIGUSR1 handler may periodically
 receive signals from a background process that 
-will cause the Forks module to attempt to 
+will cause the Forks::Super module to attempt to 
 dispatch deferred jobs from the queue. The design
 goal was to keep these operations as transparent to
 the user as possible. 
@@ -78,14 +78,14 @@ and so the parent process must poll the operating
 system to determine when child processes are
 complete. This polling must occur in the main
 execution thread. Such polling is built into
-functions like  Forks::wait  and  Forks::waitpid,
+functions like  Forks::Super::wait  and  Forks::Super::waitpid,
 but it is up to the caller whether these functions
 are called in a timely manner. Windows users are
-recommended to use the  Forks::pause  function
+recommended to use the  Forks::Super::pause  function
 as a *productive* drop-in replacement for the 
-Perl  sleep  system call. The  Forks::pause  function
+Perl  sleep  system call. The  Forks::Super::pause  function
 will perform operating system polling and queue
-management. The caller may also invoke  Forks::pause
+management. The caller may also invoke  Forks::Super::pause
 with an argument of  0  to perform these child
 management functions but without any additional
 delay.
@@ -96,7 +96,7 @@ It is said that the Perl  alarm  system call is
 not fully supported on all systems (though I have yet
 to find one that doesn't support it). The feature
 of passing a  timeout  or  expiration  option to a
-Forks::fork  call depends on this feature, so the call
+Forks::Super::fork  call depends on this feature, so the call
 will fail when used with those options on systems that
 cannot support  alarm().
 

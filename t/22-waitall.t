@@ -25,10 +25,10 @@ ok($t >= 5 && $t <= 6, "took ${t}s expected 5-6");
 
 foreach my $pid (@pid) {
   my $j = Forks::Super::Job::get($pid);
-  ok(defined $j);
-  ok($j->{real_pid} == $pid);
-  ok($j->{state} eq "REAPED");
-  ok($j->{status} == $x{$pid});
+  ok(defined $j, "exercise $pid Forks::Super::Job::get");
+  ok($j->{real_pid} == $pid, "real_pid == pid for regular job");
+  ok($j->{state} eq "REAPED", "waitall puts jobs in REAPED state");
+  ok($j->{status} == $x{$pid}, "exit status was captured");
 }
 
 __END__

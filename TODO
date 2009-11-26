@@ -3,41 +3,42 @@ Feel free to share your thoughts with me at  mob@cpan.org .
 
 Possible TODOs:
 
-         wait     timeout
-         waitpid  timeout
-         waitall  timeout
+	wait     timeout
+        waitpid  timeout
+        waitall  timeout
 
 		wait calls that block for only a limited time
          
-         fork { stdin => \@STDIN }
+        fork { stdin => \@STDIN }
 
 		pass standard input to the child in a list at fork time.
                 This seems more satisfactory for a  cmd  style fork that
                 possibly can't wait for the parent to write to 
-                Forks::Super::CHILD_STDIN{$pid}.
+        	Forks::Super::CHILD_STDIN{$pid}.
 
-         fork { stdout => \@output, stderr => \@error }
+        fork { stdout => \@output, stderr => \@error }
 
                 when the child process completes, collect its stdout and stderr
                 output into the specified arrays. This will conserve filehandles
                 in the parent.
 
-         fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
+        fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
 
 		open input and output filehandles in the child with the given names,
-		accessible in the parent at something like $Forks::Super::filehandles{$pid}{X}
+		accessible in the parent at something like 
+		$Forks::Super::filehandles{$pid}{X}
 
-         incorporate CPU load into system busy-ness calc (see Parallel::ForkControl)
+        incorporate CPU load into system busy-ness calc (see Parallel::ForkControl)
 
-	 incorporate free memory into system busy-ness calc (Parallel::ForkControl)
+	incorporate free memory into system busy-ness calc (Parallel::ForkControl)
 
-         implement child handles as sockets. May (or may not be) more robust
-         than filehandles, or useful as backup when there are no more filehandles
-	 available
+        implement child handles as sockets. May (or may not be) more robust
+        than filehandles, or useful as backup when there are no more filehandles
+	available
 
-	 implement child handles through IO::Pipe objects
+	implement child handles through IO::Pipe objects
 
-         fork { callback => \&method }
+        fork { callback => \&method }
 
                 subroutine to call in the parent process when the child finishes
 
@@ -47,15 +48,15 @@ Possible TODOs:
 			callback for a child getting put on queue
 			callback for a fatal error in child
 
-         facilities to suspend jobs when the system gets to busy
-         and to resume them when the system gets less busy.
-         I bet this will be hard to do with Win32.
+        facilities to suspend jobs when the system gets to busy
+        and to resume them when the system gets less busy.
+        I bet this will be hard to do with Win32.
 
-         fork { debug => $boolean }
+        fork { debug => $boolean }
 
-                override $Forks::Super::DEBUG for this job
+        	override $Forks::Super::DEBUG for this job
 
-         fork { cpu_affinity => $bitmask }
+        fork { cpu_affinity => $bitmask }
 
                 <OLD POD>
                 On supported systems with multiple cores, and after the successful
@@ -65,25 +66,52 @@ Possible TODOs:
                 by this process.
                 </OLD POD>
 
-         Currently USR1 is used to signal the program to analyze the queue.
-         Make the signal configurable.
+                _x_ linux [sort of, still undocumented]
+		___ MSWin32
+		___ BSD
+		___ Cygwin
 
-         Fully support changing process priority in Windows. Maybe this
-	 can be done with Win32::Process .
+	Currently USR1 is used to signal the program to analyze the queue.
+        Make the signal configurable.
 
-	 Support for launching tasks on remote hosts (maybe that's beyond
-         the scope of this module) See Paralell::PVM?
+        Fully support changing process priority in Windows. Maybe this
+	can be done with Win32::Process .
 
-         fork { retries => $ntries }
+	Support for launching tasks on remote hosts (maybe that's beyond
+        the scope of this module) See Paralell::PVM?
+
+        fork { retries => $ntries }
 
 		like Proc::Fork. Call CORE::fork() several times if
 		it's not creating child processes.
 
-	 fork { name => $name }
+	fork { name => $name }
 
 		Change ps() listing as in Parallel::ForkControl, or give
 		another way to lookup a job object from Forks::Super::Job::get.
 
-         support some more configuration in import
+        support some more configuration in import
 
                 use Forks::Super MAX_PROC => 5, CHILD_FORK_OK => -1, ... ;
+		_X_ MAX_PROC
+		_X_ MAX_LOAD
+		_X_ DEBUG
+		_X_ ON_BUSY
+		_X_ CHILD_FORK_OK
+		_X_ QUEUE_MONITOR_FREQ
+		_X_ FH_DIR
+		___ unit tests for this kind of initialization
+
+	clean up temporary files. In some OS,
+	     can't delete files from END block of parent if children
+	     are still using those files. One possible solution might
+             be to launch another background process that will try to
+	     clean up for ~5 minutes
+
+	configure during build. discover the maximum number of simultaneous
+	processes that can be spawned and set MAX_PROC, DEFAULT_MAX_PROC.
+	Would also be good to know the max number of open filehandles
+	and plan around it.
+
+	Forks::Super::Uninterruptable package for "uninterruptable" versions
+	of Perl system calls like  sleep , connect , select($$$$)

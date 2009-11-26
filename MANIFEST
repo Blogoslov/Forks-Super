@@ -20,7 +20,6 @@ t/32-stress-test.t
 t/40-timeout.t
 t/41-filehandles.t
 t/42-filehandles.t
-t/43-sockethandles.t
 t/44-busy.t
 t/45-userbusy.t
 t/50-queue.t
@@ -28,7 +27,7 @@ t/51-delayed.t
 t/52-dependencies.t
 t/60-os.t
 t/external-command.pl
+t/find-limits.pl
 t/out/foo
-t/pod.t
 TODO
 META.yml                                 Module meta-data (added by MakeMaker)

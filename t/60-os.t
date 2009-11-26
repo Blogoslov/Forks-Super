@@ -1,5 +1,5 @@
-use Forks::Super ':test';
-use Test::More tests => 3;
+use Forks::Super ':test_config';
+use Test::More tests => 2;
 use strict;
 use warnings;
 
@@ -23,7 +23,10 @@ SKIP: {
   ok($p2 == $p1 + 3);
 }
 
-my $pid3 = fork { sub => sub { sleep 5 },  cpu_affinity => 0x02 };
-ok(_isValidPid($pid3), "valid pid attempting to use only 2nd CPU");
+if (0) {
+  # placeholder for function to update CPU affinity.
+  my $pid3 = fork { sub => sub { sleep 5 },  cpu_affinity => 0x02 };
+  ok(isValidPid($pid3), "valid pid attempting to use only 2nd CPU");
+}
 
 waitall;

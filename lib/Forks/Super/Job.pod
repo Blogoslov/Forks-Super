@@ -4,13 +4,13 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.05
+0.06
 
 =head1 SYNOPSIS
 
-    use Forks;
+    use Forks::Super;
 
-    $pid = Forks::Super::fork( \%options );  # see Forks
+    $pid = Forks::Super::fork( \%options );  # see Forks::Super
     $job = Forks::Super::Job::get($pid);
     print "Current job state is $job->{state}\n";
     print "Job was created at ", scalar localtime($job->{created}), "\n";
@@ -191,6 +191,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 Copyright (c) 2009, Marty O'Brien.
 
 This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself. 
+under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available. 
 
 =cut

@@ -1,5 +1,5 @@
 #! perl
-# external-command.pl
+# $^X external-command.pl [options]
 #
 # We don't know what OS and environment we are testing on.
 # The only external program we can be confident about having
@@ -16,14 +16,14 @@
 #   -o=file       redirect standard output to file
 #   -p            outputs the parent PID
 #   -x=z          exit with code <z>
-#   -y=n          read a line from STDIN and print it out <n> times
+#   -y=n          print line from STDIN <n> times to STDOUT, once to STDERR
 #
 #
 # Examples:
 #
-#   perl t/external-command.pl -o=t/out/test -e=Hello, -e=Whirled -p -x=0
+#   $^X t/external-command.pl -o=t/out/test -e=Hello, -e=Whirled -p -x=0
 #
-#
+
 use strict;
 
 $| = 1;
@@ -52,7 +52,12 @@ foreach my $arg (@ARGV) {
   }
 }
 END {
-  print "\n";
+  print OUT "\n";
+  print STDOUT "\n";
+
+  close OUT;
+  close STDOUT;
+  close STDERR;
 }
 
 exit 0;

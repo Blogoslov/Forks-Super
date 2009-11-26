@@ -4,8 +4,10 @@ use Carp;
 use strict;
 use warnings;
 
-alarm 120;
-$SIG{ALRM} = sub { die "Timeout\n" };
+if (Forks::Super::CONFIG("alarm")) {
+  alarm 120;
+  $SIG{ALRM} = sub { die "Timeout\n" };
+}
 
 #
 # test that jobs respect their dependencies.
@@ -42,7 +44,7 @@ ok($j3->{start} < $j2->{start}, "job 3 started before job 2");
 $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "block";
 $pid1 = fork { sub => sub { sleep 5 } };
-ok(_isValidPid($pid1), "job 1 started");
+ok(isValidPid($pid1), "job 1 started");
 $j1 = Forks::Super::Job::get($pid1);
 
 $t = time;
@@ -65,7 +67,7 @@ ok($j3->{start} >= $j2->{start}, "job 3 started after job 2");
 $Forks::Super::MAX_PROC = 2;
 $Forks::Super::ON_BUSY = "queue";
 
-ok( _isValidPid(  fork( {sub => sub { sleep 2 }} ) ) );
+ok( isValidPid(  fork( {sub => sub { sleep 2 }} ) ) , "fork successful");
 $pid1 = fork { sub => sub { sleep 3 } };
 $j1 = Forks::Super::Job::get($pid1);
 ok($j1->{state} eq "ACTIVE", "first job running");
@@ -93,7 +95,9 @@ ok($j4->{start} >= $j2->{start}, "job 4 respected depend_start for job2");
 ok($j3->{start} >= $j2->{end}, "job 3 respected depend_on for job2");
 ok($j4->{start} < $j3->{start}, "low priority job 4 start before job 3");
 
-alarm 0;
+if (Forks::Super::CONFIG("alarm")) {
+  alarm 0;
+}
 
 __END__
     $pid1 = fork { cmd => $job1 };

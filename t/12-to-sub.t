@@ -56,7 +56,7 @@ unlink "t/out/test2";
 my $pid = fork { sub => 'main::internal_command',
 		args => [ "-o=t/out/test2", "-e=Hello,", 
                           "-e=Wurrled", "-p" ] };
-ok(_isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
+ok(isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
 my $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
@@ -73,7 +73,7 @@ ok($z eq $target_z,
 unlink "t/out/test2";
 $pid = fork { sub => \&internal_command,
 		args => ["-o=t/out/test2", "-e=Hello,", "-e=Wurrled", "-p" ] };
-ok(_isValidPid($pid), "fork to \\\&subroutine successful");
+ok(isValidPid($pid), "fork to \\\&subroutine successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
@@ -95,7 +95,7 @@ $pid = fork { sub => sub { my (@x) = @_;
 			   exit 1;	
 			 },
 			   args => [ "Hello", "-", "World" ] };
-ok(_isValidPid($pid), "fork to anonymous sub successful");
+ok(isValidPid($pid), "fork to anonymous sub successful");
 $p = wait;
 ok($?>>8 == 1, "child status $? \$? != 0");
 ok($pid == $p, "wait reaped child $pid == $p");
@@ -110,7 +110,7 @@ ok($z eq $target_z,
 # test that timing of reap is correct
 
 $pid = fork { sub => sub { sleep 3 } };
-ok(_isValidPid($pid), "fork to sleepy sub ok");
+ok(isValidPid($pid), "fork to sleepy sub ok");
 my $t = time;
 $p = wait;
 $t = time - $t;
@@ -122,7 +122,7 @@ ok($t >= 3 && $t <= 4, "background sub ran ${t}s, expected 3-4s");
 # test exit status
 
 $pid = fork { sub => sub { exit 7 } };
-ok(_isValidPid($pid), "fork to false sub ok");
+ok(isValidPid($pid), "fork to false sub ok");
 $p = Forks::Super::wait;
 ok($p == $pid, "wait on false sub ok");
 ok($?>>8 == 7, "captured correct non-zero status");
@@ -132,7 +132,7 @@ ok($Forks::Super::ALL_JOBS{$pid}->{status} == 7 << 8,
 ##################################################################
 
 $pid = fork { sub => sub {} };
-ok(_isValidPid($pid), "fork to trivial sub ok");
+ok(isValidPid($pid), "fork to trivial sub ok");
 $p = wait;
 ok($? == 0, "captured correct zero status from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");

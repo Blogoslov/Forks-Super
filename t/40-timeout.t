@@ -9,13 +9,20 @@ use warnings;
 # "expiration" options
 #
 
+if (!Forks::Super::CONFIG("alarm")) {
+  SKIP: {
+    skip "alarm func not available on this system ($^O,$]). Skipping all tests.", 18;
+  }
+  exit 0;
+}
+
 my $pid = fork { 'sub' => sub { sleep 5; exit 0 }, timeout => 3 };
 my $t = Forks::Super::Time();
 my $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid);
+ok($p == $pid, "wait successful");
 ok($t < 5, "Timed out in ${t}s, should have taken 3-4");
-ok($? != 0);
+ok($? != 0, "job expired with non-zero exit status");
 
 #######################################################
 
@@ -23,9 +30,9 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, timeout => 10 };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid);
-ok($t < 9);
-ok($? == 0);
+ok($p == $pid, "wait successful");
+ok($t < 9, "job completed before timeout");
+ok($? == 0, "job completed with zero exit status");
 
 #######################################################
 
@@ -33,9 +40,9 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, timeout => 0 };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid);
+ok($p == $pid, "wait successful");
 ok($t <= 1, "fast fail timeout=$t");
-ok($? != 0);
+ok($? != 0, "job failed with non-zero status");
 
 #######################################################
 
@@ -45,9 +52,9 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, expiration => $future };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid);
+ok($p == $pid, "wait successful");
 ok($t < 5, "should take about 3 seconds, took $t");
-ok($? != 0);
+ok($? != 0, "job expired with non-zero status");
 
 #######################################################
 
@@ -56,9 +63,9 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, expiration => $future };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid);
-ok($t < 9);
-ok($? == 0);
+ok($p == $pid, "wait successful");
+ok($t < 9, "job completed before expiration");
+ok($? == 0, "job completed with zero exit status");
 
 #######################################################
 
@@ -67,9 +74,9 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, expiration => $future };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid);
+ok($p == $pid, "wait succeeded");
 ok($t <= 1, "expected fast fail took ${t}s");
-ok($? != 0);
+ok($? != 0, "job expired with non-zero exit status");
 
 #######################################################
 

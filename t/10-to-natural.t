@@ -1,4 +1,4 @@
-use Forks::Super ':test';
+use Forks::Super ':test_config';
 use POSIX ':sys_wait_h';
 use Test::More tests => 15;
 use strict;
@@ -19,7 +19,7 @@ if ($pid == 0) {
   sleep 2;
   Forks::Super::child_exit 1;
 }
-ok(_isValidPid($pid), "pid $pid shows child proc");
+ok(isValidPid($pid), "pid $pid shows child proc");
 ok($$ == $Forks::Super::MAIN_PID, "parent pid $$ is current pid");
 my $job = Forks::Super::Job::get($pid);
 ok(defined $job, "got Forks::Super::Job object $job");
@@ -29,14 +29,30 @@ my $waitpid = waitpid($pid,WNOHANG);
 ok(-1 == $waitpid, "non-blocking wait succeeds");
 ok(! defined $job->{status}, "no job status");
 Forks::Super::pause(3);
-ok($job->{state} eq "COMPLETE");
-ok(defined $job->{status});
-ok($? != $job->{status});
+ok($job->{state} eq "COMPLETE", "job state is COMPLETE");
+ok(defined $job->{status}, "job status defined");
+ok($? != $job->{status}, "job status not available yet");
 my $p = waitpid $pid,0;
-ok($job->{state} eq "REAPED");
-ok($p == $pid);
-ok($? == 256);
-ok($? == $job->{status});
+ok($job->{state} eq "REAPED", "job status REAPED after waitpid");
+ok($p == $pid, "reaped correct pid");
+ok($? == 256, "system status is correct");
+ok($? == $job->{status}, "captured correct job status");
+
+#########################################################
+
+# run Forks::Super::CONFIG on some values that we might use.
+# Whether these items are configured or not will be displayed
+# with the test output.
+# it doesn't matter whether any of these fail,
+
+Forks::Super::CONFIG("Time::HiRes");
+Forks::Super::CONFIG("Win32");
+Forks::Super::CONFIG("SIGUSR1");
+Forks::Super::CONFIG("getpgrp");
+Forks::Super::CONFIG("alarm");
+Forks::Super::CONFIG("filehandles");
+Forks::Super::CONFIG("/bin/taskset");
+Forks::Super::CONFIG("BSD::Process::Affinity");
 
 __END__
 -------------------------------------------------------
