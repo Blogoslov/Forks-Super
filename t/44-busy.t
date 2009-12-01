@@ -18,11 +18,14 @@ my $sleepy = \&sleepy;
 $Forks::Super::MAX_PROC = 3;
 $Forks::Super::ON_BUSY = "block";
 
-my $t = time;
+
+#### failure point 0.06, MSWin32 5.00. Was the system overloaded? ####
+
+my $t = Time();
 my $pid1 = fork { 'sub' => $sleepy };
 my $pid2 = fork { 'sub' => $sleepy };
 my $pid3 = fork { 'sub' => $sleepy };
-$t = time - $t;
+$t = Time() - $t;
 ok($t <= 1, "three forks with no delay");
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "forks successful");

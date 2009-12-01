@@ -84,11 +84,6 @@ $t = time;
 while (time < $t+6) {
   while ((my $line = Forks::Super::read_stdout($pid))) {
     push @out,$line;
-
-    if (defined $line && length $line > 0) {
-      print "READ LINE FOR $pid STDOUT:  $line\n";
-    }
-
     if (@out > 100) {
       print STDERR "\nCrud. \@out is growing out of control:\n@out\n";
       $t -= 11;

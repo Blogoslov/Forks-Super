@@ -8,6 +8,10 @@ README
 README.windows
 t/00--pretest-message.t
 t/00-use.t
+t/01a-import.t
+t/01b-import.t
+t/01c-import.t
+t/01d-import.t
 t/10-to-natural.t
 t/11-to-command.t
 t/12-to-sub.t

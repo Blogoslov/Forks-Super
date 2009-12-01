@@ -40,7 +40,7 @@ $p = waitpid $pid, 0;
 $t = time - $t;
 $s = $?;
 ok($p==$pid, "blocking waitpid returned real pid");
-ok($t >= 3, "blocked return");
+ok($t >= 3, "blocked return took ${t}s expected 3s");
 ok($s == 768, "waitpid captured exit status");
 
 ############################################

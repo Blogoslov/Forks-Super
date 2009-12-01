@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Forks-Super
-version:            0.06
+version:            0.07
 abstract:           extensions and convenience methods for managing background processes.
 author:
     - Marty O'Brien <mob@cpan.org>

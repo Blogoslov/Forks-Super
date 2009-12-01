@@ -1,9 +1,9 @@
 use Forks::Super ':test';
-use Test::More tests => 31;
+use Test::More tests => 33;
 use strict;
 use warnings;
 if (Forks::Super::CONFIG("alarm")) {
-  alarm 90;$SIG{ALRM} = sub { die "Timeout\n" };
+  alarm 150;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
 }
 
 #
@@ -16,8 +16,9 @@ if (Forks::Super::CONFIG("alarm")) {
 # this is a subroutine that copies STDIN to STDOUT and optionally STDERR
 sub repeater {
   my ($n, $e) = @_;
-  my $end_at = time + 5;
-  sleep 2;
+  my $end_at = time + 6;
+
+  sleep 3;
   while (time < $end_at) {
     if (defined ($_ = <STDIN>)) {
       if ($e) {
@@ -35,7 +36,7 @@ sub repeater {
 
 #######################################################
 
-my $pid = fork { sub => \&repeater, timeout => 6, args => [ 3, 1 ], 
+my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
               	 get_child_stdin => 1, get_child_stdout => 1, 
 		 get_child_stderr => 1 };
 
@@ -77,7 +78,7 @@ waitall;
 
 # test join, read_stdout
 
-$pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 6,
+$pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 10,
 	    get_child_stdin => 1, get_child_stdout => 1, join_child_stderr => 1 };
 ok(isValidPid($pid), "started job with join");
 
@@ -91,13 +92,15 @@ ok($Forks::Super::CHILD_STDOUT{$pid} eq $Forks::Super::CHILD_STDERR{$pid},
    "child stdout and stderr go to same fh");
 $t = time;
 @out = ();
-while (time < $t+7) {
+while (time < $t+12) {
   while ((my $line = Forks::Super::read_stdout($pid))) {
     push @out, $line;
   }
 }
 
 ###### these 5 tests were a failure point on versions 0.04,0.05 ######
+###### failure point in 0.06 because of "Timeout" #######
+
 # perhaps some warning message was getting into the output stream
 if (@out != 3) {
   print STDERR "\ntest join+read stdout: failure imminent.\n";
@@ -119,7 +122,7 @@ waitall;
 
 # test read_stderr
 
-$pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 6,
+$pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
 	    get_child_stdin => 1, get_child_stdout => 0, get_child_stderr => 1 };
 ok(isValidPid($pid), "started job with join");
 
@@ -142,6 +145,18 @@ while (time < $t+7) {
 }
 ok(@out == 0, "received no output from child");
 @err = grep { !/alarm\(\) not available/ } @err;
+
+#### still a failure point in 0.06 ####
+
+if (@err != 2) {
+  print STDERR "\ntest read stderr: failure imminent.\n";
+  print STDERR "Expecting two lines but what we get is:\n";
+  my $i;
+  print STDERR map { ("Error line ", ++$i , ": $_") } @err;
+  print STDERR "\n";
+}
+
+
 ok(@err == 2, "received 2 lines from child stderr");
 ok($err[-2] =~ /the message is/, "got expected first line from child error");
 ok($err[-1] =~ /a test/, "got expected second line from child error");
@@ -149,7 +164,44 @@ waitall;
 
 ##################################################
 
-# get filehandles by job ID
+#
+# a proof-of-concept: get checksums for strings in a list from both parent and child.
+#
+
+sub compute_checksums_in_child {
+  sleep 5;
+  while (<STDIN>) {
+    s/\s+$//;
+    last if $_ eq "__END__";
+    print "$_\\", unpack("%32C*",$_)%65535,"\n";
+  }
+}
+
+my @pids = ();
+for (my $i=0; $i<4; $i++) {
+  push @pids, fork { sub => \&compute_checksums_in_child,
+		       get_child_stdin => 1, get_child_stdout => 1 };
+}
+my @data = (@INC,%INC,%!);
+my (@pdata, @cdata);
+for (my $i=0; $i<@data; $i++) {
+  Forks::Super::write_stdin $pids[$i%4], "$data[$i]\n";
+  push @pdata, sprintf("%s\\%d\n", $data[$i], unpack("%32C*",$data[$i])%65535);
+}
+Forks::Super::write_stdin($_,"__END__\n") for @pids;
+waitall;
+foreach (@pids) {
+  push @cdata, Forks::Super::read_stdout($_);
+}
+ok(@pdata == @cdata);
+@pdata = sort @pdata;
+@cdata = sort @cdata;
+my $pc_equal = 1;
+for (my $i=0; $i<@pdata; $i++) {
+  $pc_equal=0 if $pdata[$i] ne $cdata[$i];
+}
+ok($pc_equal);
+
 
 __END__
 -------------------------------------------------------

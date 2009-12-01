@@ -56,7 +56,8 @@ my $jo = Forks::Super::Job::get($ordinary);
 my $jm = Forks::Super::Job::get($mild);
 my $ju = Forks::Super::Job::get($urgent);
 
-ok($jo->{state} eq "REAPED" && $jm->{state} eq "REAPED" && $ju->{state} eq "REAPED",
+ok($jo->{state} eq "REAPED" && $jm->{state} eq "REAPED" &&
+   $ju->{state} eq "REAPED",
    "deferred jobs reaped after waitall");
 if (Forks::Super::CONFIG("Time::HiRes")) {
   ok($jo->{start} > $ju->{start}, "respect queue priority HR");

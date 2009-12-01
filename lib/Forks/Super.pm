@@ -7,13 +7,13 @@ use File::Path;
 use strict;
 use warnings;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
-our @EXPORT_OK = qw(isValidPid pause);
-our %EXPORT_TAGS = ( 'test' =>  [ 'isValidPid' ],
-		     'test_config' => [ 'isValidPid' ]);
+our @EXPORT_OK = qw(isValidPid pause Time);
+our %EXPORT_TAGS = ( 'test' =>  [ 'isValidPid', 'Time' ],
+		     'test_config' => [ 'isValidPid', 'Time' ]);
 
 sub _init {
   return if $Forks::Super::INITIALIZED;
@@ -41,7 +41,7 @@ sub _init {
   return;
 }
 
-sub import {
+ sub import {
   my ($class,@args) = @_;
   my @tags;
   _init();
@@ -68,7 +68,7 @@ sub import {
     } elsif ($args[$i] eq "FH_DIR") {
       my $dir = $args[++$i];
       if ($dir =~ /\S/ && -d $dir && -r $dir && -w $dir && -x $dir) {
-	_set_fh_dir($dir);
+	Forks::Super::Job::_set_fh_dir($dir);
       } else {
 	carp "Invalid value \"$dir\" for FH_DIR: $!";
       }
@@ -459,7 +459,6 @@ sub child_exit {
   if (CONFIG("alarm")) {
     alarm 0;
   }
- 
   # close filehandles ? Nah.
   exit($code);
 }
@@ -788,6 +787,21 @@ sub status {
   return $job->{status}; # might be undef
 }
 
+sub write_stdin {
+  my ($job, @msg) = @_;
+  if (ref $job ne 'Forks::Super::Job') {
+    $job = $Forks::Super::ALL_JOBS{$job} || return;
+  }
+  my $fh = $job->{child_stdin};
+  if (defined $fh) {
+    print $fh @msg;
+  } else {
+    carp "Forks::Super::write_stdin(): ",
+      "Attempted write on child $job->{pid} with no STDIN filehandle";
+  }
+  return;
+}
+
 #
 # called from the parent process,
 # attempts to read a line from standard output filehandle
@@ -810,35 +824,29 @@ sub read_stdout {
   }
   if ($job->{child_stdout_closed}) {
     if ($Forks::Super::DEBUG) {
-      debug("read_stdout: fh closed for $job->{pid}");
+      debug("Forks::Super::read_stdout(): ",
+	    "fh closed for $job->{pid}");
     }
     return;
-  } elsif ($Forks::Super::DEBUG) {
-    if (wantarray) {    
-      debug("read_stdout: reading for $job->{pid} in list context");
-#    } else {
-#      debug("read_stdout: reading for $job->{pid} in scalar context");
-    }
   }
   my $fh = $job->{child_stdout};
   if (not defined $fh) {
     if ($Forks::Super::DEBUG) {
-      debug("read_stdout: fh unavailable for $job->{pid}");
+      debug("Forks::Super::read_stdout(): ",
+	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stdout_closed}++;
     return;
   }
 
   undef $!;
-
-#  seek $fh, 0, 1;
   if (wantarray) {
     my @lines = readline($fh);
     if (0 == @lines) {
-#     if ($job->is_complete && Forks::Super::Time() - $job->{end} > -1) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
 	if ($Forks::Super::DEBUG) {
-	  debug("read_stdout: child $job->{pid} is complete. Closing $fh");
+	  debug("Forks::Super::read_stdout(): ",
+		"child $job->{pid} is complete. Closing $fh");
 	}
 	$job->{child_stdout_closed}++;
 	close $fh;
@@ -853,10 +861,10 @@ sub read_stdout {
   } else {
     my $line = readline($fh);
     if (not defined $line) {
-#      if ($job->is_complete && Forks::Super::Time() - $job->{end} > -1) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
 	if ($Forks::Super::DEBUG) {
-	  debug("read_stdout: child $job->{pid} is complete. Closing $fh");
+	  debug("Forks::Super::read_stdout(): :",
+		"child $job->{pid} is complete. Closing $fh");
 	}
 	$job->{child_stdout_closed}++;
 	close $fh;
@@ -875,33 +883,43 @@ sub read_stdout {
 # like read_stdout() but for stderr.
 #
 sub read_stderr {
-  my $job = shift;
-  local $!;
+  my ($job, $block_NOT_IMPLEMENTED) = @_;
   if (ref $job ne 'Forks::Super::Job') {
     $job = $Forks::Super::ALL_JOBS{$job} || return;
   }
-  return if $job->{child_stderr_closed};
+  if ($job->{child_stderr_closed}) {
+    if ($Forks::Super::DEBUG) {
+      debug("Forks::Super::read_stderr(): ",
+	    "fh closed for $job->{pid}");
+    }
+    return;
+  }
   my $fh = $job->{child_stderr};
   if (not defined $fh) {
+    if ($Forks::Super::DEBUG) {
+      debug("Forks::Super::read_stderr(): ",
+	    "fh unavailable for $job->{pid}");
+    }
     $job->{child_stderr_closed}++;
     return;
   }
 
   undef $!;
-  if (!seek($fh, 0, 1)) {
-    $job->{child_stderr_closed}++;
-    delete $job->{child_stderr};
-    return;
-  }
   if (wantarray) {
     my @lines = <$fh>;
     if (0 == @lines) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
+	if ($Forks::Super::DEBUG) {
+	  debug("Forks::Super::read_stderr(): ",
+		"child $job->{pid} is complete. Closing $fh");
+	}
 	$job->{child_stderr_closed}++;
 	close $fh;
 	return;
       } else {
 	@lines = ('');
+	seek $fh, 0, 1;
+	Forks::Super::pause();
       }
     }
     return @lines;
@@ -909,11 +927,17 @@ sub read_stderr {
     my $line = <$fh>;
     if (not defined $line) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
+	if ($Forks::Super::DEBUG) {
+	  debug("Forks::Super::read_stderr(): ",
+		"child $job->{pid} is complete. Closing $fh");
+	}
 	$job->{child_stderr_closed}++;
 	close $fh;
 	return;
       } else {
 	$line = '';
+	seek $fh, 0, 1;
+	Forks::Super::pause();
       }
     }
     return $line;
@@ -936,7 +960,7 @@ package Forks::Super::Job; # package name subject to change
 use Carp;
 use IO::Handle;
 use warnings;
-$Forks::Super::Job::VERSION = '0.06';
+$Forks::Super::Job::VERSION = $VERSION;
 
 $Forks::Super::Job::DEFAULT_QUEUE_PRIORITY = 0;
 
@@ -1233,17 +1257,6 @@ sub preconfig {
   my $job = shift;
 
   $job->preconfig_style;
-
-  ######################
-  # preconfigure filehandles, if desired
-  #
-#  if (defined $job->{get_child_stdin}
-#      or defined $job->{get_child_stdout}
-#      or defined $job->{get_child_stderr}
-#      or defined $job->{get_child_fh}) {
-#    $job->preconfig_fh;
-#  }
-
   $job->preconfig_busy_action;
   $job->preconfig_start_time;
   $job->preconfig_dependencies;
@@ -1479,8 +1492,7 @@ sub preconfig_dependencies {
 
 END {
   $SIG{CHLD} = 'DEFAULT';
-  if (defined $Forks::Super::FH_DIR
-     && !defined $Forks::Super::DONT_CLEANUP) {
+  if (defined $Forks::Super::FH_DIR && !$Forks::Super::DONT_CLEANUP) {
     END_cleanup();
   }
 }
@@ -1512,7 +1524,18 @@ sub END_cleanup {
     if ($clean_up_ok <= 0) {
       warn "Clean up of $Forks::Super::FH_DIR may not have succeeded.\n";
 
-      
+#      debug("will try to clean up $Forks::Super::FH_DIR in background");
+#      if (CORE::fork() == 0) {
+#	for (my $i = 0; $i < 5; $i++) {
+#	  sleep 60;
+#	  if (0 < File::Path::rmtree($Forks::Super::FH_DIR, 0, 1)) {
+#	    last;
+#	  }
+#	}
+#	exit 0;
+#      }
+
+
     }
     if (-d $Forks::Super::FH_DIR) {
       rmdir $Forks::Super::FH_DIR
@@ -1916,12 +1939,41 @@ sub config_os_child {
 	"desired cpu affinity set to zero. Is that what you really want?\n";
     }
 
-    if ($^O=~/linux/i && Forks::Super::CONFIG("/bin/taskset")) {
+    if ($^O =~ /cygwin/i && Forks::Super::CONFIG("Win32::Process")) {
+      my $winpid = Win32::Process::GetCurrentProcessID();
+      my $processHandle;
+      if (Win32::Process::Open($processHandle, $winpid, 0)) {
+	$processHandle->SetProcessAffinityMask($n);
+      } else {
+	carp "Forks::Super::Job::config_os_child(): ",
+	  "Win32::Process::Open call failed for Windows PID $winpid, ",
+	  "can not update CPU affinity";
+      }
+    } elsif ($^O=~/linux/i && Forks::Super::CONFIG("/bin/taskset")) {
+      $n = sprintf "0%o", $n;
       system(Forks::Super::CONFIG("/bin/taskset"),"-p",$n,$$);
-    } elsif (0 && $^O eq "MSWin32" && Forks::Super::CONFIG("Win32::Process")) {
-      # on Win32, child processes from fork() are actually threads
+    } elsif ($^O eq "MSWin32" && Forks::Super::CONFIG("Win32::API")) {
+      my $win32_thread_api = _get_win32_thread_api();
+      if (!defined $win32_thread_api->{"_error"}) {
+	my $thread_id = $win32_thread_api->{"GetCurrentThreadId"}->Call();
+	my ($handle, $old_affinity);
+	if ($thread_id) {
+	  # is 0x0060 right for all versions of Windows ??
+	  $handle = $win32_thread_api->{"OpenThread"}->Call(0x0060, 0, $thread_id);
+	}
+	if ($handle) {
+	  $old_affinity = $win32_thread_api->{"SetThreadAffinityMask"}->Call($handle, $n);
+	  if ($Forks::Super::DEBUG) {
+	    debug("CPU affinity for Win32 thread id $thread_id: ",
+		  "$old_affinity ==> $n\n");
+	  }
+	} else {
+	  carp "Forks::Super::Job::config_os_child(): ",
+	    "Invliad handle for Win32 thread id $thread_id";
+	}
+      }
     } elsif (Forks::Super::CONFIG('BSD::Process::Affinity')) {
-      # this code is not guaranteed to work
+      # this code is not tested and not guaranteed to work
       my $z = eval 'BSD::Process::Affinity->get_process_mask()->from_bitmask($n)->update()';
       if ($@ && 0 == $Forks::Super::Job::WARNED_ABOUT_AFFINITY++) {
 	warn "Forks::Super::Job::config_os_child(): ",
@@ -1935,6 +1987,35 @@ sub config_os_child {
   return;
 }
 
+sub _get_win32_thread_api {
+  if (!$Forks::Super::Job::WIN32_THREAD_API_INITIALIZED) {
+    local $!;
+    undef $!;
+    my $win32_thread_api = 
+      { "GetCurrentThreadId" =>
+		Win32::API->new('kernel32','GetCurrentThreadId','','N'),
+	"OpenThread" =>
+		Win32::API->new('kernel32', 
+				q[HANDLE OpenThread(DWORD a,BOOL b,DWORD c)]),
+	"SetThreadAffinityMask" =>
+		Win32::API->new('kernel32',
+				"DWORD SetThreadAffinityMask(HANDLE h,DWORD d)")
+      };
+    if ($!) {
+      $win32_thread_api->{"_error"} = "$! / $^E";
+    }
+    undef $!;
+    $win32_thread_api->{"GetProcessAffinityMask"} =
+      Win32::API->new('kernel32', "BOOL GetProcessAffinityMask(HANDLE h,PDWORD a,PDWORD b)");
+    if ($win32_thread_api->{"_error"}) {
+      carp "error in Win32::API thread initialization: ",
+	$win32_thread_api->{"_error"};
+    }
+    $Forks::Super::Job::WIN32_THREAD_API = $win32_thread_api;
+    $Forks::Super::Job::WIN32_THREAD_API_INITIALIZED++;
+  }
+  return $Forks::Super::Job::WIN32_THREAD_API;
+}
 
 
 #
@@ -1991,7 +2072,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.06
+Version 0.07
 
 =head1 SYNOPSIS
 
@@ -2398,6 +2479,21 @@ of the job object:
 On supported operating systems, and after the successful creation
 of the child process, attempt to set the operating system priority
 of the child process.
+
+On unsupported systems, this option is ignored.
+
+=item fork { cpu_affinity => $bitmask }
+
+On supported operating systems, and after the successful creation of 
+the child process, attempt to set the process's CPU affinity.
+Each bit of the bitmask represents one processor. Set a bit to 1
+to allow the process to use the corresponding processor, and set it to
+0 to disallow the corresponding processor. There may be additional
+restrictions on the valid range of values imposed by the operating
+system.
+
+As of version 0.07, supported systems are Cygwin, Win32, Linux,
+and possibly BSD.
 
 =back
 
@@ -2902,16 +2998,6 @@ Possible TODOs:
          fork { debug => $boolean }
 
                 override $Forks::Super::DEBUG for this job
-
-         fork { cpu_affinity => $bitmask }
-
-                <OLD POD>
-                On supported systems with multiple cores, and after the successful
-                creating of the child process, attempt to set the CPU affinity for
-                the child process. $mask is typically a bitmask with the lowest level
-                bits indicating whether the lowest numbered CPU's should be used
-                by this process.
-                </OLD POD>
 
          Forks::Super::Win32 as Win32 implementation of as much of this module
          as I can manage.
