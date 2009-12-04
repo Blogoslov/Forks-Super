@@ -1,4 +1,4 @@
-use Forks::Super ':test_config';
+use Forks::Super ':test';
 use Test::More tests => 3;
 use strict;
 use warnings;
@@ -11,16 +11,41 @@ use warnings;
 # or setting the CPU affinity of a background process
 #
 
+sub win32_getpriority {
+  my ($thread_id) = @_;
+  sleep 1;
+  $thread_id = abs($thread_id);
+  my $api = Forks::Super::Job::_get_win32_thread_api();
+  my $handle = $api->{OpenThread}->Call(0x0060, 0, $thread_id);
+  if ($handle) {
+    local $!;
+    undef $!;
+    my $p = $api->{GetThreadPriority}->Call($handle);
+    if ($p > 2**31) {
+      warn "Error getting Win32 thread priority: $! $^E";
+    }
+    return $p;
+  }
+  return;
+}
+
 SKIP: {
-  skip "getpriority() not avail on Win32", 2 if $^O eq "MSWin32";
+  if ($^O eq "MSWin32") {
+    if (!Forks::Super::CONFIG("Win32::API") ||
+	defined Forks::Super::Job::_get_win32_thread_api->{"_error"}) {
+      skip "getpriority() not avail on Win32", 2;
+    }
+  }
+
   my $pid1 = fork { sub => sub { sleep 10 } };
   sleep 1;
-  my $p1 = getpriority(0,$pid1);
-  my $pid2 = fork { sub => sub { sleep 10 }, os_priority => $p1 + 3 };
+  my $p1 = $^O eq "MSWin32" ? win32_getpriority($pid1) : getpriority(0,$pid1);
+  # change of plus 2 from default should be meaningful and valid on both Win32, Unix
+  my $pid2 = fork { sub => sub { sleep 10 }, os_priority => $p1 + 2 };
   sleep 1;
-  my $p2 = getpriority(0,$pid2);
-  ok($p1 != $p2);
-  ok($p2 == $p1 + 3);
+  my $p2 = $^O eq "MSWin32" ? win32_getpriority($pid2) : getpriority(0,$pid2);
+  ok($p1 != $p2, "priority has changed");
+  ok($p2 == $p1 + 2, "priority has changed by right amount");
 }
 
 SKIP: {

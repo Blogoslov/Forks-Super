@@ -128,7 +128,8 @@ ok(isValidPid($pid), "started job with join");
 
 $msg = sprintf "the message is %x", rand() * 99999999;
 $z = print {$Forks::Super::CHILD_STDIN{$pid}} "$msg\n";
-$z = print {$Forks::Super::CHILD_STDIN{$pid}} "That was a test\n";
+$z *= print {$Forks::Super::CHILD_STDIN{$pid}} "That was a test\n";
+close $Forks::Super::CHILD_STDIN{$pid};
 ok($z > 0, "successful print to child STDIN");
 ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
 ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined");
@@ -136,7 +137,7 @@ ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
 $t = time;
 @out = ();
 @err = ();
-while (time < $t+7) {
+while (time < $t+12) {
   my @data = Forks::Super::read_stdout($pid);
   push @out, @data if @data>0 and $data[0] ne "";
 
@@ -146,7 +147,8 @@ while (time < $t+7) {
 ok(@out == 0, "received no output from child");
 @err = grep { !/alarm\(\) not available/ } @err;
 
-#### still a failure point in 0.06 ####
+############### last main failure point in 0.07 ##############
+#### most common error is that @err contains 1 line not 2 ####
 
 if (@err != 2) {
   print STDERR "\ntest read stderr: failure imminent.\n";
@@ -158,7 +160,7 @@ if (@err != 2) {
 
 
 ok(@err == 2, "received 2 lines from child stderr");
-ok($err[-2] =~ /the message is/, "got expected first line from child error");
+ok($err[0] =~ /the message is/, "got expected first line from child error");
 ok($err[-1] =~ /a test/, "got expected second line from child error");
 waitall; 
 

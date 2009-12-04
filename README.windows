@@ -32,17 +32,13 @@ how  CORE::fork  is emulated on Windows.
 2. Process priority
 
 The getpriority() and setpriority() calls in Perl
-are often not supported on Windows. There are
-equivalent ways of getting and setting process
-priority in Windows, but they are not very well
-implemented in the current version of this module,
-and so calling  Forks::Super::fork  with an  os_priority
-option in Windows may have no effect.
+are often not supported on Windows. If the
+Win32::API  module is installed on your system,
+then this module can emulate the getpriority() and
+setpriority() functions. If  Win32::API  is
+unavailable, then calling  Forks::Super::fork
+with an  os_priority  option will have no effect.
 
-A future release of this module should make this
-feature available in Windows, though this may
-create a dependency on some module like
-Win32::Process .
 
 3. Signal handling
 
@@ -92,13 +88,14 @@ delay.
 
 4. Alarm
 
-It is said that the Perl  alarm  system call is
-not fully supported on all systems (though I have yet
-to find one that doesn't support it). The feature
-of passing a  timeout  or  expiration  option to a
-Forks::Super::fork  call depends on this feature, so the call
+The Perl  alarm  system call is not fully supported 
+on all systems, including Windows ports of Perl
+prior to 5.7.  The feature of passing a  timeout
+or  expiration  option to a  Forks::Super::fork  
+call depends on this feature, so the call
 will fail when used with those options on systems that
 cannot support  alarm().
+
 
 
 The  perlfork  pod discusses many pitfalls of 

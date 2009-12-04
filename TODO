@@ -52,11 +52,11 @@ Possible TODOs:
         and to resume them when the system gets less busy.
         I bet this will be hard to do with Win32.
 
-        fork { debug => $boolean }
+    _X_ fork { debug => $boolean }
 
         	override $Forks::Super::DEBUG for this job
 
-        fork { cpu_affinity => $bitmask }
+    _x_ fork { cpu_affinity => $bitmask }
 
                 <OLD POD>
                 On supported systems with multiple cores, and after the successful
@@ -66,31 +66,39 @@ Possible TODOs:
                 by this process.
                 </OLD POD>
 
-                _x_ linux [sort of, still undocumented]
-		___ MSWin32
+                _X_ linux [where /bin/taskset is avail]
+		_X_ MSWin32
 		___ BSD
-		___ Cygwin
+		_X_ Cygwin
+		_X_ documented
 
-	Currently USR1 is used to signal the program to analyze the queue.
+    _X_ Currently USR1 is used to signal the program to analyze the queue.
         Make the signal configurable.
 
-        Fully support changing process priority in Windows. Maybe this
-	can be done with Win32::Process .
+    _X_ Fully support changing process priority in Windows. This can be
+	done with Win32::API and SetThreadPriority method. Takes on values
+	between -2 and 2, or between -7 and 6 "if the thread has the
+	REALTIME_PRIORITY_CLASS base class", whatever that is. (Oh, looks
+	like we can use GetPriorityClass to figure out what it is).
+        (See http://msdn.microsoft.com/en-us/library/ms686277(VS.85).aspx).
 
 	Support for launching tasks on remote hosts (maybe that's beyond
         the scope of this module) See Paralell::PVM?
 
-        fork { retries => $ntries }
+    _x_ fork { retries => $ntries }
 
 		like Proc::Fork. Call CORE::fork() several times if
 		it's not creating child processes.
+		_X_ implement
+		___ test
+		___ document
 
 	fork { name => $name }
 
 		Change ps() listing as in Parallel::ForkControl, or give
 		another way to lookup a job object from Forks::Super::Job::get.
 
-        support some more configuration in import
+    _X_ support some more configuration in import
 
                 use Forks::Super MAX_PROC => 5, CHILD_FORK_OK => -1, ... ;
 		_X_ MAX_PROC
@@ -100,13 +108,15 @@ Possible TODOs:
 		_X_ CHILD_FORK_OK
 		_X_ QUEUE_MONITOR_FREQ
 		_X_ FH_DIR
-		___ unit tests for this kind of initialization
+		_X_ unit tests for this kind of initialization
 
-	clean up temporary files. In some OS,
+    ___ clean up temporary files. In some OS,
 	     can't delete files from END block of parent if children
 	     are still using those files. One possible solution might
              be to launch another background process that will try to
 	     clean up for ~5 minutes
+
+        _o_ haven't observed this problem lately
 
 	configure during build. discover the maximum number of simultaneous
 	processes that can be spawned and set MAX_PROC, DEFAULT_MAX_PROC.

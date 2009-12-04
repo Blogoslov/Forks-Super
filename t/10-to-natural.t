@@ -1,4 +1,4 @@
-use Forks::Super ':test_config';
+use Forks::Super ':test';
 use POSIX ':sys_wait_h';
 use Test::More tests => 15;
 use strict;
@@ -39,20 +39,6 @@ ok($? == 256, "system status is correct");
 ok($? == $job->{status}, "captured correct job status");
 
 #########################################################
-
-# run Forks::Super::CONFIG on some values that we might use.
-# Whether these items are configured or not will be displayed
-# with the test output.
-# it doesn't matter whether any of these fail,
-
-Forks::Super::CONFIG("Time::HiRes");
-Forks::Super::CONFIG("Win32");
-Forks::Super::CONFIG("SIGUSR1");
-Forks::Super::CONFIG("getpgrp");
-Forks::Super::CONFIG("alarm");
-Forks::Super::CONFIG("filehandles");
-Forks::Super::CONFIG("/bin/taskset");
-Forks::Super::CONFIG("BSD::Process::Affinity");
 
 __END__
 -------------------------------------------------------

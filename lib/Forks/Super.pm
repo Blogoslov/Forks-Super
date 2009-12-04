@@ -1,4 +1,4 @@
-package Forks::Super; # subject to change
+package Forks::Super;
 require 5.006001;     # for improvements to Perl fork and signal handling
 use Exporter;
 use POSIX ':sys_wait_h';
@@ -7,7 +7,7 @@ use File::Path;
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -35,6 +35,7 @@ sub _init {
   $Forks::Super::CHILD_FORK_OK = 0;
   $Forks::Super::QUEUE_MONITOR_FREQ = 30;
   $Forks::Super::DONT_CLEANUP = 0;
+  $Forks::Super::QUEUE_INTERRUPT = 'USR1';
 
   $SIG{CHLD} = \&Forks::Super::handle_CHLD;
   $Forks::Super::INHIBIT_QUEUE_MONITOR = $^O eq "MSWin32";
@@ -65,6 +66,8 @@ sub _init {
       $Forks::Super::CHILD_FORK_OK = $args[++$i];
     } elsif ($args[$i] eq "QUEUE_MONITOR_FREQ") {
       $Forks::Super::QUEUE_MONITOR_FREQ = $args[++$i];
+    } elsif ($args[$i] eq "QUEUE_INTERRUPT") {
+      $Forks::Super::QUEUE_INTERRUPT = $args[++$i];
     } elsif ($args[$i] eq "FH_DIR") {
       my $dir = $args[++$i];
       if ($dir =~ /\S/ && -d $dir && -r $dir && -w $dir && -x $dir) {
@@ -97,12 +100,12 @@ sub fork {
     return $job->{__test};
   }
 
-  debug('fork(): ', $job->toString(), ' initialized.') if $Forks::Super::DEBUG;
+  _debug('fork(): ', $job->toString(), ' initialized.') if $job->{debug};
 
   until ($job->can_launch) {
 
-    debug("fork(): job can not launch. Behavior=$job->{_on_busy}")
-      if $Forks::Super::DEBUG;
+    _debug("fork(): job can not launch. Behavior=$job->{_on_busy}")
+      if $job->{debug};
 
     if ($job->{_on_busy} eq "FAIL") {
       return -1;
@@ -114,8 +117,8 @@ sub fork {
     }
   }
 
-  debug('Forks::Super::fork(): launch approved for job')
-    if $Forks::Super::DEBUG;
+  _debug('Forks::Super::fork(): launch approved for job')
+    if $job->{debug};
   return $job->launch;
 }
 
@@ -266,8 +269,9 @@ sub _waitpid_pgrp {
 # by sleeping more more if the original sleep call
 # did not complete.
 # Interruption can happen if the program receives
-# a CHLD or USR1 signal in the middle of the
-# sleep call.
+# a CHLD or <strike>USR1</strike> 
+# $Forks::Super::QUEUE_INTERRUPT signal in the 
+# middle of the sleep call.
 #
 sub pause {
   my $delay = shift || 0.25;
@@ -388,8 +392,8 @@ sub _reap {
     my $pid = $job->{pid};
     $job->mark_reaped;
 
-    debug("Forks::Super::_reap(): reaping $pid/$real_pid.")
-      if $Forks::Super::DEBUG;
+    _debug("Forks::Super::_reap(): reaping $pid/$real_pid.")
+      if $Forks::Super::DEBUG || $job->{debug};
     return $real_pid if not wantarray;
 
     my $nactive = grep { $_->{state} eq 'ACTIVE'  or
@@ -447,7 +451,7 @@ sub init_child {
   @Forks::Super::ALL_JOBS = ();
   @Forks::Super::QUEUE = ();
   $SIG{CHLD} = $SIG{CLD} = 'DEFAULT';
-  $SIG{USR1} = 'DEFAULT' if CONFIG("SIGUSR1");
+  $SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT' if CONFIG("SIGUSR1");
   delete $Forks::Super::CONFIG{filehandles};
   undef $Forks::Super::FH_DIR;
   undef $Forks::Super::FH_DIR_DEDICATED;
@@ -504,13 +508,14 @@ sub get_cpu_load {
 # This method sets up a background process (using
 # CORE::fork -- it won't be subject to reaping by
 # this module's wait/waitpid/waitall methods)
-# to periodically send USR1 signals to this
+# to periodically send USR1^H^H^H^H
+# $Forks::Super::QUEUE_INTERRUPT signals to this
 #
 sub _launch_queue_monitor {
   return unless CONFIG("SIGUSR1");
 
   $Forks::Super::QUEUE_MONITOR_PID = CORE::fork();
-  $SIG{USR1} = \&Forks::Super::handle_USR1;
+  $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::check_queue;
   if (not defined $Forks::Super::QUEUE_MONITOR_PID) {
     warn "queue monitoring sub process could not be launched: $!\n";
     return;
@@ -519,7 +524,7 @@ sub _launch_queue_monitor {
     init_child();
     for (;;) {
       sleep $Forks::Super::QUEUE_MONITOR_FREQ;
-      kill 'USR1', $Forks::Super::MAIN_PID;
+      kill $Forks::Super::QUEUE_INTERRUPT, $Forks::Super::MAIN_PID;
     }
     Forks::Super::child_exit(0);
   }
@@ -575,7 +580,8 @@ sub run_queue {
 	     $_->{state} eq 'DEFERRED' } @Forks::Super::ALL_JOBS;
   foreach my $job (@deferred_jobs) {
     if ($job->can_launch) {
-      debug("Launching deferred job $job->{pid}") if $Forks::Super::DEBUG;
+      _debug("Launching deferred job $job->{pid}")
+	if $Forks::Super::DEBUG || $job->{debug};
       my $pid = $job->launch();
       if ($pid == 0) {
 	if (defined $job->{sub} or defined $job->{cmd}) {
@@ -585,8 +591,8 @@ sub run_queue {
 	croak "Forks::Super::run_queue(): ",
 	  "deferred job must have a 'sub' or 'cmd' option!\n";
       }
-    } elsif ($Forks::Super::DEBUG) {
-      debug("Still must wait to launch job $job->{pid}");
+    } elsif ($Forks::Super::DEBUG || $job->{debug}) {
+      _debug("Still must wait to launch job $job->{pid}");
     }
   }
   queue_job(); # refresh @Forks::Super::QUEUE
@@ -594,12 +600,16 @@ sub run_queue {
 }
 
 #
-# SIGUSR1 handler. A background process will send periodic USR1 signals
-# back to this process. On receipt of these signals, this process
-# should examine the queue. This will keep us from ignoring the queue
-# for too long.
+# SIGUSR1 handler. A background process will send periodic USR1^H^H^H^H
+# $Forks::Super::QUEUE_INTERRUPT signals back to this process. On 
+# receipt of these signals, this process should examine the queue. 
+# This will keep us from ignoring the queue for too long.
 #
-sub handle_USR1 {
+# Note this automatic housecleaning is not available on some OS's
+# like Windows. Those users may need to call  Forks::Super::check_queue
+# or  Forks::Super::run_queue  manually from time to time.
+#
+sub check_queue {
   run_queue();
   return;
 }
@@ -734,8 +744,13 @@ sub _CONFIG_Perl_component {
     my $z = eval { alarm 0 };
     $Forks::Super::CONFIG{"alarm"} = $@ ? 0 : 1;
   } elsif ($component eq "SIGUSR1") {
-    $Forks::Super::CONFIG{"SIGUSR1"} = $^O eq "MSWin32" ? 0 : 1;
-    # XXX - SIGUSR1 is probably not available on more systems than this ...
+
+    # %SIG is a special hash -- defined $SIG{USR1} might be false
+    # but USR1 might still appear in keys %SIG.
+
+    my $SIG = join " ", " ", keys %SIG, " ";
+    $Forks::Super::CONFIG{"SIGUSR1"} =
+      $SIG =~ / $Forks::Super::QUEUE_INTERRUPT / ? 1 : 0;
   } elsif ($component eq "select4") { # 4-arg version of select
     undef $@;
     my $z = eval { select undef,undef,undef,0.5 };
@@ -823,16 +838,16 @@ sub read_stdout {
     $job = $Forks::Super::ALL_JOBS{$job} || return;
   }
   if ($job->{child_stdout_closed}) {
-    if ($Forks::Super::DEBUG) {
-      debug("Forks::Super::read_stdout(): ",
+    if ($job->{debug}) {
+      _debug("Forks::Super::read_stdout(): ",
 	    "fh closed for $job->{pid}");
     }
     return;
   }
   my $fh = $job->{child_stdout};
   if (not defined $fh) {
-    if ($Forks::Super::DEBUG) {
-      debug("Forks::Super::read_stdout(): ",
+    if ($job->{debug}) {
+      _debug("Forks::Super::read_stdout(): ",
 	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stdout_closed}++;
@@ -844,8 +859,8 @@ sub read_stdout {
     my @lines = readline($fh);
     if (0 == @lines) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
-	if ($Forks::Super::DEBUG) {
-	  debug("Forks::Super::read_stdout(): ",
+	if ($job->{debug}) {
+	  _debug("Forks::Super::read_stdout(): ",
 		"child $job->{pid} is complete. Closing $fh");
 	}
 	$job->{child_stdout_closed}++;
@@ -862,8 +877,8 @@ sub read_stdout {
     my $line = readline($fh);
     if (not defined $line) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
-	if ($Forks::Super::DEBUG) {
-	  debug("Forks::Super::read_stdout(): :",
+	if ($job->{debug}) {
+	  _debug("Forks::Super::read_stdout(): :",
 		"child $job->{pid} is complete. Closing $fh");
 	}
 	$job->{child_stdout_closed}++;
@@ -888,16 +903,16 @@ sub read_stderr {
     $job = $Forks::Super::ALL_JOBS{$job} || return;
   }
   if ($job->{child_stderr_closed}) {
-    if ($Forks::Super::DEBUG) {
-      debug("Forks::Super::read_stderr(): ",
+    if ($job->{debug}) {
+      _debug("Forks::Super::read_stderr(): ",
 	    "fh closed for $job->{pid}");
     }
     return;
   }
   my $fh = $job->{child_stderr};
   if (not defined $fh) {
-    if ($Forks::Super::DEBUG) {
-      debug("Forks::Super::read_stderr(): ",
+    if ($job->{debug}) {
+      _debug("Forks::Super::read_stderr(): ",
 	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stderr_closed}++;
@@ -906,11 +921,11 @@ sub read_stderr {
 
   undef $!;
   if (wantarray) {
-    my @lines = <$fh>;
+    my @lines = readline($fh);
     if (0 == @lines) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
-	if ($Forks::Super::DEBUG) {
-	  debug("Forks::Super::read_stderr(): ",
+	if ($job->{debug}) {
+	  _debug("Forks::Super::read_stderr(): ",
 		"child $job->{pid} is complete. Closing $fh");
 	}
 	$job->{child_stderr_closed}++;
@@ -924,11 +939,11 @@ sub read_stderr {
     }
     return @lines;
   } else {
-    my $line = <$fh>;
+    my $line = readline($fh);
     if (not defined $line) {
       if ($job->is_complete && Forks::Super::Time() - $job->{end} > 3) {
-	if ($Forks::Super::DEBUG) {
-	  debug("Forks::Super::read_stderr(): ",
+	if ($job->{debug}) {
+	  _debug("Forks::Super::read_stderr(): ",
 		"child $job->{pid} is complete. Closing $fh");
 	}
 	$job->{child_stderr_closed}++;
@@ -947,8 +962,14 @@ sub read_stderr {
 sub debug {
   my @msg = @_;
   if ($Forks::Super::DEBUG) {
-    print Forks::Super::DEBUG Forks::Super::Ctime()," ",@msg,"\n";
+    _debug(@msg);
   }
+  return;
+}
+
+sub _debug {
+  my @msg = @_;
+  print Forks::Super::DEBUG Forks::Super::Ctime()," ",@msg,"\n";
   return;
 }
 
@@ -956,7 +977,7 @@ sub debug {
 
 #############################################################################
 
-package Forks::Super::Job; # package name subject to change
+package Forks::Super::Job;
 use Carp;
 use IO::Handle;
 use warnings;
@@ -1001,6 +1022,7 @@ sub mark_reaped {
   $job->{state} = 'REAPED';
   $job->{reaped} = Forks::Super::Time();
   $? = $job->{status};
+  debug("Job $job->{pid} reaped") if $job->{debug};
   return;
 }
 
@@ -1031,7 +1053,7 @@ sub _can_launch_delayed_start_check {
     Forks::Super::Time() >= $job->{start_after};
 
   debug('Forks::Super::Job::_can_launch(): ',
-	'start delay requested. launch fail') if $Forks::Super::DEBUG;
+	'start delay requested. launch fail') if $job->{debug};
   $job->{_on_busy} = 'queue' if not defined $job->{_on_busy};
   return 0;
 }
@@ -1050,7 +1072,7 @@ sub _can_launch_dependency_check {
     unless ($j->is_complete) {
       debug('Forks::Super::Job::_can_launch(): ',
 	"job waiting for job $j->{pid} to finish. launch fail.")
-	if $Forks::Super::DEBUG;
+	if $j->{debug};
       return 0;
     }
   }
@@ -1065,7 +1087,7 @@ sub _can_launch_dependency_check {
     unless ($j->is_started) {
       debug('Forks::Super::Job::_can_launch(): ',
 	"job waiting for job $j->{pid} to start. launch fail.")
-	if $Forks::Super::DEBUG;
+	if $j->{debug};
       return 0;
     }
   }
@@ -1087,7 +1109,7 @@ sub _can_launch {
 
   if ($force) {
     debug('Forks::Super::Job::_can_launch(): force attr set. launch ok')
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     return 1;
   }
 
@@ -1099,7 +1121,7 @@ sub _can_launch {
     if ($num_active >= $max_proc) {
       debug('Forks::Super::Job::_can_launch(): ',
 	"active jobs $num_active exceeds limit $max_proc. ",
-	    'launch fail.') if $Forks::Super::DEBUG;
+	    'launch fail.') if $job->{debug};
       return 0;
     }
   }
@@ -1109,13 +1131,13 @@ sub _can_launch {
     if ($load > $max_load) {
       debug('Forks::Super::Job::_can_launch(): ',
 	"cpu load $load exceeds limit $max_load. launch fail.")
-	if $Forks::Super::DEBUG;
+	if $job->{debug};
       return 0;
     }
   }
 
   debug('Forks::Super::Job::_can_launch(): system not busy. launch ok.')
-    if $Forks::Super::DEBUG;
+    if $job->{debug};
   return 1;
 }
 
@@ -1134,14 +1156,20 @@ sub launch {
     return _launch_from_child($job);
   }
   $job->preconfig_fh;
+  $job->preconfig2;
 
 
 
 
 
+  my $retries = $job->{retries} || 1;
 
 
   my $pid = CORE::fork();
+  while (!defined $pid && --$retries > 0) {
+    carp "system fork call returned undef. Retrying ...";
+    pause(1 + ($job->{retries} || 1) - $retries);
+  }
 
 
 
@@ -1151,7 +1179,7 @@ sub launch {
 
   if (not defined $pid) {
     debug('Forks::Super::Job::launch(): CORE::fork() returned undefined!')
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     return;
   }
 
@@ -1195,11 +1223,14 @@ sub launch {
   $job->config_child;
   if ($job->{style} eq 'cmd') {
     local $ENV{_FORK_PPID} = $$ if $^O eq "MSWin32";
+    _debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
     my $c1 = system( @{$job->{cmd}} );
+    _debug("Exit code of $job->{pid} was $c1") if $job->{debug};
     Forks::Super::child_exit($c1 >> 8);
   } elsif ($job->{style} eq 'sub') {
     no strict 'refs';
     $job->{sub}->(@{$job->{args}});
+    _debug("Job $$ subroutine call has complete") if $job->{debug};
     Forks::Super::child_exit(0);
   }
   return 0;
@@ -1253,7 +1284,6 @@ sub get {
 # mainly setting derived fields
 #
 sub preconfig {
-  #no warnings qw(once);
   my $job = shift;
 
   $job->preconfig_style;
@@ -1261,6 +1291,14 @@ sub preconfig {
   $job->preconfig_start_time;
   $job->preconfig_dependencies;
   return;
+}
+
+# some final initialization just before launch
+sub preconfig2 {
+  my $job = shift;
+  if (!defined $job->{debug}) {
+    $job->{debug} = $Forks::Super::DEBUG;
+  }
 }
 
 sub preconfig_style {
@@ -1308,17 +1346,17 @@ sub preconfig_fh {
   if ($config->{get_child_stdin}) {
     $config->{f_in} = _choose_fh_filename();
     debug("Using $config->{f_in} as shared file for child STDIN") 
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
   }
   if ($config->{get_child_stdout}) {
     $config->{f_out} = _choose_fh_filename();
     debug("Using $config->{f_out} as shared file for child STDOUT") 
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
   }
   if ($config->{get_child_stderr}) {
     $config->{f_err} = _choose_fh_filename();
     debug("Using $config->{f_err} as shared file for child STDERR") 
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
   }
 
   if (0 < scalar keys %$config) {
@@ -1350,7 +1388,7 @@ sub _choose_fh_filename {
 
     if (!$Forks::Super::FH_DIR_DEDICATED && -f $file) {
       carp "IPC file $file already exists!";
-      debug("$file already exists ...");
+      debug("$file already exists ...") if $Forks::Super::DEBUG;
 #      unlink $file;
     }
 
@@ -1469,7 +1507,7 @@ sub preconfig_start_time {
     }
     delete $job->{delay};
     debug('Forks::Super::Job::_can_launch(): start delay requested.')
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
   }
   return;
 }
@@ -1523,19 +1561,6 @@ sub END_cleanup {
     my $clean_up_ok = File::Path::rmtree($Forks::Super::FH_DIR, 0, 1);
     if ($clean_up_ok <= 0) {
       warn "Clean up of $Forks::Super::FH_DIR may not have succeeded.\n";
-
-#      debug("will try to clean up $Forks::Super::FH_DIR in background");
-#      if (CORE::fork() == 0) {
-#	for (my $i = 0; $i < 5; $i++) {
-#	  sleep 60;
-#	  if (0 < File::Path::rmtree($Forks::Super::FH_DIR, 0, 1)) {
-#	    last;
-#	  }
-#	}
-#	exit 0;
-#      }
-
-
     }
     if (-d $Forks::Super::FH_DIR) {
       rmdir $Forks::Super::FH_DIR
@@ -1573,14 +1598,14 @@ sub config_fh_parent_stdin {
   if ($fh_config->{get_child_stdin} and defined $fh_config->{f_in}) {
     my $fh;
     debug("Opening $fh_config->{f_in} in parent as child STDIN")
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     if (open ($fh, '>', $fh_config->{f_in})) {
       $job->{child_stdin} = $Forks::Super::CHILD_STDIN{$job->{real_pid}} = $fh;
       $Forks::Super::CHILD_STDIN{$job->{pid}} = $fh;
       $fh->autoflush(1);
 
       debug("Setting up link to $job->{pid} stdin in $fh_config->{f_in}")
-	if $Forks::Super::DEBUG;
+	if $job->{debug};
 
     } else {
       warn "Forks::Super::Job::config_fh_parent(): ",
@@ -1599,7 +1624,7 @@ sub config_fh_parent_stdout {
     # don't panic if we can't open it right away.
     my ($try, $fh);
     debug("Opening ", $fh_config->{f_out}, " in parent as child STDOUT")
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     for ($try=1; $try<=11; $try++) {
       local $! = 0;
       if ($try <= 10 && open($fh, '<', $fh_config->{f_out})) {
@@ -1608,7 +1633,7 @@ sub config_fh_parent_stdout {
 	$Forks::Super::CHILD_STDOUT{$job->{pid}} = $fh;
 
 	debug("Setting up link to $job->{pid} stdout in $fh_config->{f_out}")
-	  if $Forks::Super::DEBUG;
+	  if $job->{debug};
 
 	last;
       } else {
@@ -1631,14 +1656,14 @@ sub config_fh_parent_stderr {
     delete $fh_config->{join_child_stderr};
     my ($try, $fh);
     debug("Opening ", $fh_config->{f_err}, " in parent as child STDERR")
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     for ($try=1; $try<=11; $try++) {
       if ($try <= 10 && open($fh, '<', $fh_config->{f_err})) {
 	$job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}} = $fh;
 	$Forks::Super::CHILD_STDERR{$job->{pid}} = $fh;
 
 	debug("Setting up link to $job->{pid} stderr in $fh_config->{f_err}")
-	  if $Forks::Super::DEBUG;
+	  if $job->{debug};
 
 	last;
       } else {
@@ -1679,10 +1704,22 @@ sub config_fh_parent {
 
 sub config_child {
   my $job = shift;
+  $job->config_debug_child;
   $job->config_fh_child;
   $job->config_timeout_child;
   $job->config_os_child;
   return;
+}
+
+sub config_debug_child {
+  my $job = shift;
+  if (($Forks::Super::DEBUG || $job->{debug}) && $job->{undebug}) {
+    if (!$Forks::Super::IMPORT{":test"}) {
+      _debug("Disabling debugging in child $job->{pid}");
+    }
+    $Forks::Super::DEBUG = 0;
+    $job->{debug} = 0;
+  }
 }
 
 sub config_fh_child_stdin {
@@ -1695,7 +1732,7 @@ sub config_fh_child_stdin {
     # creation of $fh_config->{f_in} may be delayed. 
     # don't panic if we can't open it right away.
     my ($try, $fh);
-    debug("Opening ", $fh_config->{f_in}, " in child STDIN") if $Forks::Super::DEBUG;
+    debug("Opening ", $fh_config->{f_in}, " in child STDIN") if $job->{debug};
     for ($try=1; $try<=11; $try++) {
       if ($try <= 10 && open($fh, '<', $fh_config->{f_in})) {
 	close STDIN if $^O eq "MSWin32";
@@ -1730,7 +1767,7 @@ sub config_fh_child_stdout {
   if ($fh_config->{get_child_stdout} && $fh_config->{f_out}) {
     my $fh;
     debug("Opening up $fh_config->{f_out} for output in the child   $$")
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     if (open($fh, '>', $fh_config->{f_out})) {
       $fh->autoflush(1);
       close STDOUT if $^O eq "MSWin32";
@@ -1766,7 +1803,7 @@ sub config_fh_child_stderr {
   if ($fh_config->{get_child_stderr} && $fh_config->{f_err}) {
     my $fh;
     debug("Opening $fh_config->{f_err} as child STDERR")
-      if $Forks::Super::DEBUG;
+      if $job->{debug};
     if (open($fh, '>', $fh_config->{f_err})) {
       close STDERR if $^O eq "MSWin32";
       if (open(STDERR, '>&' . fileno($fh))) {
@@ -1792,10 +1829,6 @@ sub config_fh_child_stderr {
 sub config_fh_child {
   my $job = shift;
   return if not defined $job->{fh_config};
-  if ($Forks::Super::DEBUG && $job->{undebug}) {
-    debug("Disabling debugging in child $$");
-    $Forks::Super::DEBUG = 0;
-  }
   if ($job->{style} eq 'cmd') {
     $job->config_cmd_fh_child;
     return;
@@ -1871,7 +1904,7 @@ sub config_cmd_fh_child {
     }
   }
   debug("Forks::Super::Job::config_cmd_fh_config(): child cmd is   $cmd[0]  ")
-    if $Forks::Super::DEBUG;
+    if $job->{debug};
 
   $job->{cmd} = [ @cmd ];
   return;
@@ -1902,7 +1935,7 @@ sub config_timeout_child {
       alarm $timeout;
       debug("Forks::Super::Job::config_timeout_child(): ",
 	    "alarm set for ${timeout}s in child process $$")
-	if $Forks::Super::DEBUG;
+	if $job->{debug};
     } else {
       carp "Forks::Super: alarm() not available, ",
 	"timeout,expiration options ignored.\n";
@@ -1925,10 +1958,34 @@ sub config_os_child {
   if (defined $job->{os_priority}) {
     my $p = $job->{os_priority} + 0;
     my $q = -999;
-    my $z = eval "setpriority(0,0,$p); \$q = getpriority(0,0)";
-    if ($@) {
-      carp "Forks::Super::Job::config_os_child(): ",
-	"setpriority() call failed $p ==> $q\n";
+
+    if ($^O eq "MSWin32" && Forks::Super::CONFIG("Win32::API")) {
+      my $win32_thread_api = _get_win32_thread_api();
+      if (!defined $win32_thread_api->{"_error"}) {
+	my $thread_id = $win32_thread_api->{"GetCurrentThreadId"}->Call();
+	my ($handle, $old_affinity);
+	if ($thread_id) {
+	  $handle = $win32_thread_api->{"OpenThread"}->Call(0x0060,0,$thread_id)
+	    || $win32_thread_api->{"OpenThread"}->Call(0x0400,0,$thread_id);
+	}
+	if ($handle) {
+	  my $result = $win32_thread_api->{"SetThreadPriority"}->Call($handle,$p);
+	  if ($result) {
+	    if ($job->{debug}) {
+	      _debug("updated thread priority to $p for job $job->{pid}");
+	    }
+	  } else {
+	    carp "Forks::Super::Job::config_os_child(): ",
+	      "setpriority() call failed $p ==> $q\n";
+	  }
+	}
+      }
+    } else {
+      my $z = eval "setpriority(0,0,$p); \$q = getpriority(0,0)";
+      if ($@) {
+	carp "Forks::Super::Job::config_os_child(): ",
+	  "setpriority() call failed $p ==> $q\n";
+      }
     }
   }
 
@@ -1963,7 +2020,7 @@ sub config_os_child {
 	}
 	if ($handle) {
 	  $old_affinity = $win32_thread_api->{"SetThreadAffinityMask"}->Call($handle, $n);
-	  if ($Forks::Super::DEBUG) {
+	  if ($job->{debug}) {
 	    debug("CPU affinity for Win32 thread id $thread_id: ",
 		  "$old_affinity ==> $n\n");
 	  }
@@ -1974,7 +2031,8 @@ sub config_os_child {
       }
     } elsif (Forks::Super::CONFIG('BSD::Process::Affinity')) {
       # this code is not tested and not guaranteed to work
-      my $z = eval 'BSD::Process::Affinity->get_process_mask()->from_bitmask($n)->update()';
+      my $z = eval 'BSD::Process::Affinity->get_process_mask()
+                    ->from_bitmask($n)->update()';
       if ($@ && 0 == $Forks::Super::Job::WARNED_ABOUT_AFFINITY++) {
 	warn "Forks::Super::Job::config_os_child(): ",
 	  "cannot update CPU affinity\n";
@@ -1992,6 +2050,7 @@ sub _get_win32_thread_api {
     local $!;
     undef $!;
     my $win32_thread_api = 
+      # needed for setting CPU affinity
       { "GetCurrentThreadId" =>
 		Win32::API->new('kernel32','GetCurrentThreadId','','N'),
 	"OpenThread" =>
@@ -1999,14 +2058,22 @@ sub _get_win32_thread_api {
 				q[HANDLE OpenThread(DWORD a,BOOL b,DWORD c)]),
 	"SetThreadAffinityMask" =>
 		Win32::API->new('kernel32',
-				"DWORD SetThreadAffinityMask(HANDLE h,DWORD d)")
+				"DWORD SetThreadAffinityMask(HANDLE h,DWORD d)"),
+
+	# needed for setting thread priority
+	"SetThreadPriority" =>
+		Win32::API->new('kernel32', "BOOL SetThreadPriority(HANDLE h,int n)"),
       };
     if ($!) {
       $win32_thread_api->{"_error"} = "$! / $^E";
     }
+
     undef $!;
     $win32_thread_api->{"GetProcessAffinityMask"} =
       Win32::API->new('kernel32', "BOOL GetProcessAffinityMask(HANDLE h,PDWORD a,PDWORD b)");
+    $win32_thread_api->{"GetThreadPriority"} =
+      Win32::API->new('kernel32', "int GetThreadPriority(HANDLE h)");
+
     if ($win32_thread_api->{"_error"}) {
       carp "error in Win32::API thread initialization: ",
 	$win32_thread_api->{"_error"};
@@ -2058,7 +2125,13 @@ sub printAll {
 
 sub debug {
   my @msg = @_;
-  Forks::Super::debug(@msg) if $Forks::Super::DEBUG;
+  Forks::Super::_debug(@msg);
+  return;
+}
+
+sub _debug {
+  my @msg = @_;
+  Forks::Super::_debug(@msg);
   return;
 }
 
@@ -2072,7 +2145,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.07
+Version 0.08
 
 =head1 SYNOPSIS
 
@@ -2089,10 +2162,10 @@ Version 0.07
     }
 
     # wait for a child process to finish
-    $w = wait;                  # blocking wait for any child, $? hold exit status of child
-    $w = waitpid $pid, 0;       # blocking wait for specific child
-    $w = waitpid $pid, WNOHANG; # non blocking wait, use with POSIX ':sys_wait_h'
-    $w = waitpid 0, $flag;      # wait on any process in the current process group
+    $w = wait;                  # blocking wait on any child, $? holds child exit status
+    $w = waitpid $pid, 0;       # blocking wait on specific child
+    $w = waitpid $pid, WNOHANG; # non-blocking wait, use with POSIX ':sys_wait_h'
+    $w = waitpid 0, $flag;      # wait on any process in current process group
     waitall;                    # block until all children are finished
 
     # -------------- helpful extensions ---------------------
@@ -2157,6 +2230,10 @@ Version 0.07
     $pid1 = fork { cmd => $job1 };
     $pid2 = fork { cmd => $job2, depend_on => $pid1 };            # put on queue until job 1 is complete
     $pid4 = fork { cmd => $job4, depend_start => [$pid2,$pid3] }; # put on queue until jobs 2,3 have started
+
+    # manage OS settings on jobs -- not available on all systems
+    $pid1 = fork { os_priority => 10 };    # like nice(1) on Unix
+    $pid2 = fork { cpu_affinity => 0x5 };  # prefer CPUs #0 and #2
 
     # job information
     $state = Forks::Super::state($pid);    # ACTIVE, DEFERRED, COMPLETE, REAPED
@@ -2484,8 +2561,9 @@ On unsupported systems, this option is ignored.
 
 =item fork { cpu_affinity => $bitmask }
 
-On supported operating systems, and after the successful creation of 
-the child process, attempt to set the process's CPU affinity.
+On supported operating systems with multiple cores, 
+and after the successful creation of the child process, 
+attempt to set the process's CPU affinity.
 Each bit of the bitmask represents one processor. Set a bit to 1
 to allow the process to use the corresponding processor, and set it to
 0 to disallow the corresponding processor. There may be additional
@@ -2494,6 +2572,20 @@ system.
 
 As of version 0.07, supported systems are Cygwin, Win32, Linux,
 and possibly BSD.
+
+=item fork { debug => $bool }
+
+=item fork { undebug => $bool }
+
+Overrides the value in C<$Forks::Super::DEBUG> (see L</"MODULE VARIABLES">)
+for this specific job. If specified, the C<debug> parameter
+controls only whether the module will output debugging information related
+to the job created by this C<fork> call.
+
+Normally, the debugging settings of the parent, including the job-specific
+settings, are inherited by child processes. If the C<undebug> option is
+specified with a non-zero parameter value, then debugging will be 
+disabled in the child process.
 
 =back
 
@@ -2794,6 +2886,9 @@ will be written to the C<Forks::Super::DEBUG> filehandle. By default
 C<Forks::Super::DEBUG> is aliased to C<STDERR>, but it may be reset
 by the module user at any time.
 
+Debugging behavior may be overridden for specific jobs
+if the C<debug> or C<undebug> option is provided to C<fork>.
+
 =item %Forks::Super::CHILD_STDIN
 
 =item %Forks::Super::CHILD_STDOUT
@@ -2835,6 +2930,24 @@ List of all C<Forks::Super::Job> objects that were created from C<fork()> calls,
 including deferred and failed jobs. Both process IDs and job IDs
 (for jobs that were deferred at one time) can be used to look
 up Job objects in the %Forks::Super::ALL_JOBS table.
+
+=item $Forks::Super::QUEUE_INTERRUPT
+
+On systems with mostly-working signal frameworks, this
+module installs a signal handler the first time that a
+task is deferred. The signal that is trapped is
+defined in the variable C<$Forks::Super::QUEUE_INTERRUPT>.
+The default value is C<USR1>, and it may be overridden 
+directly or set on module import
+
+    use Forks::Super QUEUE_INTERRUPT => 'TERM';
+    $Forks::Super::QUEUE_INTERRUPT = 'USR2';
+
+You would only worry about resetting this variable
+if you (including other modules that you import) are
+making use of an existing C<SIGUSR1> handler.
+
+
 
 =back
 
@@ -2887,17 +3000,19 @@ filehandles C<$Forks::Super::CHILD_STDOUT{PID}> AND C<$Forks::Super::CHILD_STDER
 
 =head1 INCOMPATIBILITIES
 
-If a C<fork> call ever results in a task being deferred,
-then this module will install a C<SIGUSR1> handler as
-well, and become incompatible with modules that require
-their own C<SIGUSR1> handler.
-
 Some features use the C<alarm> function and custom
 C<SIGALRM> handlers in the child processes. Using other
 modules that employ this functionality may cause
 undefined behavior. Systems and versions that do not
 implement the C<alarm> function (like MSWin32 prior to
 Perl v5.7) will not be able to use these features.
+
+The first time that a task is deferred, by default this
+module will try to install a C<SIGUSR1> handler. See
+the description of C<$Forks::Super::QUEUE_INTERRUPT>
+under L</"MODULE VARIABLES"> for changing this behavior
+if you intended to use a C<SIGUSR1> handler for
+something else.
 
 =head1 DEPENDENCIES
 
@@ -2940,6 +3055,12 @@ from platform to platform. It is possible that this module
 or certain features will not work as advertised. Please
 report any problems you encounter to E<lt>mob@cpan.orgE<gt>
 and I'll see what I can do about it.
+
+=cut
+
+head1 SEE ALSO
+
+There are reams of other modules on CPAN 
 
 =head1 AUTHOR
 
@@ -2995,12 +3116,3 @@ Possible TODOs:
          and to resume them when the system gets less busy.
          I bet this will be hard to do with Win32.
 
-         fork { debug => $boolean }
-
-                override $Forks::Super::DEBUG for this job
-
-         Forks::Super::Win32 as Win32 implementation of as much of this module
-         as I can manage.
-
-         Currently USR1 is used to signal the program to analyze the queue.
-         Make the signal configurable.

@@ -4,7 +4,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.07
+0.08
 
 =head1 SYNOPSIS
 
@@ -107,6 +107,10 @@ receive a C<SIGCHLD> signal, but have not been reaped.
 For jobs that have been reaped by a call to C<Forks::Super::wait>, 
 C<Forks::Super::waitpid>, or C<Forks::Super::waitall>.
 
+=item C<SUSPENDED>
+
+Reserved for future use.
+
 =back
 
 =item status
@@ -175,6 +179,11 @@ be killed.
 
 Value supplied to the C<fork> call about desired 
 operating system priority for the job.
+
+=item cpu_affinity
+
+Value supplied to the C<fork> call about desired
+CPU's for this process to prefer.
 
 =back
 

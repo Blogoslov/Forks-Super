@@ -38,7 +38,7 @@ SKIP: {
       if (/maxfork:(\d+)/) {
 	$nn = $1;
 	print STDERR "$^O-$] can apparently support $nn simultaneous background procs\n";
-	$nn = int(0.85 * $nn);
+	$nn = int(0.75 * $nn);
 	if ($nn > 150) {
 	  $nn = 150;
 	}

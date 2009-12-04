@@ -1,5 +1,5 @@
 
-Forks::Super version 0.07
+Forks::Super version 0.08
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -72,6 +72,11 @@ timing conditions can be validated. You should not infer
 from the long running time of the tests that this module
 will degrade your scripts' performance.
 
+Tests from the file "t/60-os.t" cover the operating-
+system dependent functionality of this module. These
+tests may fail on some configurations, but that should
+not discourage you from installing this module.
+
 
 DEPENDENCIES
 
@@ -89,6 +94,15 @@ modules if they are installed, but will still be able
 to perform all of its functions without using them:
 
     Time::HiRes
+
+Certain operating system dependent features may not work
+(usually failing silently) if these OS-specific modules
+are not installed:
+
+    Win32::Process [Windows and Cygwin]
+    Win32          [Windows]
+    Win32::API     [Windows]
+    BSD::Process::Affinity [BSD]
 
 WINDOWS
 
