@@ -25,9 +25,11 @@ if (-f $limits_file) {
   unlink $limits_file;
 }
 
+my $N = 200;
+print STDERR "";
 undef $@;
 my $r = eval {
-  for (my $i=0; $i<200; $i++) {
+  for (my $i=0; $i<$N; $i++) {
     undef $@;
     my $pid;
     eval { $pid = fork() }; # CORE::fork, not Forks::Super::fork
@@ -36,6 +38,7 @@ my $r = eval {
       1 while wait > -1;
       exit 0;
     } elsif ($pid == 0) {
+      print STDERR "";
       sleep 15;
       exit 0;
     }
@@ -45,7 +48,7 @@ my $r = eval {
       close L;
     }
   }
-  print STDERR "$^O-$] successfully forked 200 processes.\n";
+  print STDERR "$^O-$] successfully forked $N processes.\n";
   1 while wait > -1;
 };
 print "Result: $r / $@\n";

@@ -1,5 +1,5 @@
 package Forks::Super;
-require 5.006001;     # for improvements to Perl fork and signal handling
+use 5.007003;     # for "safe" signals -- see perlipc
 use Exporter;
 use POSIX ':sys_wait_h';
 use Carp;
@@ -7,7 +7,7 @@ use File::Path;
 use strict;
 use warnings;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -42,7 +42,7 @@ sub _init {
   return;
 }
 
- sub import {
+sub import {
   my ($class,@args) = @_;
   my @tags;
   _init();
@@ -635,7 +635,9 @@ sub handle_CHLD {
     push @Forks::Super::CHLD_HANDLE_HISTORY, "start\n";
   }
   my $sig = shift;
-  debug("Forks::Super::handle_CHLD(): $sig received") if $Forks::Super::DEBUG;
+  if ($sig ne "-1" && $Forks::Super::DEBUG) {
+    debug("Forks::Super::handle_CHLD(): $sig received");
+  }
 
   my $nhandled = 0;
 
@@ -838,7 +840,7 @@ sub read_stdout {
     $job = $Forks::Super::ALL_JOBS{$job} || return;
   }
   if ($job->{child_stdout_closed}) {
-    if ($job->{debug}) {
+    if ($job->{debug} && !$job->{_warned_stdout_closed}++) {
       _debug("Forks::Super::read_stdout(): ",
 	    "fh closed for $job->{pid}");
     }
@@ -903,7 +905,7 @@ sub read_stderr {
     $job = $Forks::Super::ALL_JOBS{$job} || return;
   }
   if ($job->{child_stderr_closed}) {
-    if ($job->{debug}) {
+    if ($job->{debug} && !$job->{_warned_stderr_closed}++) {
       _debug("Forks::Super::read_stderr(): ",
 	    "fh closed for $job->{pid}");
     }
@@ -2052,7 +2054,7 @@ sub _get_win32_thread_api {
     my $win32_thread_api = 
       # needed for setting CPU affinity
       { "GetCurrentThreadId" =>
-		Win32::API->new('kernel32','GetCurrentThreadId','','N'),
+		Win32::API->new('kernel32','int GetCurrentThreadId()'),
 	"OpenThread" =>
 		Win32::API->new('kernel32', 
 				q[HANDLE OpenThread(DWORD a,BOOL b,DWORD c)]),
@@ -2145,7 +2147,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.08
+Version 0.09
 
 =head1 SYNOPSIS
 

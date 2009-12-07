@@ -1,5 +1,5 @@
 
-Forks::Super version 0.08
+Forks::Super version 0.09
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -65,12 +65,8 @@ usually works. A few of the tests are subject to some
 hard-to-investigate race conditions and may fail
 intermittently. Running "make test" again or installing
 the "Time::HiRes" module may increase the chance of
-passing the test phase.
-
-In many tests, long delays are induced so that various
-timing conditions can be validated. You should not infer
-from the long running time of the tests that this module
-will degrade your scripts' performance.
+passing the test phase. Some of the tests are also more
+likely to fail on a heavily loaded system.
 
 Tests from the file "t/60-os.t" cover the operating-
 system dependent functionality of this module. These

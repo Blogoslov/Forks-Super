@@ -125,3 +125,5 @@ Possible TODOs:
 
 	Forks::Super::Uninterruptable package for "uninterruptable" versions
 	of Perl system calls like  sleep , connect , select($$$$)
+
+    ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc)

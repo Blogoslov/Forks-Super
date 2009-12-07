@@ -42,6 +42,9 @@ SKIP: {
 	if ($nn > 150) {
 	  $nn = 150;
 	}
+	if ($^O =~ /bsd/i && $nn > 110) {
+	  $nn = 110;
+	}
       }
     }
     close L;
@@ -63,7 +66,9 @@ SKIP: {
     skip "Max ~$nn proc on $^O v$], can only do ".((2*$nn)+1)." tests", 2*(150-$nn);
   }
 }
+
 for (my $i=0; $i<$nn; $i++) {
+  # failure point on some systems: "Maximal count of pending signals (nnn) exceeded"
   my $pid = fork { 'sub' => sub { sleep 5 } };
   croak "fork failed i=$i OS=$^O V=$]" if !isValidPid($pid);
 }

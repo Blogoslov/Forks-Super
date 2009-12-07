@@ -23,11 +23,11 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
 my $pid1 = fork { sub => sub { sleep 5 } };
-my $t = time;
+my $t = Forks::Super::Time();
 my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, queue_priority => 10 };
 my $pid3 = fork { sub => sub { }, queue_priority => 5 };
-$t = time - $t;
-ok($t <= 1, "quick return for queued job");
+$t = Forks::Super::Time() - $t;
+ok($t <= 1.5, "quick return ${t}s for queued job, expected <= 1s");
 my $j1 = Forks::Super::Job::get($pid1);
 my $j2 = Forks::Super::Job::get($pid2);
 my $j3 = Forks::Super::Job::get($pid3);

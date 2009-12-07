@@ -52,6 +52,9 @@ sub internal_command {
 #       fork routine should be able to attach it to the calling package.
 #
 
+open(LOCK, ">>", "t/out/.lock-t12");
+flock LOCK, 2;
+
 unlink "t/out/test2";
 my $pid = fork { sub => 'main::internal_command',
 		args => [ "-o=t/out/test2", "-e=Hello,", 
@@ -137,18 +140,4 @@ $p = wait;
 ok($? == 0, "captured correct zero status from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");
 
-__END__
--------------------------------------------------------
-
-Feature:	fork to a Perl subroutine
-
-What to test:	specify a perl subroutine
-			by method name and by CODE ref
-			with and without arguments
-		verify that it ran in the background
-		verify that it ran for the correct amount of time
-		verify that it produced the correct output
-		verify that it returned the correct status
-			zero and non-zero
-
--------------------------------------------------------
+close LOCK;
