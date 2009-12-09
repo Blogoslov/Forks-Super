@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 301;
+use Test::More tests => 299;
 use Carp;
 use strict;
 use warnings;
@@ -30,7 +30,8 @@ my $limits_file = "t/out/limits.$^O.$]";
   }
 }
 
-my $nn = 150;  # cygwin chokes if $nn>196
+my $NN = 149;
+my $nn = $NN;
 SKIP: {
   if (-f $limits_file) {
     open(L, "<", $limits_file);
@@ -39,8 +40,8 @@ SKIP: {
 	$nn = $1;
 	print STDERR "$^O-$] can apparently support $nn simultaneous background procs\n";
 	$nn = int(0.75 * $nn);
-	if ($nn > 150) {
-	  $nn = 150;
+	if ($nn > $NN) {
+	  $nn = $NN;
 	}
 	if ($^O =~ /bsd/i && $nn > 110) {
 	  $nn = 110;
@@ -62,8 +63,8 @@ SKIP: {
   } elsif ($^O =~ /darwin/) {
     $nn = 80;
   }
-  if ($nn < 150) {
-    skip "Max ~$nn proc on $^O v$], can only do ".((2*$nn)+1)." tests", 2*(150-$nn);
+  if ($nn < $NN) {
+    skip "Max ~$nn proc on $^O v$], can only do ".((2*$nn)+1)." tests", 2*($NN-$nn);
   }
 }
 

@@ -8,6 +8,7 @@ most of the ports to Windows, including
 many features that would be useful to the
 Forks::Super module.
 
+
 1. Process groups and pseudo-process IDs
 
 On Un*x systems, a process group is identified
@@ -28,6 +29,7 @@ pseudo-process ID.
 
 See the  perlfork  POD for more information about
 how  CORE::fork  is emulated on Windows.
+
 
 2. Process priority
 
@@ -86,15 +88,36 @@ with an argument of  0  to perform these child
 management functions but without any additional
 delay.
 
+
 4. Alarm
 
 The Perl  alarm  system call is not fully supported 
-on all systems, including Windows ports of Perl
-prior to 5.7.  The feature of passing a  timeout
+on all systems, including all Windows ports of Perl
+prior to 5.8.3.  The feature of passing a  timeout
 or  expiration  option to a  Forks::Super::fork  
 call depends on this feature, so the call
 will fail when used with those options on systems that
 cannot support  alarm().
+
+On Windows systems that do implement  alarm() ,
+it may not be fully functional. For example, the
+SIGALRM signal might still not interrupt certain
+system calls like  sysread().
+
+
+5. Sockets are blocking
+
+Sockets in Windows systems are always blocking.
+If you invoke  fork { child_fh => [ "socket" ] }
+to use sockets for parent-child interprocess
+communication, you must take care not to read from
+an empty socket handle or your script will hang.
+
+In general, the 4-arg version of select does work
+on Windows (but only on socket handles, not on pipes
+or regular filehandles). You can use this command
+to check whether there is input to be read on a
+Windows socket handle.
 
 
 

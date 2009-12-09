@@ -1,9 +1,9 @@
 
-Forks::Super version 0.09
+Forks::Super version 0.10
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
-fork(), wait(), and waitpid() functions to provide
+fork(), wait(), and waitpid() functions with
 additional features for spawning background processes
 and managing them, including:
 

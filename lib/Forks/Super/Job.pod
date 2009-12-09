@@ -4,7 +4,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.09
+0.10
 
 =head1 SYNOPSIS
 

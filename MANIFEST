@@ -26,6 +26,7 @@ t/32-stress-test.t
 t/40-timeout.t
 t/41-filehandles.t
 t/42-filehandles.t
+t/43-sockethandles.t
 t/44-busy.t
 t/45-userbusy.t
 t/50-queue.t

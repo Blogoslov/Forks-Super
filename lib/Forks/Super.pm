@@ -4,16 +4,19 @@ use Exporter;
 use POSIX ':sys_wait_h';
 use Carp;
 use File::Path;
+use IO::Handle;
 use strict;
 use warnings;
+$| = 1;
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
-our @EXPORT_OK = qw(isValidPid pause Time);
+our @EXPORT_OK = qw(isValidPid pause Time read_stdout read_stderr);
 our %EXPORT_TAGS = ( 'test' =>  [ 'isValidPid', 'Time' ],
-		     'test_config' => [ 'isValidPid', 'Time' ]);
+		     'test_config' => [ 'isValidPid', 'Time' ],
+		     'all' => [ @EXPORT_OK ] );
 
 sub _init {
   return if $Forks::Super::INITIALIZED;
@@ -23,6 +26,7 @@ sub _init {
   open(Forks::Super::DEBUG, '>&STDERR') 
     or *Forks::Super::DEBUG = *STDERR 
     or carp "Debugging not available in Forks::Super module!\n";
+  *Forks::Super::DEBUG->autoflush(1);
   $Forks::Super::REAP_NOTHING_MSGS = 0;
   $Forks::Super::NUM_PAUSE_CALLS = 0;
   $Forks::Super::NEXT_DEFERRED_ID = -100000;
@@ -455,6 +459,19 @@ sub init_child {
   delete $Forks::Super::CONFIG{filehandles};
   undef $Forks::Super::FH_DIR;
   undef $Forks::Super::FH_DIR_DEDICATED;
+
+  if (-p STDIN or defined getsockname(STDIN)) {
+    close STDIN;
+    open(STDIN, '<', '/dev/null');
+  }
+  if (-p STDOUT or defined getsockname(STDOUT)) {
+    close STDOUT;
+    open(STDOUT, '>', '/dev/null');
+  }
+  if (-p STDERR or defined getsockname(STDERR)) {
+    close STDERR;
+    open(STDERR, '>', '/dev/null');
+  }
   return;
 }
 
@@ -464,6 +481,7 @@ sub child_exit {
     alarm 0;
   }
   # close filehandles ? Nah.
+  # close sockethandles ? Nah.
   exit($code);
 }
 
@@ -573,6 +591,8 @@ sub run_queue {
   #   assemble all DEFERRED jobs
   #   order by priority
   #   go through the list and attempt to launch each job in order.
+  # XXX - if job can launch, we should make another pass through the front
+  # XXX - of  @deferred_jobs  -- this might fix some intermittent test failures
 
   debug('run_queue(): examining deferred jobs') if $Forks::Super::DEBUG;
   my @deferred_jobs = sort { $b->{queue_priority} <=> $a->{queue_priority} }
@@ -811,12 +831,54 @@ sub write_stdin {
   }
   my $fh = $job->{child_stdin};
   if (defined $fh) {
-    print $fh @msg;
+    return print $fh @msg;
   } else {
     carp "Forks::Super::write_stdin(): ",
       "Attempted write on child $job->{pid} with no STDIN filehandle";
   }
   return;
+}
+
+sub _read_socket {
+  my ($job, $sh, $wantarray) = @_;
+
+  if (!defined $job && $$ != $Forks::Super::MAIN_PID) {
+    $job = $Forks::Super::Job::self;
+  }
+
+  if (!defined $sh) {
+    carp "read on undefined filehandle for ",$job->toString();
+  }
+
+  if ($sh->blocking() || $^O eq "MSWin32") {
+    my $fileno = fileno($sh);
+    if (not defined $fileno) {
+      $fileno = $Forks::Super::FILENO{$sh};
+      Carp::cluck "Cannot determine FILENO for socket handle $sh!";
+    }
+
+    my ($rin,$rout,$ein,$eout);
+    my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+    $rin = '';
+    vec($rin, $fileno, 1) = 1;
+
+    # perldoc select: warns against mixing select4 (unbuffered input) with
+    # readline (buffered input). Oops. Do I have to do my own buffering? Weak.
+
+    local $!; undef $!;
+    my ($nfound,$timeleft) = select $rout=$rin,undef,undef, $timeout;
+    if (!$nfound) {
+      if ($Forks::Super::DEBUG) {
+	debug("no input found on $sh/$fileno");
+      }
+      return;
+    }
+
+    if ($nfound == -1) {
+      warn "Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
+    }
+  }
+  return readline($sh);
 }
 
 #
@@ -854,6 +916,9 @@ sub read_stdout {
     }
     $job->{child_stdout_closed}++;
     return;
+  }
+  if (defined getsockname($fh)) {
+    return _read_socket($job, $fh, wantarray);
   }
 
   undef $!;
@@ -919,6 +984,9 @@ sub read_stderr {
     }
     $job->{child_stderr_closed}++;
     return;
+  }
+  if (defined getsockname($fh)) {
+    return _read_socket($job, $fh, wantarray);
   }
 
   undef $!;
@@ -1333,18 +1401,59 @@ sub preconfig_fh {
   my $job = shift;
 
   my $config = {};
-  if (defined $job->{get_child_fh} or defined $job->{get_child_filehandles}) {
-    $config->{get_child_stdin} = 1;
-    $config->{get_child_stdout} = 1;
-    $config->{get_child_stderr} = 1;
+  if (defined $job->{child_fh}) {
+    my $fh_spec = $job->{child_fh};
+    if (ref $fh_spec eq "ARRAY") {
+      $fh_spec = join ":", @$fh_spec;
+    }
+    if ($fh_spec =~ /all/i) {
+      foreach my $attr (qw(get_child_stdin get_child_stdout 
+			   get_child_stderr in out err all)) {
+	$config->{$attr} = 1;
+      }
+    } else {
+      if ($fh_spec =~ /(?<!jo)in/i) {
+	$config->{get_child_stdin} = $config->{in} = 1;
+      }
+      if ($fh_spec =~ /out/i) {
+	$config->{get_child_stdout} = $config->{out} = 1;
+      }
+      if ($fh_spec =~ /err/i) {
+	$config->{get_child_stderr} = $config->{err} = 1;
+      }
+      if ($fh_spec =~ /join/i) {
+	$config->{join_child_stderr} = $config->{join} = 1;
+	$config->{get_child_stdout} = $config->{out} = 1;
+	$config->{get_child_stderr} = $config->{err} = 1;
+      }
+      if ($fh_spec =~ /sock/i) {
+	$config->{sockets} = 1;
+      }
+    }
   } else {
-    foreach my $key (qw(get_child_stdin get_child_stdout
-			get_child_stderr join_child_stderr)) {
-      $config->{$key} = $job->{$key} if defined $job->{$key};
+    if (defined $job->{get_child_fh} or defined $job->{get_child_filehandles}) {
+      foreach my $attr (qw(get_child_stdin get_child_stdout 
+			   get_child_stderr in out err all)) {
+	$config->{$attr} = 1;
+      }
+    } else {
+      foreach my $key (qw(get_child_stdin get_child_stdout
+			  get_child_stderr join_child_stderr)) {
+	if (defined $job->{$key}) {
+	  $config->{$key} = $job->{$key};
+	  if ($key =~ /join/) {
+	    $config->{join} = $job->{$key};
+	  } else {
+	    $config->{substr($key,13)} = $job->{$key};
+	  }
+	}
+
+      }
     }
   }
 
-  # choose file names
+  # choose file names -- if sockets are used and successfully set up,
+  # the files will not be created.
   if ($config->{get_child_stdin}) {
     $config->{f_in} = _choose_fh_filename();
     debug("Using $config->{f_in} as shared file for child STDIN") 
@@ -1361,6 +1470,10 @@ sub preconfig_fh {
       if $job->{debug};
   }
 
+  if ($config->{sockets}) {
+    $job->preconfig_fh_sockets($config);
+  }
+
   if (0 < scalar keys %$config) {
     if (defined $Forks::Super::CONFIG{filehandles} 
 	and $Forks::Super::CONFIG{filehandles} == 0) {
@@ -1370,6 +1483,74 @@ sub preconfig_fh {
     $job->{fh_config} = $config;
   }
   return;
+}
+
+sub preconfig_fh_sockets {
+  my ($job,$config) = @_;
+  if (!Forks::Super::CONFIG("Socket")) {
+    carp "Forks::Super::Job::preconfig_fh_sockets(): ",
+      "Socket unavailable. Will try to use regular filehandles for child ipc.";
+    delete $config->{sockets};
+    return;
+  }
+  if ($config->{in} || $config->{out} || $config->{err}) {
+    ($config->{csock},$config->{psock}) = _create_socket_pair();
+
+    if (not defined $config->{csock}) {
+      delete $config->{sockets};
+      return;
+    } elsif ($job->{debug}) {
+      debug("created socket pair/$config->{csock}:", fileno($config->{csock}),
+	    "/$config->{psock}:",fileno($config->{psock}));
+    }
+    if ($config->{out} && $config->{err} && !$config->{join}) {
+      ($config->{csock2},$config->{psock2}) = _create_socket_pair();
+      if (not defined $config->{csock2}) {
+	delete $config->{sockets};
+	return;
+      } elsif ($job->{debug}) {
+	debug("created socket pair/$config->{csock2}:", fileno($config->{csock2}),
+	      "/$config->{psock2}:",fileno($config->{psock2}));
+      }
+    }
+  }
+}
+
+sub _create_socket_pair {
+  if (!Forks::Super::CONFIG("Socket")) {
+    croak "Forks::Super::Job::_create_socket_pair(): no Socket";
+  }
+  my ($s_child, $s_parent);
+  local $!;
+  undef $!;
+  if (Forks::Super::CONFIG("IO::Socket")) {
+    ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_UNIX(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
+    if (!(defined $s_child && defined $s_parent)) {
+      warn "IO::Socket->socketpair(AF_UNIX) failed. Trying AF_INET\n";
+      ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_INET(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
+    } 
+  } else {
+    my $z = socketpair($s_child, $s_parent, Socket::AF_UNIX(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
+    if ($z == 0) {
+      warn "socketpair(AF_UNIX) failed. Trying AF_INET\n";
+      $z = socketpair($s_child, $s_parent, Socket::AF_INET(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
+      if ($z == 0) {
+	undef $s_child;
+	undef $s_parent;
+      }
+    }
+  }
+  if (!(defined $s_child && defined $s_parent)) {
+    carp "Forks::Super::Job::_create_socket_pair(): socketpair failed $! $^E!";
+    return;
+  }
+  $s_child->autoflush(1);
+  $s_parent->autoflush(1);
+  $s_child->blocking(not $^O ne "MSWin32");
+  $s_parent->blocking(not $^O ne "MSWin32");
+  $Forks::Super::FILENO{$s_child} = fileno($s_child);
+  $Forks::Super::FILENO{$s_parent} = fileno($s_parent);
+  return ($s_child,$s_parent);
 }
 
 
@@ -1597,11 +1778,16 @@ sub config_fh_parent_stdin {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{get_child_stdin} and defined $fh_config->{f_in}) {
+  if ($fh_config->{in} && $fh_config->{sockets}) {
+    $fh_config->{s_in} = $fh_config->{psock};
+    $job->{child_stdin} = $Forks::Super::CHILD_STDIN{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDIN{$job->{pid}} = $fh_config->{s_in};
+    $fh_config->{f_in} = "__socket__";
+    debug("Setting up socket to $job->{pid} stdin $fh_config->{s_in} ",fileno($fh_config->{s_in})) if $job->{debug};
+  } elsif ($fh_config->{get_child_stdin} and defined $fh_config->{f_in}) {
     my $fh;
-    debug("Opening $fh_config->{f_in} in parent as child STDIN")
-      if $job->{debug};
     if (open ($fh, '>', $fh_config->{f_in})) {
+      debug("Opening $fh_config->{f_in} in parent as child STDIN") if $job->{debug};
       $job->{child_stdin} = $Forks::Super::CHILD_STDIN{$job->{real_pid}} = $fh;
       $Forks::Super::CHILD_STDIN{$job->{pid}} = $fh;
       $fh->autoflush(1);
@@ -1621,16 +1807,23 @@ sub config_fh_parent_stdout {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{get_child_stdout} and defined $fh_config->{f_out}) {
+  if ($fh_config->{out} && $fh_config->{sockets}) {
+    $fh_config->{s_out} = $fh_config->{psock};
+    $job->{child_stdout} = $Forks::Super::CHILD_STDOUT{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDOUT{$job->{pid}} = $fh_config->{s_out};
+    $fh_config->{f_out} = "__socket__";
+    debug("Setting up socket to $job->{pid} stdout $fh_config->{s_out} ",fileno($fh_config->{s_out})) if $job->{debug};
+
+  } elsif ($fh_config->{get_child_stdout} and defined $fh_config->{f_out}) {
     # creation of $fh_config->{f_out} may be delayed. 
     # don't panic if we can't open it right away.
     my ($try, $fh);
-    debug("Opening ", $fh_config->{f_out}, " in parent as child STDOUT")
-      if $job->{debug};
+    debug("Opening ", $fh_config->{f_out}, " in parent as child STDOUT") if $job->{debug};
     for ($try=1; $try<=11; $try++) {
       local $! = 0;
       if ($try <= 10 && open($fh, '<', $fh_config->{f_out})) {
 
+	debug("Opened child STDOUT in parent on try #$try") if $job->{debug};
 	$job->{child_stdout} = $Forks::Super::CHILD_STDOUT{$job->{real_pid}} = $fh;
 	$Forks::Super::CHILD_STDOUT{$job->{pid}} = $fh;
 
@@ -1647,6 +1840,14 @@ sub config_fh_parent_stdout {
 	"could not open filehandle to read child STDOUT: $!\n";
     }
   }
+  if ($fh_config->{join} || $fh_config->{join_child_stderr}) {
+    delete $fh_config->{err};
+    delete $fh_config->{get_child_stderr};
+    $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDERR{$job->{pid}} = $job->{child_stdout};
+    $fh_config->{f_err} = $fh_config->{f_out};
+    debug("Joining stderr to stdout for $job->{pid}") if $job->{debug};
+  }
   return;
 }
 
@@ -1654,13 +1855,21 @@ sub config_fh_parent_stderr {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{get_child_stderr} and defined $fh_config->{f_err}) {
+  if ($fh_config->{err} && $fh_config->{sockets}) {
+    $fh_config->{s_err} = $fh_config->{s_out} ? $fh_config->{psock2} : $fh_config->{psock};
+    $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDERR{$job->{pid}} = $fh_config->{s_err};
+    $fh_config->{f_err} = "__socket__";
+    debug("Setting up socket to $job->{pid} stderr $fh_config->{s_err} ",fileno($fh_config->{s_err})) if $job->{debug};
+
+  } elsif ($fh_config->{get_child_stderr} and defined $fh_config->{f_err}) {
     delete $fh_config->{join_child_stderr};
     my ($try, $fh);
     debug("Opening ", $fh_config->{f_err}, " in parent as child STDERR")
       if $job->{debug};
     for ($try=1; $try<=11; $try++) {
       if ($try <= 10 && open($fh, '<', $fh_config->{f_err})) {
+	debug("Opened child STDERR in parent on try #$try") if $job->{debug};
 	$job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}} = $fh;
 	$Forks::Super::CHILD_STDERR{$job->{pid}} = $fh;
 
@@ -1677,11 +1886,12 @@ sub config_fh_parent_stderr {
 	"could not open filehandle to read child STDERR: $!\n";
     }
   }
-  if ($fh_config->{join_child_stderr}) {
-    $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
-      = $Forks::Super::CHILD_STDOUT{$job->{real_pid}};
-    $Forks::Super::CHILD_STDERR{$job->{pid}} = $Forks::Super::CHILD_STDOUT{$job->{pid}};
-  }
+  ### join code moved to config_fh_parent_stdout
+  #if ($fh_config->{join_child_stderr}) {
+  #  $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+  #    = $Forks::Super::CHILD_STDOUT{$job->{real_pid}};
+  #  $Forks::Super::CHILD_STDERR{$job->{pid}} = $Forks::Super::CHILD_STDOUT{$job->{pid}};
+  #}
   return;
 }
 
@@ -1700,12 +1910,17 @@ sub config_fh_parent {
   $job->config_fh_parent_stdin;
   $job->config_fh_parent_stdout;
   $job->config_fh_parent_stderr;
+  if ($job->{fh_config}->{sockets}) {
+    close $job->{fh_config}->{csock};
+    close $job->{fh_config}->{csock2} if defined $job->{fh_config}->{csock2};
+  }
 
   return;
 }
 
 sub config_child {
   my $job = shift;
+  $Forks::Super::Job::self = $job;
   $job->config_debug_child;
   $job->config_fh_child;
   $job->config_timeout_child;
@@ -1730,7 +1945,17 @@ sub config_fh_child_stdin {
   undef $!;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{get_child_stdin} && $fh_config->{f_in}) {
+  if ($fh_config->{in} && $fh_config->{sockets}) {
+    close STDIN;
+    if (open(STDIN, '<&' . fileno($fh_config->{csock}))) {
+      *STDIN->autoflush(1);
+      $Forks::Super::FILENO{*STDIN} = fileno(STDIN);
+    } else {
+      warn "Forks::Super::Job::config_fh_child_stdin(): ",
+	"could not attach child STDIN to input sockethandle: $!\n";
+    }
+    debug("Opening ",*STDIN,"/",fileno(STDIN), " in child STDIN") if $job->{debug};
+  } elsif ($fh_config->{get_child_stdin} && $fh_config->{f_in}) {
     # creation of $fh_config->{f_in} may be delayed. 
     # don't panic if we can't open it right away.
     my ($try, $fh);
@@ -1738,9 +1963,10 @@ sub config_fh_child_stdin {
     for ($try=1; $try<=11; $try++) {
       if ($try <= 10 && open($fh, '<', $fh_config->{f_in})) {
 	close STDIN if $^O eq "MSWin32";
-	open(STDIN, '<&' . fileno($fh) )
+	open(STDIN, "<&" . fileno($fh) )
 	  or warn "Forks::Super::Job::config_fh_child(): ",
 	    "could not attach child STDIN to input filehandle: $!\n";
+	debug("Reopened STDIN in child on try #$try") if $job->{debug};
 
 	# XXX - Unfortunately, if redirecting STDIN fails (and it might
 	# if the parent is late in opening up the file), we have probably
@@ -1766,7 +1992,31 @@ sub config_fh_child_stdout {
   undef $!;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{get_child_stdout} && $fh_config->{f_out}) {
+  if ($fh_config->{out} && $fh_config->{sockets}) {
+    close STDOUT;
+    if (open(STDOUT, '>&' . fileno($fh_config->{csock}))) {
+      *STDOUT->autoflush(1);
+      select STDOUT;
+    } else {
+      warn "Forks::Super::Job::config_fh_child_stdout(): ",
+	"could not attach child STDOUT to output sockethandle: $!\n";
+    }
+    debug("Opening ",*STDOUT,"/",fileno(STDOUT)," in child STDOUT") if $job->{debug};
+
+    if ($fh_config->{join} || $fh_config->{join_child_stderr}) {
+      delete $fh_config->{err};
+      delete $fh_config->{get_child_stderr};
+      close STDERR;
+      if (open(STDERR, ">&" . fileno($fh_config->{csock}))) {
+        *STDERR->autoflush(1);
+	debug("Joining ",*STDERR,"/",fileno(STDERR)," STDERR to child STDOUT") if $job->{debug};
+      } else {
+        warn "Forks::Super::Job::config_fh_child_stdout(): ",
+          "could not join child STDERR to STDOUT sockethandle: $!\n";
+      }
+    }
+
+  } elsif ($fh_config->{get_child_stdout} && $fh_config->{f_out}) {
     my $fh;
     debug("Opening up $fh_config->{f_out} for output in the child   $$")
       if $job->{debug};
@@ -1802,7 +2052,16 @@ sub config_fh_child_stderr {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{get_child_stderr} && $fh_config->{f_err}) {
+  if ($fh_config->{err} && $fh_config->{sockets}) {
+    close STDERR;
+    if (open(STDERR, ">&" . fileno($fh_config->{$fh_config->{out} ? "csock2" : "csock"}))) {
+      *STDERR->autoflush(1);
+      debug("Opening ",*STDERR,"/",fileno(STDERR)," in child STDERR") if $job->{debug};      
+    } else {
+      warn "Forks::Super::Job::config_fh_child_stderr(): ",
+	"could not attach STDERR to child error sockethandle: $!\n";
+    }
+  } elsif ($fh_config->{get_child_stderr} && $fh_config->{f_err}) {
     my $fh;
     debug("Opening $fh_config->{f_err} as child STDERR")
       if $job->{debug};
@@ -1839,6 +2098,10 @@ sub config_fh_child {
   $job->config_fh_child_stdout;
   $job->config_fh_child_stderr;
   $job->config_fh_child_stdin;
+  if ($job->{fh_config} && $job->{fh_config}->{sockets}) {
+    close $job->{fh_config}->{psock};
+    close $job->{fh_config}->{psock2} if defined $job->{fh_config}->{psock2};   
+  }
   return;
 }
 
@@ -1932,7 +2195,7 @@ sub config_timeout_child {
     } 
     croak "Forks::Super::Job::config_timeout_child(): quick timeout";
   } elsif ($timeout < 9E8) {
-    $SIG{ALRM} = sub { die "Timeout\n" };
+    $SIG{ALRM} = sub { die "Forks::Super: child process timeout\n" };
     if (Forks::Super::CONFIG("alarm")) {
       alarm $timeout;
       debug("Forks::Super::Job::config_timeout_child(): ",
@@ -2147,7 +2410,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.09
+Version 0.10
 
 =head1 SYNOPSIS
 
@@ -2185,7 +2448,7 @@ Version 0.09
     $pid = fork { sub => $subRef , expiration => 1260000000 }; # complete by 8AM Dec 5, 2009 UTC
 
     # obtain standard filehandles for the child process
-    $pid = fork { get_child_filehandles => 1 };
+    $pid = fork { child_fh => "in,out,err" };
     if ($pid == 0) {      # child process
       $x = <STDIN>; # read "Clean your room" command from parent
       print "from the mouth of babes\n";   # same as  print STDOUT ...
@@ -2200,7 +2463,7 @@ Version 0.09
     }
 
     # ---------- manage jobs and system resources ---------------
-    # this runs 100 tasks but the fork call blocks when there are already 5 jobs running
+    # runs 100 tasks but the fork call blocks when there are already 5 jobs running
     $Forks::Super::MAX_PROC = 5;
     $Forks::Super::ON_BUSY = 'block';
     for ($i=0; $i<100; $i++) {
@@ -2218,7 +2481,7 @@ Version 0.09
     $pid = fork { sub => 'MyModule::MyMethod', args => [ @b ], max_proc => 3 };
 
     # try to fork no matter how busy the system is
-    $pid = fork { force => 1 };
+    $pid = fork { force => 1, sub => \&MyMethod, args => [ @my_args ] };
 
     # when system is busy, queue jobs. When system is not busy, some jobs on the queue will start.
     # if job is queue, return value from fork() is a very negative number
@@ -2257,15 +2520,23 @@ call C<fork()>:
 
 =over 4
 
-=item * creating a new process running the same program at the same point
+=item * 
 
-=item * returning the process id (PID) of the child process to the parent
+creating a new process running the same program at the same point
+
+=item * 
+
+returning the process id (PID) of the child process to the parent.
 
 On Windows, this is a I<pseudo-process ID> 
 
-=item * returning 0 to the child process
+=item * 
 
-=item * returning C<undef> if the fork call was unsuccessful
+returning 0 to the child process
+
+=item * 
+
+returning C<undef> if the fork call was unsuccessful
 
 =back
 
@@ -2280,7 +2551,7 @@ C<fork> call.
 
 =item $child_pid = fork { cmd => $shell_command }
 
-=item $child_pid = fork { cmd => @shell_command }
+=item $child_pid = fork { cmd => \@shell_command }
 
 On successful launch of the child process, runs the specified shell command
 in the child process with the Perl C<system()> function. When the system
@@ -2300,7 +2571,7 @@ executing in the parent or child process.
 
 =item $child_pid = fork { sub => \&subroutineReference [, args => \@args ] }
 
-=item $child_pid = fork { sub => sub { ... subroutine defn ... } [, args => \@args ] }
+=item $child_pid = fork { sub => sub { ... code ... } [, args => \@args ] }
 
 On successful launch of the child process, C<fork> invokes the specified
 Perl subroutine with the specified set of method arguments (if provided).
@@ -2366,11 +2637,11 @@ C<timeout> and C<expiration>). Jobs with inconsistent times
 (end time is not later than start time) will be killed of
 as soon as they are created.
 
-=item fork { get_child_filehandles => 1 }
+=item fork { child_fh => $fh_spec }
 
-=item fork { get_child_stdin => $bool, get_child_stdout => $bool, get_child_stderr => $bool }
+=item fork { child_fh => [ @fh_spec ] }
 
-=item fork { get_child_stdout => $bool, join_child_stderr => $bool }
+B<Note: API change since v0.10.>
 
 Launches a child process and makes the child process's 
 STDIN, STDOUT, and/or STDERR filehandles available to
@@ -2382,12 +2653,12 @@ even convenient, for a parent process to communicate with a
 child, as this contrived example shows.
 
     $pid = fork { sub => \&pig_latinize, timeout => 10,
-                  get_child_filehandles => 1 };
+                  child_fh => "all" };
 
     # in the parent, $Forks::Super::CHILD_STDIN{$pid} is an *output* filehandle
     print {$Forks::Super::CHILD_STDIN{$pid}} "The blue jay flew away in May\n";
 
-    sleep 2; # give child time to do its job
+    sleep 2; # give child time to start up and get ready for input
 
     # and $Forks::Super::CHILD_STDOUT{$pid} is an *input* handle
     $result = <{$Forks::Super::CHILD_STDOUT{$pid}}>;
@@ -2417,12 +2688,93 @@ child, as this contrived example shows.
       }
     }
 
-The option C<get_child_filehandles> will obtain filehandles for the child's
-STDIN, STDOUT, and STDERR filehandles. If C<get_child_filehandles> is omitted,
-the fork() call will obtain those filehandles specified with
-C<get_child_stdin>, C<get_child_stdout>, and/or C<get_child_stderr> options. If the
-C<join_child_stderr> option is specified, then both the child's STDOUT and
-STDERR will be returned in the single $Forks::Super::CHILD_STDOUT{$pid} filehandle.
+The set of filehandles to make available are specified either as
+a non-alphanumeric delimited string, or list reference. This spec
+may contain one or more of the words C<in>, C<out>, C<err>,
+C<join>, C<all>, or C<socket>. 
+
+C<in>, C<out>, and C<err> mean that the child's STDIN, STDOUT,
+and STDERR, respectively, will be available in the parent process
+through the filehandles in C<$Forks::Super::CHILD_STDIN{$pid}>,
+C<$Forks::Super::CHILD_STDOUT{$pid}>, 
+and C<$Forks::Super::CHILD_STDERR{$pid}>, where C<$pid> is the
+child's process ID. C<all> is a convenient way to specify
+C<in>, C<out>, and C<err>. C<join> specifies that the child's
+STDOUT and STDERR will be returned through the same filehandle,
+specified as both C<$Forks::Super::CHILD_STDOUT{$pid}> and
+C<$Forks::Super::CHILD_STDERR{$pid}>.
+
+If C<socket> is specified, then local sockets will be used to
+pass between parent and child instead of temporary files.
+
+=head3 Socket handles vs. file handles
+
+Here are some things to keep in mind when deciding whether to
+use sockets or regular files for parent-child IPC:
+
+=over 4
+
+=item * 
+
+Sockets have a performance advantage, especially at 
+child process start-up.
+
+=item * 
+
+Socket input buffers have limited capacity. Write operations 
+can block if the socket reader is not vigilant
+
+=item * 
+
+On Windows, sockets are blocking, and care must be taken
+to prevent your script from reading on an empty socket
+
+=back
+
+=cut 
+
+It is an open question (that is to say: I personally haven't researched it)
+whether opening socket handles counts against your program's limit
+of simultaneous open filehandles.
+
+=head3 Socket and file handle gotchas
+
+Some things to keep in mind when using socket or file handles
+to communicate with a child process.
+
+=over 4
+
+=item * 
+
+care should be taken before C<close>'ing a socket handle.
+The same socket handle can be used for both reading and writing.
+Don't close a handle when you are only done with one half of the
+socket operations.
+
+=item * 
+
+The test C<defined getsockname($handle)> can determine
+whether C<$handle> is a socket handle or a regular filehandle.
+
+=item * 
+
+The following idiom is safe to use on both socket handles
+and regular filehandles:
+
+    shutdown($handle,2) || close $handle;
+
+=item * 
+
+IPC in this module is asynchronous. In general, you
+cannot tell whether the parent/child has written anything to
+be read in the child/parent. So getting C<undef> when reading
+from the C<$Forks::Super::CHILD_STDOUT{$pid}> handle does not
+necessarily mean that the child has finished (or even started!)
+writing to its STDOUT. Check out the C<seek HANDLE,0,1> trick
+in L<perlfunc#seek> for reading from a handle after you have
+already read past the end. You may find it useful for your
+parent and child processes to follow some convention (for example,
+a special word like C<"__END__">) to denote the end of input.
 
 =back
 
@@ -3048,7 +3400,7 @@ In some cases there are tedious workarounds:
     3b: sleep 1 while time < $stop_sleeping_at;
 
 It should be noted that signal handling in Perl is much
-improved with version 5.6, and the problems caused by
+improved with version 5.7.3, and the problems caused by
 such interruptions are much more tractable than they
 used to be.
 
@@ -3079,42 +3431,15 @@ at your option, any later version of Perl 5 you may have available.
 =cut
 
 
-TODO in future releases:
+TODO in future releases: See TODO file.
 
-support 
+Undocumented:
+$Forks::Super::Job::self              available in child process. Reference to the job object that launched the process.
+$Forks::Super::SOCKET_READ_TIMEOUT    in _read_socket, length of time to wait for input on the sockethandle being read
+                                      before returning  undef 
 
-Possible TODOs:
+Stuff to know about sockethandles vs filehandles:
 
-         wait     timeout
-         waitpid  timeout
-
-		wait calls that block for only a limited time
-         
-         fork { stdin => \@STDIN }
-
-		pass standard input to the child in a list at fork time.
-                This seems more satisfactory for a  cmd  style fork that
-                possibly can't wait for the parent to write to 
-                Forks::Super::CHILD_STDIN{$pid}.
-
-         fork { stdout => \@output, stderr => \@error }
-
-                when the child process completes, collect its stdout and stderr
-                output into the specified arrays. This will conserve filehandles
-                in the parent.
-
-         fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
-
-		open input and output filehandles in the child with the given names,
-		accessible in the parent at something like $Forks::Super::filehandles{$pid}{X}
-
-         incorporate CPU load into system business calc (see Parallel::ForkControl)
-
-         fork { callback => \&method }
-
-                subroutine to call in the parent process when the child finishes
-
-         facilities to suspend jobs when the system gets to busy
-         and to resume them when the system gets less busy.
-         I bet this will be hard to do with Win32.
-
+    don't close them. Use  shutdown() .
+    don't seek on them
+    use select4 to see if there is input waiting to be read before reading

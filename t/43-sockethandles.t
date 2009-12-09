@@ -1,9 +1,9 @@
 use Forks::Super ':test';
-use Test::More tests => 33;
+use Test::More tests => 34;
 use strict;
 use warnings;
 if (Forks::Super::CONFIG("alarm")) {
-  alarm 150;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
 }
 
 #
@@ -12,15 +12,6 @@ if (Forks::Super::CONFIG("alarm")) {
 # process. This features allows for communication
 # between parent and child processes.
 #
-
-#
-# 0.09 - added debugging code to sub repeater and to 
-# the "read_stderr" test (tests 23-31). The read_stderr is
-# a consistent failure point since 0.07 on some systems and
-# I need to get a handle on what goes on during that test.
-#
-
-
 
 # this is a subroutine that copies STDIN to STDOUT and optionally STDERR
 sub repeater {
@@ -32,10 +23,12 @@ sub repeater {
   my $curpos;
   local $!;
 
+  binmode STDOUT;  # for MSWin32 compatibility
+  binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    for ($curpos = tell STDIN; defined ($_ = <STDIN>); $curpos = tell STDIN) {
+    while (defined ($_ = Forks::Super::_read_socket(undef, *STDIN, 0))) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
@@ -60,9 +53,8 @@ sub repeater {
       Forks::Super::debug("repeater: no input");
     }
     Forks::Super::pause();
-    seek STDIN, $curpos, 0;
   }
-  if ($Forks::Super::DEBUG) {
+  if (0 && $Forks::Super::DEBUG) { # f_in can't be read in socket context
     my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
     Forks::Super::debug("repeater: time expired. Not processing any more input");
     Forks::Super::debug("input was from file: $f_in");
@@ -73,37 +65,36 @@ sub repeater {
     }
     close F_IN;
   }
-  close STDOUT;
-  close STDERR;
 }
 
 #######################################################
+
 my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
-              	 get_child_stdin => 1, get_child_stdout => 1, 
-		 get_child_stderr => 1 };
+		 child_fh => "in,out,err,socket" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $Forks::Super::CHILD_STDIN{$pid},"found stdin fh");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid},"found stdout fh");
-ok(defined $Forks::Super::CHILD_STDERR{$pid},"found stderr fh");
+ok(defined $Forks::Super::CHILD_STDIN{$pid} && defined fileno($Forks::Super::CHILD_STDIN{$pid}),"found stdin fh");
+ok(defined $Forks::Super::CHILD_STDOUT{$pid} && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),"found stdout fh");
+ok(defined $Forks::Super::CHILD_STDERR{$pid} && defined fileno($Forks::Super::CHILD_STDERR{$pid}),"found stderr fh");
+ok(defined getsockname($Forks::Super::CHILD_STDIN{$pid}) &&
+   defined getsockname($Forks::Super::CHILD_STDOUT{$pid}) &&
+   defined getsockname($Forks::Super::CHILD_STDERR{$pid}), "STDxxx handles are socket handles");
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
-close $fh_in;
+shutdown($fh_in, 1) || close $fh_in;
 ok($z > 0, "print to child stdin successful");
 my $t = time;
 my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
 my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
 while (time < $t+10) {
-  push @out, <$fh_out>;
-  push @err, <$fh_err>;
+  push @out, Forks::Super::read_stdout($pid);
+  push @err, Forks::Super::read_stderr($pid);
   sleep 1;
-  seek $fh_out,0,1;
-  seek $fh_err,0,1;
-
-# print "\@out:\n------\n@out\n\@err:\n-------\n@err\n";
 }
+shutdown($fh_out, 2) || close $fh_out;
+shutdown($fh_err, 2) || close $fh_err;
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 
@@ -121,7 +112,7 @@ waitall;
 # test join, read_stdout
 
 $pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 10,
-	    get_child_stdin => 1, get_child_stdout => 1, join_child_stderr => 1 };
+		child_fh => [ "in", "out", "join", "socket" ] };
 ok(isValidPid($pid), "started job with join");
 
 $msg = sprintf "the message is %x", rand() * 99999999;
@@ -139,6 +130,9 @@ while (time < $t+12) {
     push @out, $line;
   }
 }
+shutdown($Forks::Super::CHILD_STDIN{$pid},2) || close $Forks::Super::CHILD_STDIN{$pid};
+shutdown($Forks::Super::CHILD_STDOUT{$pid},2) || close $Forks::Super::CHILD_STDOUT{$pid};
+shutdown($Forks::Super::CHILD_STDERR{$pid},2) || close $Forks::Super::CHILD_STDERR{$pid};
 
 ###### these 5 tests were a failure point on versions 0.04,0.05 ######
 ###### failure point in 0.06 because of "Timeout" #######
@@ -169,7 +163,7 @@ waitall;
 sub read_stderr_test {
 
   $pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
-		  get_child_stdin => 1, get_child_stdout => 0, get_child_stderr => 1 };
+		  child_fh => "in,err,socket" };
 
   my $z = 0;
   if (isValidPid($pid)) {
@@ -185,8 +179,7 @@ sub read_stderr_test {
     if ($Forks::Super::DEBUG) {
       Forks::Super::debug("Printed \"That was a test\\n\" to child stdin ($pid). Result:$z");
     }
-    sleep 1;
-    close $Forks::Super::CHILD_STDIN{$pid};
+    shutdown($Forks::Super::CHILD_STDIN{$pid}, 1) || close $Forks::Super::CHILD_STDIN{$pid};
     if ($Forks::Super::DEBUG) {
       Forks::Super::debug("Closed filehandle to $pid STDIN");
     }
@@ -205,15 +198,9 @@ $t = time;
 @err = ();
 while (time < $t+12) {
   my @data = Forks::Super::read_stdout($pid);
-  if ($Forks::Super::DEBUG && defined $data[0]) {
-    Forks::Super::debug("Read from child $pid stdout: [ ", @data,  " ]");
-  }
   push @out, @data if @data>0 and $data[0] ne "";
 
   @data = Forks::Super::read_stderr($pid);
-  if ($Forks::Super::DEBUG && defined $data[0]) {
-    Forks::Super::debug("Read from child $pid stderr: [ ", @data,  " ]");
-  }
   push @err, @data if @data>0 and $data[0] ne "";
 }
 ok(@out == 0, "received no output from child");
@@ -257,8 +244,13 @@ $Forks::Super::DEBUG = 0;
 #
 
 sub compute_checksums_in_child {
-  sleep 5;
-  while (<STDIN>) {
+  binmode STDOUT;
+  for (;;) {
+    $_ = <STDIN>;
+    if (not defined $_) {
+      Forks::Super::pause();
+      next;
+    }
     s/\s+$//;
     last if $_ eq "__END__";
     print "$_\\", unpack("%32C*",$_)%65535,"\n";
@@ -267,13 +259,13 @@ sub compute_checksums_in_child {
 
 my @pids = ();
 for (my $i=0; $i<4; $i++) {
-  push @pids, fork { sub => \&compute_checksums_in_child,
-		       get_child_stdin => 1, get_child_stdout => 1 };
+  push @pids, fork { sub => \&compute_checksums_in_child, timeout => 20,
+			child_fh => "in,out,socket" };
 }
-my @data = (@INC,%INC,%!);
+my @data = (@INC,%INC,keys(%!),keys(%ENV));
 my (@pdata, @cdata);
 for (my $i=0; $i<@data; $i++) {
-  Forks::Super::write_stdin $pids[$i%4], "$data[$i]\n";
+  print {$Forks::Super::CHILD_STDIN{$pids[$i%4]}} "$data[$i]\n";
   push @pdata, sprintf("%s\\%d\n", $data[$i], unpack("%32C*",$data[$i])%65535);
 }
 Forks::Super::write_stdin($_,"__END__\n") for @pids;
@@ -286,7 +278,7 @@ ok(@pdata == @cdata);
 @cdata = sort @cdata;
 my $pc_equal = 1;
 for (my $i=0; $i<@pdata; $i++) {
-  $pc_equal=0 if $pdata[$i] ne $cdata[$i];
+  $pc_equal=0 if $pdata[$i] ne $cdata[$i] && print "$i: $pdata[$i] /// $cdata[$i] ///\n";
 }
 ok($pc_equal);
 

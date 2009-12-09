@@ -38,7 +38,7 @@ for (my $i=0; $i<20; $i++) {
   ok(isValidPid($pid), "successful fork $pid");
   $x{$pid} = $i;
 }
-$t = time;
+$t = Forks::Super::Time();
 while (0 < scalar keys %x) {
   my $p = wait;
   ok(isValidPid($p), "waited on arbitrary pid $p");
@@ -46,15 +46,15 @@ while (0 < scalar keys %x) {
   ok($?>>8 == $x{$p}, "wait returned correct exit status");
   delete $x{$p};
 }
-$t = time - $t;
-ok($t <= 8, "wait did not take too long");
-$t = time;
+$t = Forks::Super::Time() - $t;
+ok($t <= 8, "wait did not take too long ${t}s, expected <=8s");
+$t = Forks::Super::Time();
 for (my $i=0; $i<5; $i++) {
   my $p = wait;
   ok($p == -1, "wait on nothing gives -1");
 }
-$t = time - $t;
-ok($t <= 1, "no delay for wait on nothing");
+$t = Forks::Super::Time() - $t;
+ok($t <= 1, "no delay for wait on nothing ${t}s, expected <=1s");
 
 
 

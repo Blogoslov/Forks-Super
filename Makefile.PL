@@ -21,7 +21,7 @@ if ($^O =~ /bsd/i) {
 }
 
 WriteMakefile(
-    ((@recommends > 0)
+    ((@recommends > 0 && $ExtUtils::MakeMaker::VERSION >= 6.46)
          ? ('META_MERGE' => { 'recommends' => [ @recommends ] })
 	 : ()),
     NAME                => 'Forks::Super',

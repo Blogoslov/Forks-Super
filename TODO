@@ -32,7 +32,7 @@ Possible TODOs:
 
 	incorporate free memory into system busy-ness calc (Parallel::ForkControl)
 
-        implement child handles as sockets. May (or may not be) more robust
+    _X_ implement child handles as sockets. May (or may not be) more robust
         than filehandles, or useful as backup when there are no more filehandles
 	available
 
@@ -116,6 +116,8 @@ Possible TODOs:
              be to launch another background process that will try to
 	     clean up for ~5 minutes
 
+	___ This is also a problem if the script is interrupted
+
         _o_ haven't observed this problem lately
 
 	configure during build. discover the maximum number of simultaneous
@@ -127,3 +129,12 @@ Possible TODOs:
 	of Perl system calls like  sleep , connect , select($$$$)
 
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc)
+
+    ___ When fork'ing-to-sub with a named subroutine, invoke the function
+        from the calling package
+
+    ___ Make $Forks::Super::ON_BUSY a tied scalar, limited to take on vals busy|fail|queue
+
+    ___ Make $Forks::Super::QUEUE_INTERRUPT a tied scalar, limited to signal names
+
+
