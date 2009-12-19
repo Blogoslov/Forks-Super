@@ -6,10 +6,15 @@ use warnings;
 
 #
 # arrange for many jobs to finish at about the same time.
-# Is the signal handler able to handle all the SIGCHLDs and reap all the jobs on time?
-# If not, do we invoke the signal handler manually and reap the
+# Is the signal handler able to handle all the SIGCHLDs and reap all the 
+# jobs on time? If not, do we invoke the signal handler manually and reap the
 # unhandled jobs in a timely way?
 # 
+
+#
+# On Cygwin, this test sometimes hangs for exactly five minutes.
+# See the note in  find-limits.pl
+#
  
 
 # $SIG_DEBUG is special flag to instruct SIGCHLD handler to record what goes on
@@ -38,7 +43,8 @@ SKIP: {
     while (<L>) {
       if (/maxfork:(\d+)/) {
 	$nn = $1;
-	print STDERR "$^O-$] can apparently support $nn simultaneous background procs\n";
+	print STDERR "$^O-$] can apparently support $nn simultaneous ",
+		"background procs\n";
 	$nn = int(0.75 * $nn);
 	if ($nn > $NN) {
 	  $nn = $NN;
@@ -64,12 +70,13 @@ SKIP: {
     $nn = 80;
   }
   if ($nn < $NN) {
-    skip "Max ~$nn proc on $^O v$], can only do ".((2*$nn)+1)." tests", 2*($NN-$nn);
+    skip "Max ~$nn proc on $^O v$], can only do ".((2*$nn)+1)." tests", 
+      2*($NN-$nn);
   }
 }
 
 for (my $i=0; $i<$nn; $i++) {
-  # failure point on some systems: "Maximal count of pending signals (nnn) exceeded"
+  # failure point on some systems: Maximal count of pending signals (nnn) exceeded
   my $pid = fork { 'sub' => sub { sleep 5 } };
   croak "fork failed i=$i OS=$^O V=$]" if !isValidPid($pid);
 }
@@ -96,7 +103,8 @@ sub check_CHLD_handle_history_for_interleaving {
     }
   }
   $fail++ if $start > $end;
-  ok($fail == 0, "CHLD_handle history consistent " . scalar @Forks::Super::CHLD_HANDLE_HISTORY . " records");
+  ok($fail == 0, "CHLD_handle history consistent " . 
+     scalar @Forks::Super::CHLD_HANDLE_HISTORY . " records");
 }
 
 

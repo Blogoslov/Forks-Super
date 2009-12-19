@@ -13,15 +13,6 @@ if (Forks::Super::CONFIG("alarm")) {
 # between parent and child processes.
 #
 
-#
-# 0.09 - added debugging code to sub repeater and to 
-# the "read_stderr" test (tests 23-31). The read_stderr is
-# a consistent failure point since 0.07 on some systems and
-# I need to get a handle on what goes on during that test.
-#
-
-
-
 # this is a subroutine that copies STDIN to STDOUT and optionally STDERR
 sub repeater {
   Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
@@ -29,13 +20,12 @@ sub repeater {
   my ($n, $e) = @_;
   my $end_at = time + 6;
   my ($input_found, $input) = 1;
-  my $curpos;
   local $!;
 
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    for ($curpos = tell STDIN; defined ($_ = <STDIN>); $curpos = tell STDIN) {
+    while (defined ($_ = <STDIN>)) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
@@ -44,7 +34,8 @@ sub repeater {
       if ($e) {
         print STDERR $_;
 	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",fileno(STDERR));
+	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
+			      fileno(STDERR));
 	}
       }
       for (my $i = 0; $i < $n; $i++) {
@@ -60,7 +51,7 @@ sub repeater {
       Forks::Super::debug("repeater: no input");
     }
     Forks::Super::pause();
-    seek STDIN, $curpos, 0;
+    seek STDIN, 0, 1;
   }
   if ($Forks::Super::DEBUG) {
     my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
@@ -107,7 +98,7 @@ while (time < $t+10) {
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 
-@err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
+@err = grep { !/alarm\(\) not available/ } @err; # exclude warning to child STDERR
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
 ok($out[0] eq "0:$msg\n", "got expected first line from child output");
@@ -153,7 +144,7 @@ if (@out != 3) {
 }
 
 @out = grep { !/alarm\(\) not available/ } @out;
-ok(@out == 3, "read ".(scalar @out)." [3] lines from child STDOUT:   @out"); # 18 #
+ok(@out == 3, "read ".(scalar @out)." [3] lines from child STDOUT:   @out");
 ok($out[-3] =~ /the message is/, "first line matches expected pattern");
 ok($out[-3] eq "$msg\n", "first line matches expected pattern");
 ok($out[-2] eq "0:$msg\n", "second line matches expected pattern");
@@ -169,7 +160,8 @@ waitall;
 sub read_stderr_test {
 
   $pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
-		  get_child_stdin => 1, get_child_stdout => 0, get_child_stderr => 1 };
+		  get_child_stdin => 1, get_child_stdout => 0, 
+		  get_child_stderr => 1 };
 
   my $z = 0;
   if (isValidPid($pid)) {
@@ -183,7 +175,8 @@ sub read_stderr_test {
     sleep 1;
     $z = print $pid_stdin_fh "That was a test\n";
     if ($Forks::Super::DEBUG) {
-      Forks::Super::debug("Printed \"That was a test\\n\" to child stdin ($pid). Result:$z");
+      Forks::Super::debug("Printed \"That was a test\\n\" to child stdin ($pid).",
+                          " Result:$z");
     }
     sleep 1;
     close $Forks::Super::CHILD_STDIN{$pid};

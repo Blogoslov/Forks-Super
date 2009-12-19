@@ -9,7 +9,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -431,11 +431,13 @@ sub _reap {
     debug('Forks::Super::_reap(): nothing to reap now. ',
 	  "$nactive remain.");
 
-    if ($Forks::Super::REAP_NOTHING_MSGS % 5 == 0) {
-      debug('-------------------------');
-      debug('Active jobs:');
-      debug('   ', $_->toString()) for @active;
-      debug('-------------------------');
+    if (!$Forks::Super::IMPORT{":test"}) {
+      if ($Forks::Super::REAP_NOTHING_MSGS % 5 == 0) {
+	debug('-------------------------');
+	debug('Active jobs:');
+	debug('   ', $_->toString()) for @active;
+	debug('-------------------------');
+      }
     }
   }
 
@@ -2410,7 +2412,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.10
+Version 0.11
 
 =head1 SYNOPSIS
 
