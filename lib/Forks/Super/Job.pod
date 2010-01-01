@@ -4,7 +4,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.11
+0.12
 
 =head1 SYNOPSIS
 
@@ -12,6 +12,7 @@ Forks::Super::Job - object representing a background task
 
     $pid = Forks::Super::fork( \%options );  # see Forks::Super
     $job = Forks::Super::Job::get($pid);
+    $job = Forks::Super::Job::getByName($name);
     print "Current job state is $job->{state}\n";
     print "Job was created at ", scalar localtime($job->{created}), "\n";
 
@@ -31,12 +32,15 @@ to be created.
 
 =head1 ATTRIBUTES
 
-Use the C<Forks::Super::Job::get> method to obtain a Forks::Super::Job object for
+Use the C<Forks::Super::Job::get> or C<Forks::Super::Job::getByName>
+methods to obtain a Forks::Super::Job object for
 examination. The C<Forks::Super::Job::get> method takes a process ID or
 job ID as an input (a value that may have been returned from a previous
 call to C<Forks::Super::fork> and returns a reference to a C<Forks::Super::Job>
 object, or C<undef> if the process ID or job ID was not associated
-with any known Job object.
+with any known Job object. The C<Forks::Super::Job::getByName> looks up
+job objects by the C<name> parameter that may have been passed
+in the C<Forks::Super::fork> call.
 
 A C<Forks::Super::Job> object has many attributes, some of which may
 be of interest to an end-user. Most of these should not be overwritten.

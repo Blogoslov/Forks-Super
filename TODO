@@ -3,13 +3,13 @@ Feel free to share your thoughts with me at  mob@cpan.org .
 
 Possible TODOs:
 
-	wait     timeout
+    ___	wait     timeout
         waitpid  timeout
         waitall  timeout
 
 		wait calls that block for only a limited time
          
-        fork { stdin => \@STDIN }
+    ___ fork { stdin => \@STDIN }
 
 		pass standard input to the child in a list at fork time.
                 This seems more satisfactory for a  cmd  style fork that
@@ -24,9 +24,9 @@ Possible TODOs:
 
         fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
 
-		open input and output filehandles in the child with the given names,
-		accessible in the parent at something like 
-		$Forks::Super::filehandles{$pid}{X}
+		open input and output filehandles in the child with the given 
+		names, accessible in the parent at something like 
+		$Forks::Super::CHILD_FH{$pid}{X}
 
         incorporate CPU load into system busy-ness calc (see Parallel::ForkControl)
 
@@ -36,9 +36,9 @@ Possible TODOs:
         than filehandles, or useful as backup when there are no more filehandles
 	available
 
-	implement child handles through IO::Pipe objects
+    ___	implement child handles through IO::Pipe objects
 
-        fork { callback => \&method }
+    ___ fork { callback => \&method }
 
                 subroutine to call in the parent process when the child finishes
 
@@ -48,13 +48,15 @@ Possible TODOs:
 			callback for a child getting put on queue
 			callback for a fatal error in child
 
-        facilities to suspend jobs when the system gets to busy
+    ___ fork { callback => { start => \&method, finish => \&method,
+			     queue => \&method, fail => \&method } };
+
+		subroutines to call in the parent process on various
+		child process events
+
+    ___ facilities to suspend jobs when the system gets to busy
         and to resume them when the system gets less busy.
         I bet this will be hard to do with Win32.
-
-    _X_ fork { debug => $boolean }
-
-        	override $Forks::Super::DEBUG for this job
 
     _x_ fork { cpu_affinity => $bitmask }
 
@@ -71,11 +73,12 @@ Possible TODOs:
 		___ BSD
 		_X_ Cygwin
 		_X_ documented
+	 	___ Solaris
+		___ Irix
+		___ OS X
+		___ any others ?
 
-    _X_ Currently USR1 is used to signal the program to analyze the queue.
-        Make the signal configurable.
-
-    _X_ Fully support changing process priority in Windows. This can be
+    _x_ Fully support changing process priority in Windows. This can be
 	done with Win32::API and SetThreadPriority method. Takes on values
 	between -2 and 2, or between -7 and 6 "if the thread has the
 	REALTIME_PRIORITY_CLASS base class", whatever that is. (Oh, looks
@@ -93,22 +96,11 @@ Possible TODOs:
 		___ test
 		___ document
 
-	fork { name => $name }
+    _X_	fork { name => $name }
 
 		Change ps() listing as in Parallel::ForkControl, or give
 		another way to lookup a job object from Forks::Super::Job::get.
 
-    _X_ support some more configuration in import
-
-                use Forks::Super MAX_PROC => 5, CHILD_FORK_OK => -1, ... ;
-		_X_ MAX_PROC
-		_X_ MAX_LOAD
-		_X_ DEBUG
-		_X_ ON_BUSY
-		_X_ CHILD_FORK_OK
-		_X_ QUEUE_MONITOR_FREQ
-		_X_ FH_DIR
-		_X_ unit tests for this kind of initialization
 
     ___ clean up temporary files. In some OS,
 	     can't delete files from END block of parent if children
@@ -120,7 +112,7 @@ Possible TODOs:
 
         _o_ haven't observed this problem lately
 
-	configure during build. discover the maximum number of simultaneous
+    ___	configure during build. discover the maximum number of simultaneous
 	processes that can be spawned and set MAX_PROC, DEFAULT_MAX_PROC.
 	Would also be good to know the max number of open filehandles
 	and plan around it.
@@ -130,11 +122,15 @@ Possible TODOs:
 
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc)
 
-    ___ When fork'ing-to-sub with a named subroutine, invoke the function
+    _X_ When fork'ing-to-sub with a named subroutine, invoke the function
         from the calling package
 
-    ___ Make $Forks::Super::ON_BUSY a tied scalar, limited to take on vals busy|fail|queue
+    _X_ Make $Forks::Super::ON_BUSY a tied scalar, limited to take on vals busy|fail|queue
 
-    ___ Make $Forks::Super::QUEUE_INTERRUPT a tied scalar, limited to signal names
+    _X_ Make $Forks::Super::QUEUE_INTERRUPT a tied scalar, limited to signal names
+
+    ___	Make CONFIG{filehandles} meaningful
+
+    ___	Defect to fix, $Forks::Super::MAX_PROC = "0"
 
 

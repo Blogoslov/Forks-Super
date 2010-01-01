@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 22;
+use Test::More tests => 26;
 use strict;
 use warnings;
 
@@ -55,17 +55,37 @@ sub internal_command {
 open(LOCK, ">>", "t/out/.lock-t12");
 flock LOCK, 2;
 
+# test fork => $::
+
 unlink "t/out/test2";
 my $pid = fork { sub => 'main::internal_command',
 		args => [ "-o=t/out/test2", "-e=Hello,", 
                           "-e=Wurrled", "-p" ] };
-ok(isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
+ok(isValidPid($pid), "fork to \$qualified::subroutineName successful, pid=$pid");
 my $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
 my $z = do { my $fh; open($fh, "<", "t/out/test2"); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Wurrled $pid";
+ok($z eq $target_z, 
+	"child produced child output \'$z\' vs. \'$target_z\'");
+
+#############################################################################
+
+# test fork => $
+
+unlink "t/out/test2";
+$pid = fork { sub => 'internal_command',
+	      args => [ "-o=t/out/test2", "-e=Hello,", 
+                        "-e=Wurrled", "-p" ] };
+ok(isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
+$p = wait;
+ok($pid == $p, "wait reaped child $pid == $p");
+ok($? == 0, "child status \$? == 0");
+$z = do { my $fh; open($fh, "<", "t/out/test2"); my $zz = join '', <$fh>; close $fh; $zz };
+$z =~ s/\s+$//;
+$target_z = "Hello, Wurrled $pid";
 ok($z eq $target_z, 
 	"child produced child output \'$z\' vs. \'$target_z\'");
 

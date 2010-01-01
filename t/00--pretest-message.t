@@ -23,5 +23,26 @@ print STDERR <<'pretest_message_ends';
 #############################################
 
 pretest_message_ends
-sleep 3;
+
 ok(1);
+
+my $limits_file = "t/out/limits.$^O.$]";
+if (-f $limits_file) {
+  exit 0;
+}
+
+
+$SIG{ALRM} = \sub { die "find-limits.pl timed out\n" };
+eval 'alarm 60';
+
+print STDERR "\nTesting system limitations\n";	
+if ($^O	=~ /cygwin/i) {
+  print STDERR "On Cygwin, this test can hang for 5 minutes.\n";
+}
+
+system($^X, "t/find-limits.pl", $limits_file);
+
+END {
+  $SIG{ALRM} = 'DEFAULT';
+  eval 'alarm 0';
+};

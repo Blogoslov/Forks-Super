@@ -21,19 +21,8 @@ use warnings;
 $Forks::Super::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
 
+# find-limits.pl call moved to 00--pretest.t
 my $limits_file = "t/out/limits.$^O.$]";
-{
-  local $SIG{ALRM};
-  if (Forks::Super::CONFIG("alarm")) {
-    $SIG{ALRM} = \sub { die "find-limits.pl timed out\n" };
-    alarm 60;
-  }
-  system($^X, "t/find-limits.pl", $limits_file);
-  if (Forks::Super::CONFIG("alarm")) {
-    $SIG{ALRM} = 'DEFAULT';
-    alarm 0;
-  }
-}
 
 my $NN = 149;
 my $nn = $NN;

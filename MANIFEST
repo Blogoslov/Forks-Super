@@ -2,6 +2,7 @@
 Changes
 lib/Forks/Super.pm
 lib/Forks/Super/Job.pod
+lib/Tie/Enum.pm
 Makefile.PL
 MANIFEST
 README
@@ -12,6 +13,7 @@ t/01a-import.t
 t/01b-import.t
 t/01c-import.t
 t/01d-import.t
+t/02-tie-on_busy.t
 t/09-show-config.t
 t/10-to-natural.t
 t/11-to-command.t
@@ -32,9 +34,12 @@ t/45-userbusy.t
 t/50-queue.t
 t/51-delayed.t
 t/52-dependencies.t
+t/53-name.t
 t/60-os.t
+t/tie-enum.tt
 t/external-command.pl
 t/find-limits.pl
+t/spawner-and-counter.pl
 t/out/foo
 TODO
 META.yml                                 Module meta-data (added by MakeMaker)

@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 18;
+use Test::More tests => 28;
 use strict;
 use warnings;
 
@@ -11,7 +11,8 @@ use warnings;
 
 if (!Forks::Super::CONFIG("alarm")) {
   SKIP: {
-    skip "alarm func not available on this system ($^O,$]). Skipping all tests.", 18;
+    skip "alarm func not available on this system ($^O,$]). ".
+	"Skipping all tests.", 28;
   }
   exit 0;
 }
@@ -80,17 +81,57 @@ ok($? != 0, "job expired with non-zero exit status");
 
 #######################################################
 
+SKIP: {
+  if (!Forks::Super::CONFIG("getpgrp")) {
+    skip "setpgrp() unavailable. Skipping tests about timing out grandchildren.",
+      10;
+  }
 
+  unlink "t/out/spawn.pids.$$";;
+  $t = Forks::Super::Time();
+  $pid = fork { timeout => 5, 
+		  cmd => [ $^X, "t/spawner-and-counter.pl",
+			   "t/out/spawn.pids.$$", "3", "15" ] };
+  $p = wait;
+  $t = Forks::Super::Time() - $t;
+  ok($p == $pid && $t >= 5 && $t <= 7, "external prog took ${t}s, expected 5-7s");
+  if ($t < 14) {
+    sleep 15 - $t;
+  }
+  open(PIDS, "<", "t/out/spawn.pids.$$");
+  my @pids = map { s/\s+$//; $_ } <PIDS>;
+  close PIDS;
+  ok(@pids == 4, "spawned " . scalar @pids . " procs, expected 4");
+  unlink "t/out/spawn.pids.$$";
+  for (my $i=0; $i<4 && $i<@pids; $i++) {
+    my ($pid_i, $file_i) = split /,/, $pids[$i];
+    open(F_I, "<", $file_i);
+    my @data_i = <F_I>;
+    close F_I;
+    pop @data_i while @data_i > 0 && $data_i[-1] !~ /\S/;
+    my $last_count_i = $data_i[-1] + 0;
 
+    ok($last_count_i > 5,
+       "Last count from $file_i was $last_count_i, expect > 5");
+    unlink $file_i;
+  }
 
-__END__
--------------------------------------------------------
+  waitall;
+  my ($job, $pgid, $ppgid);
 
-Feature[40]:	fork with timeout
+  $ppgid = getpgrp();
+  $pid = fork { sub => sub { sleep 5 } };
+  $job = Forks::Super::Job::get($pid);
+  $pgid = $job->{pgid};
+  $p = waitpid -$ppgid, 0;
+  ok($p == $pid && $pgid == $ppgid);
 
-What to test:	child completes before alarm
-		child does not complete before alarm
-		relative (timeout) or absolute (expiration)
-                negative timeout
-
--------------------------------------------------------
+  $pid = fork { timeout => 3, sub => sub { sleep 5 } };
+  $job = Forks::Super::Job::get($pid);
+  $pgid = $job->{pgid};
+  ok($pgid != $ppgid);
+  $p = waitpid -$ppgid, 0;
+  ok($p == -1);
+  $p = waitpid -$pgid, 0;
+  ok($p == $pid);
+}

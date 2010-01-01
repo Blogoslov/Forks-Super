@@ -1,0 +1,17 @@
+use strict;
+package A'Test'Package;
+use Tie::Enum;
+use Test::More tests => 3;
+
+my $my_favorite_color;
+tie $my_favorite_color, 'Tie::Enum', 'red', 'green', 'blue', 'yellow';
+
+$my_favorite_color = "red";
+ok($my_favorite_color eq "red");
+
+$my_favorite_color = "Green";
+ok($my_favorite_color eq "green");
+
+$my_favorite_color = "Modern";
+ok($my_favorite_color eq "green");
+

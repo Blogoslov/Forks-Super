@@ -1,5 +1,10 @@
 Revision history for Forks-Super
 
+0.12
+	Added name attribute. waitpid, dependencies, and job lookup by job name.
+        Fixed named subroutine. Impl tied scalars for $ON_BUSY,$QUEUE_INTERRUPT.
+        On child timeout, all child subprocesses are killed.
+
 0.11    2009-12-18
 	Fixes for some tests.
 

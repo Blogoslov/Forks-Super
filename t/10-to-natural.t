@@ -35,7 +35,7 @@ ok($? != $job->{status}, "job status not available yet");
 my $p = waitpid $pid,0;
 ok($job->{state} eq "REAPED", "job status REAPED after waitpid");
 ok($p == $pid, "reaped correct pid");
-ok($? == 256, "system status is correct");
+ok($? == 256, "system status is $?, expected 256");
 ok($? == $job->{status}, "captured correct job status");
 
 #########################################################
