@@ -3,6 +3,12 @@ use Test::More tests => 3;
 use strict;
 use warnings;
 
+# XXX - consider breaking this up into separate scripts for each system:
+#         60-os-linux.t
+#         60-os-MSWin32.t
+#         ...
+#         60-os-other.t
+
 #
 # 60-os.t
 #

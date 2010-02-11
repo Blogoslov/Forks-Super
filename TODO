@@ -9,18 +9,27 @@ Possible TODOs:
 
 		wait calls that block for only a limited time
          
-    ___ fork { stdin => \@STDIN }
+    ___ fork { stdin => \@stdin }
+    ___ fork { stdin => \$stdin }
+    ___ fork { stdin => $stdin }
 
-		pass standard input to the child in a list at fork time.
+		pass standard input to the child in a scalar, a list
+		reference, or a scalar reference at fork time.
                 This seems more satisfactory for a  cmd  style fork that
                 possibly can't wait for the parent to write to 
         	Forks::Super::CHILD_STDIN{$pid}.
+
+		With sub style, this needs a file descriptor but maybe
+		not an open filehandle?
 
         fork { stdout => \@output, stderr => \@error }
 
                 when the child process completes, collect its stdout and stderr
                 output into the specified arrays. This will conserve filehandles
-                in the parent.
+                in the parent. But it doesn't allow you to read child 
+		output while the child is running.
+
+		Could implement this in terms of a "collect output callback".
 
         fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
 
@@ -29,16 +38,15 @@ Possible TODOs:
 		$Forks::Super::CHILD_FH{$pid}{X}
 
         incorporate CPU load into system busy-ness calc (see Parallel::ForkControl)
+		(Parallel::ForkControl uses uptime(1) as  a "cheap linux only hack"
+		See also: Win32::Process::CpuUsage, Sys::CPU, Sys::CpuLoad).
 
 	incorporate free memory into system busy-ness calc (Parallel::ForkControl)
-
-    _X_ implement child handles as sockets. May (or may not be) more robust
-        than filehandles, or useful as backup when there are no more filehandles
-	available
+		(Parallel::ForkControl says "non functional")
 
     ___	implement child handles through IO::Pipe objects
 
-    ___ fork { callback => \&method }
+    _X_ fork { callback => \&method }
 
                 subroutine to call in the parent process when the child finishes
 
@@ -48,11 +56,15 @@ Possible TODOs:
 			callback for a child getting put on queue
 			callback for a fatal error in child
 
-    ___ fork { callback => { start => \&method, finish => \&method,
+    _X_ fork { callback => { start => \&method, finish => \&method,
 			     queue => \&method, fail => \&method } };
 
 		subroutines to call in the parent process on various
 		child process events
+
+		XXX - Parallel::ForkManager names it "run_on_finish". We should
+		consider the name  run_on_finish => CODE  or
+		run on => { finish => CODE, start => CODE, ... }
 
     ___ facilities to suspend jobs when the system gets to busy
         and to resume them when the system gets less busy.
@@ -96,21 +108,14 @@ Possible TODOs:
 		___ test
 		___ document
 
-    _X_	fork { name => $name }
-
-		Change ps() listing as in Parallel::ForkControl, or give
-		another way to lookup a job object from Forks::Super::Job::get.
-
-
-    ___ clean up temporary files. In some OS,
+    _X_ clean up temporary files. In some OS (MSWin32),
 	     can't delete files from END block of parent if children
-	     are still using those files. One possible solution might
-             be to launch another background process that will try to
-	     clean up for ~5 minutes
+	     are still using those files. On those systems, wait for
+	     children to finish.
 
-	___ This is also a problem if the script is interrupted
+	_X_ This is also a problem if the script is interrupted
 
-        _o_ haven't observed this problem lately
+        _X_ haven't observed this problem lately. How to reproduce?
 
     ___	configure during build. discover the maximum number of simultaneous
 	processes that can be spawned and set MAX_PROC, DEFAULT_MAX_PROC.
@@ -120,17 +125,32 @@ Possible TODOs:
 	Forks::Super::Uninterruptable package for "uninterruptable" versions
 	of Perl system calls like  sleep , connect , select($$$$)
 
-    ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc)
-
-    _X_ When fork'ing-to-sub with a named subroutine, invoke the function
-        from the calling package
-
-    _X_ Make $Forks::Super::ON_BUSY a tied scalar, limited to take on vals busy|fail|queue
-
-    _X_ Make $Forks::Super::QUEUE_INTERRUPT a tied scalar, limited to signal names
+    ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
+	Can test with >5.7.3 and Perl::Unsafe::Signals
 
     ___	Make CONFIG{filehandles} meaningful
 
     ___	Defect to fix, $Forks::Super::MAX_PROC = "0"
 
+    ___	Decompose source into manageable modules
 
+		Forks::Super::OS, Forks::Super::OS::XXX
+		Forks::Super::Filehandle
+		Forks::Super::Timeout
+		Forks::Super::Uninterruptable
+
+    _X_	exec => [ @args ]
+
+	Use exec() instead of system() to run command. Child process
+	doesn't return from fork(). Probably can't use  timeout/expiration.
+
+    ___	kill_all($signal), kill($signal, @jobs)
+
+	Deliver a signal to all jobs or to a list of jobs.
+
+    _X_ a bg_eval { BLOCK } method, like forked in Acme::Fork::Lazy. 
+	We could implement it in terms of a tied scalar or tied array
+
+	_X_ implement
+	_X_ test
+	_X_ document

@@ -15,9 +15,9 @@ if (Forks::Super::CONFIG("alarm")) {
 
 my $pid = fork { 'sub' => sub { sleep 2 ; exit 2 } };
 sleep 3;
-my $t = time;
+my $t = Forks::Super::Time();
 my $p = waitpid $pid, WNOHANG;
-$t = time - $t;
+$t = Forks::Super::Time() - $t;
 my $s = $?;
 ok(isValidPid($pid), "fork successful");
 ok($p == $pid, "waitpid on $pid returns $p");
@@ -28,16 +28,16 @@ ok($s == 512, "waitpid captured exit status");
 
 $pid = fork { 'sub' => sub { sleep 3; exit 3 } };
 ok(isValidPid($pid), "fork successful");
-$t = time;
+$t = Forks::Super::Time();
 $p = waitpid $pid,WNOHANG;
 ok($p == -1, "non-blocking waitpid returned -1");
 ok(-1 == waitpid ($pid + 10, WNOHANG), "return -1 for invalid target");
 ok(-1 == waitpid ($pid + 10, 0), "fast return -1 for invalid target");
-$t = time - $t;
+$t = Forks::Super::Time() - $t;
 ok($t <= 1, "fast return");
-$t = time;
+$t = Forks::Super::Time();
 $p = waitpid $pid, 0;
-$t = time - $t;
+$t = Forks::Super::Time() - $t;
 $s = $?;
 ok($p==$pid, "blocking waitpid returned real pid");
 ok($t >= 3, "blocked return took ${t}s expected 3s");
@@ -52,7 +52,7 @@ for (my $i=0; $i<20; $i++) {
   ok(isValidPid($pid), "Launched $pid");
   $x{$pid} = $i;
 }
-$t = time;
+$t = Forks::Super::Time();
 while (0 < scalar keys %x) {
 
   my $p;
@@ -73,15 +73,15 @@ while (0 < scalar keys %x) {
   }
 }
 
-$t = time - $t;
+$t = Forks::Super::Time() - $t;
 ok($t >= 6 && $t <= 10, "waitpid on multi-procs took ${t}s, expected 6-10s");
-$t = time;
+$t = Forks::Super::Time();
 
 for (my $i=0; $i<5; $i++) {
   my $p = waitpid -1, 0;
   ok($p == -1, "wait on nothing gives -1, $p");
 }
-$t = time - $t;
+$t = Forks::Super::Time() - $t;
 
 ok($t <= 1, "waitpid on nothing caused no delay");
 
@@ -104,7 +104,7 @@ for (my $i=0; $i<20; $i++) {
   $x{$pid} = $i;
 }
 
-$t = time;
+$t = Forks::Super::Time();
 SKIP: {
   if (!Forks::Super::CONFIG("getpgrp")) {
     skip "$^O,$]: Can't test waitpid on pgid", 44;
@@ -114,7 +114,7 @@ SKIP: {
   my $bogus_pgid = $pgid + 175;
   ok(-1 == waitpid (-$bogus_pgid, 0), "bogus pgid");
   ok(-1 == waitpid (-$bogus_pgid, WNOHANG), "bogus pgid");
-  ok(time - $t <= 1, "fast return wait on bogus pgid");
+  ok(Forks::Super::Time() - $t <= 1, "fast return wait on bogus pgid");
 
   while (0 < scalar keys %x) {
 
@@ -141,7 +141,7 @@ SKIP: {
     }
   }
 
-  $t = time - $t;
+  $t = Forks::Super::Time() - $t;
   ok($t >= 7 && $t <= 11, "Took $t s to reap all. Should take about 7-11s");
 }
 

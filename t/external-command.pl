@@ -37,7 +37,10 @@ foreach my $arg (@ARGV) {
     print $val, " ";
   } elsif ($key eq "--ppid" or $key eq "-p") {
     # On MSWin32, getppid() is broken. 
-    my $pid = $^O eq "MSWin32" ? $ENV{_FORK_PPID} : getppid();
+    my $ppid = $^O eq "MSWin32" ? $ENV{_FORK_PPID} : getppid();
+    print $ppid, " ";
+  } elsif ($key eq "--pid" or $key eq "-P") {
+    my $pid = $^O eq "MSWin32" ? $ENV{_FORK_PID} : $$;
     print $pid, " ";
   } elsif ($key eq "--sleep" or $key eq "-s") {
     sleep $val || 1;

@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 33;
+use Test::More tests => 42;
 use strict;
 use warnings;
 if (Forks::Super::CONFIG("alarm")) {
@@ -24,7 +24,6 @@ sub repeater {
 
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
     while (defined ($_ = <STDIN>)) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
@@ -69,9 +68,9 @@ sub repeater {
 }
 
 #######################################################
+
 my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
-              	 get_child_stdin => 1, get_child_stdout => 1, 
-		 get_child_stderr => 1 };
+		   child_fh => "all" };
 
 ok(isValidPid($pid), "pid $pid valid");
 ok(defined $Forks::Super::CHILD_STDIN{$pid},"found stdin fh");
@@ -235,6 +234,93 @@ if (@err != 2) {
   @err = grep { !/repeater:/ && !/alarm/ } @err;
 }
 
+ok(@err == 2, "received 2 lines from child stderr");
+ok($err[0] =~ /the message is/, "got expected first line from child error");
+ok($err[-1] =~ /a test/, "got expected second line from child error");
+waitall; 
+$Forks::Super::DEBUG = 0;
+
+##################################################
+# test read_stderr -- this is the last significant failure point from 0.08
+# the usual error is that @err contains one line instead of two
+# let's retest with debugging if we detect that this test is going to fail ...
+
+sub read_stderr_test1 {
+
+  $pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
+		child_fh => "in,err" };
+
+  my $z = 0;
+  if (isValidPid($pid)) {
+    my $msg = sprintf "the message is %x", rand() * 99999999;
+    my $pid_stdin_fh = $Forks::Super::CHILD_STDIN{$pid};
+
+    $z = print $pid_stdin_fh "$msg\n";
+    if ($Forks::Super::DEBUG) {
+      Forks::Super::debug("Printed \"$msg\\n\" to child stdin ($pid). Result:$z");
+    }
+    sleep 1;
+    $z = print $pid_stdin_fh "That was a test\n";
+    if ($Forks::Super::DEBUG) {
+      Forks::Super::debug("Printed \"That was a test\\n\" to child stdin ($pid).",
+                          " Result:$z");
+    }
+    sleep 1;
+    close $Forks::Super::CHILD_STDIN{$pid};
+    if ($Forks::Super::DEBUG) {
+      Forks::Super::debug("Closed filehandle to $pid STDIN");
+    }
+  }
+  return ($z,$pid);
+}
+
+($z,$pid) = &read_stderr_test1;
+ok(isValidPid($pid), "started job with join");
+ok($z > 0, "successful print to child STDIN");
+ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
+ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined");
+ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
+$t = time;
+@out = ();
+@err = ();
+while (time < $t+12) {
+  my @data = Forks::Super::read_stdout($pid);
+  if ($Forks::Super::DEBUG && defined $data[0]) {
+    Forks::Super::debug("Read from child $pid stdout: [ ", @data,  " ]");
+  }
+  push @out, @data if @data>0 and $data[0] ne "";
+
+  @data = Forks::Super::read_stderr($pid);
+  if ($Forks::Super::DEBUG && defined $data[0]) {
+    Forks::Super::debug("Read from child $pid stderr: [ ", @data,  " ]");
+  }
+  push @err, @data if @data>0 and $data[0] ne "";
+}
+ok(@out == 0, "received no output from child");
+@err = grep { !/alarm\(\) not available/ } @err;
+
+if (@err != 2) {
+  print STDERR "\ntest read stderr: failure imminent.\n";
+  print STDERR "Expecting two lines but what we get is:\n";
+  my $i;
+  print STDERR map { ("Error line ", ++$i , ": $_") } @err;
+  print STDERR "\n";
+  print STDERR "Rerunning read_stderr test with debugging on ...\n";
+
+  # retest with debugging -- let's see if we can figure out what's going on
+  $Forks::Super::DEBUG = 1;
+  ($z,$pid) = &read_stderr_test1;
+  $t = time;
+  $i = 0;
+  @err = ();
+  while (time < $t+12) {
+    my @data = Forks::Super::read_stderr($pid);
+    push @err, @data if @data>0 and $data[0] ne "";
+  }
+  print STDERR "Standard error from retest:\n";
+  print STDERR map { ("Error line ", ++$i, ": $_") } @err;
+  @err = grep { !/repeater:/ && !/alarm/ } @err;
+}
 
 ok(@err == 2, "received 2 lines from child stderr");
 ok($err[0] =~ /the message is/, "got expected first line from child error");
@@ -260,8 +346,7 @@ sub compute_checksums_in_child {
 
 my @pids = ();
 for (my $i=0; $i<4; $i++) {
-  push @pids, fork { sub => \&compute_checksums_in_child,
-		       get_child_stdin => 1, get_child_stdout => 1 };
+  push @pids, fork { sub => \&compute_checksums_in_child, child_fh => "in,out" };
 }
 my @data = (@INC,%INC,%!);
 my (@pdata, @cdata);

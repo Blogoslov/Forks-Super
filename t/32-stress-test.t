@@ -66,8 +66,16 @@ SKIP: {
 
 for (my $i=0; $i<$nn; $i++) {
   # failure point on some systems: Maximal count of pending signals (nnn) exceeded
+  # failure point on solaris-5.8.9 135/199
+  # failure point on solaris-5.11.3 29/75
+  # failure point on solaris-5.11.4 96/199
   my $pid = fork { 'sub' => sub { sleep 5 } };
-  croak "fork failed i=$i OS=$^O V=$]" if !isValidPid($pid);
+  if (!isValidPid($pid)) {
+    croak "fork failed i=$i OS=$^O V=$]";
+  }
+  if (Forks::Super::CONFIG("Time::HiRes")) {
+    Time::HiRes::sleep(0.001);
+  }
 }
 
 for (my $i=0; $i<$nn; $i++) {

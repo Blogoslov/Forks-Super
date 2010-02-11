@@ -34,10 +34,10 @@ ok($j2->{start} - $j2->{created} >= 9.9,
 $Forks::Super::ON_BUSY = "block";
 $now = time;
 
-my $t = time;
+my $t = Time();
 $p1 = fork { sub => sub { sleep 3 } , delay => 5 };
-$t = time - $t;
-ok($t >= 4, "delayed job blocked");
+$t = Time() - $t;
+ok($t >= 4, "delayed job blocked took ${t}s expected >=5s");
 ok(isValidPid($p1), "delayed job blocked and ran");
 $j1 = Forks::Super::Job::get($p1);
 ok($j1->{state} eq "ACTIVE", "state of delayed job is ACTIVE");

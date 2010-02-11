@@ -54,6 +54,18 @@ my @out2 = <$X>;
 seek $X, 0, 1;
 my $out2 = scalar @out2;
 ok($out2 > 0, "module debugging on");
+
+if ($out2 >= $out1) {
+  print STDERR "    Pending failure in test t/$0:\n";
+  print STDERR "    -----------------------------\n";
+  print STDERR "    full debugging:\n";
+  print STDERR join "\n    ", "    ", @out1;
+  print STDERR "\n    -----------------------------\n";
+  print STDERR "    module debugging only:\n";
+  print STDERR join "\n    ", "    ", @out2;
+  print STDERR "    ------------------------------\n\n";
+}
+
 ok($out2 < $out1, "but job debugging off $out1 > $out2");
 sleep 1;
 

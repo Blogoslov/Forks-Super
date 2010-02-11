@@ -1,13 +1,17 @@
 use strict;
 package A'Test'Package;
 use Tie::Enum;
-use Test::More tests => 3;
+use Test::More tests => 4;
+# unit tests for Tie::Enum, for scalars that take on a limited
+# number of (case-insensitive) values
 
 my $my_favorite_color;
 tie $my_favorite_color, 'Tie::Enum', 'red', 'green', 'blue', 'yellow';
 
-$my_favorite_color = "red";
 ok($my_favorite_color eq "red");
+
+$my_favorite_color = "yellow";
+ok($my_favorite_color eq "yellow");
 
 $my_favorite_color = "Green";
 ok($my_favorite_color eq "green");

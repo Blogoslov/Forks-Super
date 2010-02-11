@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 28;
+use Test::More tests => 30;
 use strict;
 use warnings;
 
@@ -135,3 +135,17 @@ SKIP: {
   $p = waitpid -$pgid, 0;
   ok($p == $pid);
 }
+
+##########################################################
+
+$pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=4" ], timeout => 2 };
+$t = Forks::Super::Time();
+waitpid $pid, 0;
+$t = Forks::Super::Time() - $t;
+ok($t <= 3, "cmd-style respects timeout");
+
+$pid = fork { exec => [ $^X, "t/external-command.pl", "-s=4" ], timeout => 2 };
+$t = Forks::Super::Time();
+waitpid $pid, 0;
+$t = Forks::Super::Time() - $t;
+ok($t >= 3.9, "exec-style doesn't respect timeout");

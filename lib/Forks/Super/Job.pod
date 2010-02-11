@@ -4,7 +4,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.12
+0.13
 
 =head1 SYNOPSIS
 
@@ -193,7 +193,7 @@ CPU's for this process to prefer.
 
 =head1 SEE ALSO
 
-L<Forks|Forks>.
+L<Forks::Super|Forks::Super>.
 
 =head1 AUTHOR
 

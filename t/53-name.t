@@ -55,6 +55,7 @@ $j3 = Forks::Super::Job::get($p3);
 ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',
    "active/queued jobs in correct state");
 waitall;
+
 ok($j1->{end} <= $j2->{start}, "respected depend_on by name");
 ok($j3->{start} < $j2->{start}, "non-dependent job started before dependent job");
 
@@ -82,7 +83,7 @@ ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',
    "jobs with apparent circular dependency in correct state");
 waitall();
 $t = Forks::Super::Time() - $t;
-ok($t > 5.5 && $t < 7.5, "Took ${t}s for dependent jobs - expected ~6s");
+ok($t > 5.5 && $t < 8.0, "Took ${t}s for dependent jobs - expected ~6s");
 ok($j1->{end} <= $j2->{start}, "handled circular dependency");
 
 $t = Forks::Super::Time();
