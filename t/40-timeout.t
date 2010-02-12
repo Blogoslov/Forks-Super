@@ -22,7 +22,7 @@ my $t = Forks::Super::Time();
 my $p = wait;
 $t = Forks::Super::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t < 5, "Timed out in ${t}s, should have taken 3-4");
+ok($t < 5, "Timed out in ${t}s, should have taken ~3s");
 ok($? != 0, "job expired with non-zero exit status");
 
 #######################################################
@@ -32,7 +32,7 @@ $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t < 9, "job completed before timeout");
+ok($t < 9, "job completed before timeout ${t}s expected ~5s");
 ok($? == 0, "job completed with zero exit status");
 
 #######################################################
@@ -42,7 +42,7 @@ $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t <= 1, "fast fail timeout=$t");
+ok($t <= 1, "fast fail timeout=${t}s, expected <=1s");
 ok($? != 0, "job failed with non-zero status");
 
 #######################################################
@@ -54,7 +54,7 @@ $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t < 5, "should take about 3 seconds, took $t");
+ok($t < 5, "should take about 3 seconds, took ${t}s");
 ok($? != 0, "job expired with non-zero status");
 
 #######################################################
@@ -65,7 +65,7 @@ $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t < 9, "job completed before expiration");
+ok($t < 9, "job completed before expiration ${t}s expected ~5s");
 ok($? == 0, "job completed with zero exit status");
 
 #######################################################
@@ -83,8 +83,10 @@ ok($? != 0, "job expired with non-zero exit status");
 
 SKIP: {
   if (!Forks::Super::CONFIG("getpgrp")) {
-    skip "setpgrp() unavailable. Skipping tests about timing out grandchildren.",
-      10;
+    skip "setpgrp() unavailable. Skipping tests about timing out grandchildren.", 10;
+  }
+  if (getpgrp(0) != $$) {
+    skip "current pgrp is != current pid -- test to time out grandchildren probably won't work", 10;
   }
 
   unlink "t/out/spawn.pids.$$";;

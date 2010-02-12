@@ -17,7 +17,7 @@ ok(defined $pid, "pid defined after fork") if $$==$Forks::Super::MAIN_PID;
 
 if ($pid == 0) {
   sleep 2;
-  Forks::Super::child_exit 1;
+  exit 1;
 }
 ok(isValidPid($pid), "pid $pid shows child proc");
 ok($$ == $Forks::Super::MAIN_PID, "parent pid $$ is current pid");

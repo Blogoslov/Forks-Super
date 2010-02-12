@@ -34,7 +34,7 @@ $SIG{CHLD} = \&child_signal_hijacker;
 my $pid = fork();
 if (defined $pid && $pid == 0) {
   sleep 3;
-  Forks::Super::child_exit 0;
+  exit 0;
 }
 ok(defined $pid && isValidPid($pid), "valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
@@ -69,7 +69,7 @@ ok($j->{reaped} - $j->{end} > 0, "reap occurred after job completed");
 $pid = fork();
 if (defined $pid && $pid == 0) {
   sleep 3;
-  Forks::Super::child_exit 0;
+  exit 0;
 }
 ok(defined $pid && isValidPid($pid), "valid pid $pid");
 $j = Forks::Super::Job::get($pid);

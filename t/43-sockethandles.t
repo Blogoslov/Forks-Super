@@ -229,7 +229,6 @@ if (@err != 2) {
   @err = grep { !/repeater:/ && !/alarm/ } @err;
 }
 
-
 ok(@err == 2, "received 2 lines from child stderr");
 ok($err[0] =~ /the message is/, "got expected first line from child error");
 ok($err[-1] =~ /a test/, "got expected second line from child error");

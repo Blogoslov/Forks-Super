@@ -35,7 +35,7 @@ sub internal_command {
     } elsif ($key eq "--exit" or $key eq "-x") {
       select STDOUT;
       close OUT;
-      Forks::Super::child_exit $val || 0;
+      exit $val || 0;
     }
   }
   select STDOUT;

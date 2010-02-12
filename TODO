@@ -46,26 +46,6 @@ Possible TODOs:
 
     ___	implement child handles through IO::Pipe objects
 
-    _X_ fork { callback => \&method }
-
-                subroutine to call in the parent process when the child finishes
-
-		callbacks for other events could also be considered:
-			callback for a child starting
-			callback for a child blocking
-			callback for a child getting put on queue
-			callback for a fatal error in child
-
-    _X_ fork { callback => { start => \&method, finish => \&method,
-			     queue => \&method, fail => \&method } };
-
-		subroutines to call in the parent process on various
-		child process events
-
-		XXX - Parallel::ForkManager names it "run_on_finish". We should
-		consider the name  run_on_finish => CODE  or
-		run on => { finish => CODE, start => CODE, ... }
-
     ___ facilities to suspend jobs when the system gets to busy
         and to resume them when the system gets less busy.
         I bet this will be hard to do with Win32.
@@ -108,15 +88,6 @@ Possible TODOs:
 		___ test
 		___ document
 
-    _X_ clean up temporary files. In some OS (MSWin32),
-	     can't delete files from END block of parent if children
-	     are still using those files. On those systems, wait for
-	     children to finish.
-
-	_X_ This is also a problem if the script is interrupted
-
-        _X_ haven't observed this problem lately. How to reproduce?
-
     ___	configure during build. discover the maximum number of simultaneous
 	processes that can be spawned and set MAX_PROC, DEFAULT_MAX_PROC.
 	Would also be good to know the max number of open filehandles
@@ -139,18 +110,10 @@ Possible TODOs:
 		Forks::Super::Timeout
 		Forks::Super::Uninterruptable
 
-    _X_	exec => [ @args ]
-
-	Use exec() instead of system() to run command. Child process
-	doesn't return from fork(). Probably can't use  timeout/expiration.
-
     ___	kill_all($signal), kill($signal, @jobs)
 
 	Deliver a signal to all jobs or to a list of jobs.
 
-    _X_ a bg_eval { BLOCK } method, like forked in Acme::Fork::Lazy. 
-	We could implement it in terms of a tied scalar or tied array
+    ___ found end cleanup function issue in Linux with an nfs drive.
+	Update end cleanup code
 
-	_X_ implement
-	_X_ test
-	_X_ document

@@ -10,7 +10,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -532,22 +532,18 @@ sub init_child {
 END {
   # child cleanup
   if ($$ != $Forks::Super::MAIN_PID) {
-    &Forks::Super::child_exit(-9999);
-  }
-}
 
-sub child_exit {
-  my ($code) = @_;
-  if (CONFIG("alarm")) {
-    alarm 0;
+    if (CONFIG("alarm")) {
+      alarm 0;
+    }
+
+    if (CONFIG("getpgrp") && $Forks::Super::SETPGRP_SUCCESSFUL) {
+      my $resetpgrp_result = setpgrp(0, $Forks::Super::MAIN_PID);
+      if ($resetpgrp_result) {
+	kill 'TERM', -$$;
+      }
+    }
   }
-  # close filehandles ? Nah.
-  # close sockethandles ? Nah.
-  if (CONFIG("getpgrp")) {
-    setpgrp(0, $Forks::Super::MAIN_PID);
-    kill 'TERM', -$$;
-  }
-  CORE::exit $code if $code != -9999;
 }
 
 
@@ -609,7 +605,7 @@ sub _launch_queue_monitor {
       sleep $Forks::Super::QUEUE_MONITOR_FREQ;
       kill $Forks::Super::QUEUE_INTERRUPT, $Forks::Super::MAIN_PID;
     }
-    Forks::Super::child_exit(0);
+    exit 0;
   }
   return;
 }
@@ -2696,8 +2692,9 @@ sub config_timeout_child {
   # if allowed by the OS, establish a new process group for this child.
   # This will make it easier to kill off this child and all of its
   # children when desired.
+  $Forks::Super::SETPGRP_SUCCESSFUL = 0;
   if (Forks::Super::CONFIG("getpgrp")) {
-    setpgrp(0, $$);
+    $Forks::Super::SETPGRP_SUCCESSFUL = setpgrp(0, $$);
     $job->{pgid} = getpgrp();
     if ($job->{debug}) {
       _debug("Forks::Super::Job::config_timeout_child: ",
@@ -2937,7 +2934,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.13
+Version 0.14
 
 =head1 SYNOPSIS
 
@@ -3182,7 +3179,7 @@ an epoch time (like the one returned by the C<time> function) as the
 child process's deadline.
 
 If the C<setpgrp()> system call is implemented on your system,
-then this module will reset the process group ID of the child 
+then this module will try to reset the process group ID of the child 
 process. On timeout, the module will attempt to kill off all
 subprocesses of the expiring child process.
 

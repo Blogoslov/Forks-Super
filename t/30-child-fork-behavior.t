@@ -12,7 +12,7 @@ $Forks::Super::CHILD_FORK_OK = 0;
 my $pid1 = fork();
 if ($pid1 == 0) {
   &try_to_fork_from_child;
-  Forks::Super::child_exit 0;
+  exit 0;
 }
 my $p = waitpid $pid1,0;
 ok($p == $pid1, "waitpid reaped child");
@@ -23,7 +23,7 @@ $Forks::Super::CHILD_FORK_OK = 1;
 my $pid2 = fork();
 if ($pid2 == 0) {
   &try_to_fork_from_child;
-  Forks::Super::child_exit 0;
+  exit 0;
 }
 $p = waitpid $pid2, 0;
 ok($p == $pid2, "blocking waitpid");
@@ -33,7 +33,7 @@ $Forks::Super::CHILD_FORK_OK = -1;
 my $pid3 = fork();
 if ($pid3 == 0) {
   &try_to_fork_from_child;
-  Forks::Super::child_exit 0;
+  exit 0;
 }
 $p = wait;
 ok($p == $pid3, "blocking wait");
@@ -45,13 +45,13 @@ sub try_to_fork_from_child {
   my $child_fork_pid = fork();
   if (not defined $child_fork_pid  or  !isValidPid($child_fork_pid)) {
     # child fork failed.
-    Forks::Super::child_exit 23;
+    exit 23;
   }
   if (isValidPid($child_fork_pid)) {
     my $j = Forks::Super::Job::get($child_fork_pid);
     if (not defined $j) {
       # normal (CORE::) fork. No child job created.
-      Forks::Super::child_exit 25;
+      exit 25;
     }
   }
 }

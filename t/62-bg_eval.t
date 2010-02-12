@@ -23,7 +23,7 @@ $x = bg_eval { sleep 4; return 19 } { timeout => 2 };
 $t = Time();
 ok(!defined $$x, "scalar bg_eval undef on failure");
 $t = Time() - $t;
-ok($t < 2.4, "scalar bg_eval respected timeout, took ${t}s expected ~2s");
+ok($t <= 3, "scalar bg_eval respected timeout, took ${t}s expected ~2s");
 
 ### list context ###
 #
