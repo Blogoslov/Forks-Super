@@ -114,6 +114,6 @@ Possible TODOs:
 
 	Deliver a signal to all jobs or to a list of jobs.
 
-    ___ found end cleanup function issue in Linux with an nfs drive.
+    _X_ found end cleanup function issue in Linux with an nfs drive.
 	Update end cleanup code
 

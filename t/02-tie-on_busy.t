@@ -1,4 +1,4 @@
-use Forks::Super ON_BUSY => 'bogus', ':test';
+use Forks::Super ':test', ON_BUSY => 'bogus';
 use Test::More tests => 6;
 
 #

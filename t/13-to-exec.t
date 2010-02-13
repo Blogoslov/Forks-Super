@@ -56,7 +56,7 @@ my $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
 ok($p == $pid, "wait reaped correct pid");
-ok($t >= 5 && $t <= 6.5, "background command ran for ${t}s, expected 5-6s");
+ok($t > 4.5 && $t < 6.5, "background command ran for ${t}s, expected 5-6s");
 
 ##################################################################
 

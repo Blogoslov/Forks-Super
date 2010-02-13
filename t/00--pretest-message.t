@@ -37,7 +37,8 @@ eval 'alarm 60';
 
 print STDERR "\nTesting system limitations\n";	
 if ($^O	=~ /cygwin/i) {
-  print STDERR "On Cygwin, this test can hang for 5 minutes.\n";
+  print STDERR 
+	"On Cygwin, this test can hang for 5 minutes. Please be patient.\n";
 }
 
 system($^X, "t/find-limits.pl", $limits_file);

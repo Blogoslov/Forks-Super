@@ -33,8 +33,9 @@ sub STORE {
   if ($ATTR{""}) {
     $VALUE{$self} = "";
   } else {
-    carp "Invalid assignment to enumerated tied scalar";
+    carp "Invalid assignment to enumerated tied scalar\n";
   }
 }
 
 1;
+

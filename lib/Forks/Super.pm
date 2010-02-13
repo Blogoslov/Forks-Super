@@ -10,7 +10,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -26,7 +26,7 @@ sub _init {
   # open(Forks::Super::DEBUG, '>&',STDERR)   # "bareword" in v5.6.x
   open(Forks::Super::DEBUG, '>&STDERR') 
     or *Forks::Super::DEBUG = *STDERR 
-    or carp "Debugging not available in Forks::Super module!\n";
+    or carp "Forks::Super: Debugging not available in module!\n";
   *Forks::Super::DEBUG->autoflush(1);
   $Forks::Super::REAP_NOTHING_MSGS = 0;
   $Forks::Super::NUM_PAUSE_CALLS = 0;
@@ -77,10 +77,16 @@ sub import {
       if ($dir =~ /\S/ && -d $dir && -r $dir && -w $dir && -x $dir) {
 	Forks::Super::Job::_set_fh_dir($dir);
       } else {
-	carp "Invalid value \"$dir\" for FH_DIR: $!";
+	carp "Forks::Super: Invalid FH_DIR value \"$dir\": $!\n";
       }
     } else {
       push @tags, $args[$i];
+      if ($args[$i] =~ /^:test/) {
+	no warnings;
+	*Forks::Super::Job::carp = *Forks::Super::carp
+	  = *Tie::Enum::carp = sub { warn @_ };
+	*Forks::Super::Job::croak = *Forks::Super::croak = sub { die @_ };
+      }
     }
   }
 
@@ -140,13 +146,13 @@ sub waitpid {
   }
 
   if (@dummy > 0) {
-    carp "Too many arguments for Forks::Super::waitpid()";
+    carp "Forks::Super::waitpid: Too many arguments\n";
     foreach my $dflag (@dummy) {
       $flags |= $dflag;
     }
   }
   if (not defined $flags) {
-    carp "Not enough arguments for Forks::Super::waitpid()";
+    carp "Forks::Super::waitpid: Not enough arguments\n";
     $flags = 0;
   }
 
@@ -171,7 +177,7 @@ sub waitpid {
     return -1;
   } elsif (Forks::Super::CONFIG("getpgrp")) {
     if ($target == 0) {
-      $target = getpgrp();
+      $target = getpgrp(0);
     } else {
       $target = -$target;
     }
@@ -498,11 +504,12 @@ sub _reap {
 #
 sub init_child {
   if ($$ == $Forks::Super::MAIN_PID) {
-    carp "Forks::Super::init_child() method called from main process!";
+    carp "Forks::Super::init_child() method called from main process!\n";
     return;
   }
   @Forks::Super::ALL_JOBS = ();
   @Forks::Super::QUEUE = ();
+  $Forks::Super::TIMEDOUT = 0;
   $SIG{CHLD} = $SIG{CLD} = 'DEFAULT';
   if ($Forks::Super::QUEUE_INTERRUPT && CONFIG("SIGUSR1")) {
     $SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT';
@@ -528,24 +535,6 @@ sub init_child {
   }
   return;
 }
-
-END {
-  # child cleanup
-  if ($$ != $Forks::Super::MAIN_PID) {
-
-    if (CONFIG("alarm")) {
-      alarm 0;
-    }
-
-    if (CONFIG("getpgrp") && $Forks::Super::SETPGRP_SUCCESSFUL) {
-      my $resetpgrp_result = setpgrp(0, $Forks::Super::MAIN_PID);
-      if ($resetpgrp_result) {
-	kill 'TERM', -$$;
-      }
-    }
-  }
-}
-
 
 #
 # count the number of active processes
@@ -596,7 +585,8 @@ sub _launch_queue_monitor {
   $Forks::Super::QUEUE_MONITOR_PID = CORE::fork();
   $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::check_queue;
   if (not defined $Forks::Super::QUEUE_MONITOR_PID) {
-    warn "queue monitoring sub process could not be launched: $!\n";
+    warn "Forks::Super: ",
+      "queue monitoring sub process could not be launched: $!\n";
     return;
   }
   if ($Forks::Super::QUEUE_MONITOR_PID == 0) {
@@ -649,6 +639,9 @@ sub queue_job {
 # DEFFERED state.
 #
 sub run_queue {
+  my ($ignore) = @_;
+
+  # XXX - synchronize this function?
 
   # tasks for run_queue:
   #   assemble all DEFERRED jobs
@@ -666,6 +659,7 @@ sub run_queue {
       if ($job->can_launch) {
 	_debug("Launching deferred job $job->{pid}")
 	  if $job->{debug};
+	$job->{state} = "LAUNCHING";
 	my $pid = $job->launch();
 	if ($pid == 0) {
 	  if (defined $job->{sub} or defined $job->{cmd} or defined $job->{exec}) {
@@ -804,7 +798,8 @@ sub _CONFIG_module {
   my ($module,$warn, @settings) = @_;
   my $zz = eval " require $module ";
   if ($@) {
-    carp "Module $module could not be loaded: $@\n" if $warn;
+    carp "Forks::Super::CONFIG: ",
+      "Module $module could not be loaded: $@\n" if $warn;
       if ($Forks::Super::IMPORT{":test_config"}) {
 	print STDERR "CONFIG\{$module\} failed\n";
       }
@@ -814,7 +809,8 @@ sub _CONFIG_module {
   if (@settings) {
     $zz = eval " $module->import(\@settings) ";
     if ($@) {
-      carp "Module $module was loaded but could not import with settings [",
+      carp "Forks::Super::CONFIG: ",
+	"Module $module was loaded but could not import with settings [",
 	join (",", @settings), "]\n" if $warn;
     }
   }
@@ -829,7 +825,7 @@ sub _CONFIG_Perl_component {
   local $@;
   if ($component eq "getpgrp") {
     undef $@;
-    my $z = eval { getpgrp() };
+    my $z = eval { getpgrp(0) };
     $Forks::Super::CONFIG{"getpgrp"} = $@ ? 0 : 1;
   } elsif ($component eq "getpriority") {
     undef $@;
@@ -916,7 +912,7 @@ sub write_stdin {
     return print $fh @msg;
   } else {
     carp "Forks::Super::write_stdin(): ",
-      "Attempted write on child $job->{pid} with no STDIN filehandle";
+      "Attempted write on child $job->{pid} with no STDIN filehandle\n";
   }
   return;
 }
@@ -929,7 +925,8 @@ sub _read_socket {
   }
 
   if (!defined $sh) {
-    carp "read on undefined filehandle for ",$job->toString();
+    carp "Forks::Super::_read_socket: ",
+      "read on undefined filehandle for ",$job->toString(),"\n";
   }
 
   if ($sh->blocking() || $^O eq "MSWin32") {
@@ -957,7 +954,8 @@ sub _read_socket {
     }
 
     if ($nfound == -1) {
-      warn "Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
+      warn "Forks::Super:_read_socket: ",
+	"Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
     }
   }
   return readline($sh);
@@ -1128,7 +1126,8 @@ sub bg_eval (&;@) {
     tie $result, 'Forks::Super::BackgroundTieScalar', $code, @other_options;
     if ($$ != $p) {
       # a WTF observed on MSWin32
-      croak "$p changed to $$!\n";
+      croak "Forks::Super::bg_eval: ",
+	"Inconsistency in process IDs: $p changed to $$!\n";
     }
     return \$result;
   }
@@ -1153,7 +1152,7 @@ sub Forks::Super::BackgroundTieScalar::_retrieve_value {
   if (!$self->{job}->is_complete) {
     my $pid = Forks::Super::waitpid $self->{job_id}, 0;
     if ($pid != $self->{job}->{real_pid}) {
-      carp "bg_eval: failed to retrieve result from process!";
+      carp "Forks::Super::bg_eval: failed to retrieve result from process!\n";
       $self->{value_set} = 1;
       return;
     }
@@ -1199,7 +1198,7 @@ sub Forks::Super::BackgroundTieArray::_retrieve_value {
   if (!$self->{job}->is_complete) {
     my $pid = Forks::Super::waitpid $self->{job_id}, 0;
     if ($pid != $self->{job}->{real_pid}) {
-      carp "bg_eval: failed to retrieve result from process";
+      carp "Forks::Super::bg_eval: failed to retrieve result from process\n";
       $self->{value_set} = 1;
       return;
     }
@@ -1434,7 +1433,8 @@ sub _can_launch_dependency_check {
   foreach my $dj (@dep_on) {
     my $j = $Forks::Super::ALL_JOBS{$dj};
     if (not defined $j) {
-      carp "Job dependency $dj for job $job->{pid} is invalid. Ignoring.\n";
+      carp "Forks::Super::Job: ",
+	"dependency $dj for job $job->{pid} is invalid. Ignoring.\n";
       next;
     }
     unless ($j->is_complete) {
@@ -1448,8 +1448,8 @@ sub _can_launch_dependency_check {
   foreach my $dj (@dep_start) {
     my $j = $Forks::Super::ALL_JOBS{$dj};
     if (not defined $j) {
-      carp "Job start dependency $dj for job $job->{pid} is invalid. ",
-	"Ignoring.\n";
+      carp "Forks::Super::Job ",
+	"start dependency $dj for job $job->{pid} is invalid. Ignoring.\n";
       next;
     }
     unless ($j->is_started) {
@@ -1538,7 +1538,8 @@ sub launch {
 
   my $pid = CORE::fork();
   while (!defined $pid && --$retries > 0) {
-    carp "system fork call returned undef. Retrying ...";
+    warn "Forks::Super::launch: ",
+      "system fork call returned undef. Retrying ...\n";
     pause(1 + ($job->{retries} || 1) - $retries);
   }
 
@@ -1559,6 +1560,7 @@ sub launch {
     $Forks::Super::ALL_JOBS{$pid} = $job;
     if (defined $job->{state} && 
 	$job->{state} ne 'NEW' &&
+	$job->{state} ne 'LAUNCHING' &&
 	$job->{state} ne 'DEFERRED') {
       warn "Forks::Super::Job::launch(): ",
 	"job $pid already has state: $job->{state}\n";
@@ -1572,7 +1574,8 @@ sub launch {
       # for this process.
       #
       if (defined $Forks::Super::BASTARD_DATA{$pid}) {
-	warn "Job $pid reaped before parent initialization.\n";
+	warn "Forks::Super::Job::launch: ",
+	  "Job $pid reaped before parent initialization.\n";
 	$job->mark_complete;
 	($job->{end}, $job->{status})
 	  = @{delete $Forks::Super::BASTARD_DATA{$pid}};
@@ -1617,23 +1620,17 @@ sub launch {
 sub _launch_from_child {
   my $job = shift;
   if ($Forks::Super::CHILD_FORK_OK == 0) {
-    if ($Forks::Super::IMPORT{":test"}) {
-      carp "fork() not allowed from child\n";
-    } else {
-      carp 'Forks::Super::Job::launch(): fork() not allowed ',
-	"in child process $$ while \$Forks::Super::CHILD_FORK_OK ",
+    carp 'Forks::Super::Job::launch(): fork() not allowed ',
+      "in child process $$ while \$Forks::Super::CHILD_FORK_OK ",
 	"is not set!\n";
-    }
+
     return;
   } elsif ($Forks::Super::CHILD_FORK_OK == -1) {
-    if ($Forks::Super::IMPORT{":test"}) {
-      carp "fork() not allowed from child. Using CORE::fork()\n";
-    } else {
-      carp "Forks::Super::Job::launch(): Forks::Super::fork() ",
-	"call not allowed\n",
+    carp "Forks::Super::Job::launch(): Forks::Super::fork() ",
+      "call not allowed\n",
 	"in child process $$ while \$Forks::Super::CHILD_FORK_OK <= 0.\n",
 	  "Will create child of child with CORE::fork()\n";
-    }
+
     my $pid = CORE::fork();
     if (defined $pid && $pid == 0) {
       # child of child
@@ -1830,7 +1827,7 @@ sub preconfig_fh {
   if (0 < scalar keys %$config) {
     if (defined $Forks::Super::CONFIG{filehandles} 
 	and $Forks::Super::CONFIG{filehandles} == 0) {
-      warn "interprocess filehandles not available!\n";
+      warn "Forks::Super::Job: interprocess filehandles not available!\n";
       return;  # filehandle feature not available
     }
     $job->{fh_config} = $config;
@@ -1842,7 +1839,8 @@ sub preconfig_fh_sockets {
   my ($job,$config) = @_;
   if (!Forks::Super::CONFIG("Socket")) {
     carp "Forks::Super::Job::preconfig_fh_sockets(): ",
-      "Socket unavailable. Will try to use regular filehandles for child ipc.";
+      "Socket unavailable. ",
+	"Will try to use regular filehandles for child ipc.\n";
     delete $config->{sockets};
     return;
   }
@@ -1871,7 +1869,7 @@ sub preconfig_fh_sockets {
 
 sub _create_socket_pair {
   if (!Forks::Super::CONFIG("Socket")) {
-    croak "Forks::Super::Job::_create_socket_pair(): no Socket";
+    croak "Forks::Super::Job::_create_socket_pair(): no Socket\n";
   }
   my ($s_child, $s_parent);
   local $!;
@@ -1879,13 +1877,15 @@ sub _create_socket_pair {
   if (Forks::Super::CONFIG("IO::Socket")) {
     ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_UNIX(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     if (!(defined $s_child && defined $s_parent)) {
-      warn "IO::Socket->socketpair(AF_UNIX) failed. Trying AF_INET\n";
+      warn "Forks::Super::_create_socket_pair: ",
+	"IO::Socket->socketpair(AF_UNIX) failed. Trying AF_INET\n";
       ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_INET(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     } 
   } else {
     my $z = socketpair($s_child, $s_parent, Socket::AF_UNIX(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     if ($z == 0) {
-      warn "socketpair(AF_UNIX) failed. Trying AF_INET\n";
+      warn "Forks::Super::_create_socket_pair: ",
+	"socketpair(AF_UNIX) failed. Trying AF_INET\n";
       $z = socketpair($s_child, $s_parent, Socket::AF_INET(), Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
       if ($z == 0) {
 	undef $s_child;
@@ -1894,7 +1894,8 @@ sub _create_socket_pair {
     }
   }
   if (!(defined $s_child && defined $s_parent)) {
-    carp "Forks::Super::Job::_create_socket_pair(): socketpair failed $! $^E!";
+    carp "Forks::Super::Job::_create_socket_pair(): ",
+      "socketpair failed $! $^E!\n";
     return;
   }
   $s_child->autoflush(1);
@@ -1923,7 +1924,8 @@ sub _choose_fh_filename {
     push @Forks::Super::FH_FILES, $file;
 
     if (!$Forks::Super::FH_DIR_DEDICATED && -f $file) {
-      carp "IPC file $file already exists!";
+      carp "Forks::Super::Job::_choose_fh_filename: ",
+	"IPC file $file already exists!\n";
       debug("$file already exists ...") if $Forks::Super::DEBUG;
 #      unlink $file;
     }
@@ -2038,7 +2040,7 @@ sub run_callback {
   my $ref = ref $job->{$key};
   if ($ref ne "CODE" && ref ne "") {
     carp "Forks::Super::Job::run_callback: invalid callback $callback. ",
-      "Got $ref, expected CODE or subroutine name";
+      "Got $ref, expected CODE or subroutine name\n";
     return;
   }
 
@@ -2127,7 +2129,8 @@ sub _expand_names {
 	  push @out, $j->{pid};
 	}
       } else {
-	carp "Forks::Super: Job dependency identifier \"$id\" is invaild. Ignoring";
+	carp "Forks::Super: Job ",
+	  "dependency identifier \"$id\" is invaild. Ignoring\n";
       }
     }
   }
@@ -2202,7 +2205,8 @@ sub END_cleanup {
 
     my $clean_up_ok = File::Path::rmtree($Forks::Super::FH_DIR, 0, 1);
     if ($clean_up_ok <= 0) {
-      warn "Clean up of $Forks::Super::FH_DIR may not have succeeded.\n";
+      warn "Forks::Super END:",
+	"Clean up of $Forks::Super::FH_DIR may not have succeeded.\n";
     }
 
     # There are two unusual features of MSWin32 to note here:
@@ -2214,13 +2218,16 @@ sub END_cleanup {
     if (-d $Forks::Super::FH_DIR) {
       if (0 == rmdir $Forks::Super::FH_DIR) {
 	if ($^O eq "MSWin32") {
-	  warn "Must wait for all children to finish before ",
+	  warn "Forks::Super END: ",
+	    "Must wait for all children to finish before ",
 	    "removing $Forks::Super::FH_DIR\n";
 	  1 while -1 != CORE::wait;
 	  File::Path::rmtree($Forks::Super::FH_DIR, 0, 1);
 	  rmdir $Forks::Super::FH_DIR;
 	} else {
-	  warn "Failed to remove $Forks::Super::FH_DIR/: $!\n";
+	  warn "Forks::Super END: ",
+	    "Failed to remove $Forks::Super::FH_DIR/: $!\n";
+	  _launch_bg_directory_cleaner($Forks::Super::FH_DIR);
 	}
       }   # endif  rmdir
     }     # endif  -d $Forks::Super::FH_DIR
@@ -2236,6 +2243,29 @@ sub END_cleanup {
   return;
 }
 
+sub _launch_bg_directory_cleaner {
+  my $dir = shift;
+  my $pid = CORE::fork();
+  return if $pid;
+
+  warn "Forks::Super: will try to clean up IPC directory $dir in background\n";
+
+  for (my $i=0; $i<300; $i+=10) {
+    sleep 10;
+    my $clean_up_ok = File::Path::rmtree($dir, 0, 1);
+    if ($clean_up_ok >= 0) {
+      if (-d $dir) {
+	if (rmdir $dir) {
+	  print STDERR "Clean up of $dir complete.\n";
+	  exit 0;
+	}
+      } else {
+	print STDERR "Clean up of $dir complete.\n";
+	exit 0;
+      }
+    } # else try again in 10 seconds for up to 5 minutes
+  }
+}
 
 
 #
@@ -2672,7 +2702,7 @@ sub config_timeout_child {
   if (defined $job->{timeout}) {
     $timeout = $job->{timeout};
     if ($job->{style} eq "exec") {
-      carp "Forks::Super: exec option used, timeout option ignored";
+      carp "Forks::Super: exec option used, timeout option ignored\n";
       return;
     }
   }
@@ -2681,7 +2711,7 @@ sub config_timeout_child {
       $timeout = $job->{expiration} - Forks::Super::Time();
     }
     if ($job->{style} eq "exec") {
-      carp "Forks::Super: exec option used, expiration option ignored";
+      carp "Forks::Super: exec option used, expiration option ignored\n";
       return;
     }
   }
@@ -2689,29 +2719,52 @@ sub config_timeout_child {
     return;
   }
 
-  # if allowed by the OS, establish a new process group for this child.
-  # This will make it easier to kill off this child and all of its
-  # children when desired.
-  $Forks::Super::SETPGRP_SUCCESSFUL = 0;
+  # if possible in this OS, establish a new process group for
+  # this child. If this process times out, we want to have
+  # an easy way to kill off all the grandchildren.
+  #
+  # see the END{} block that covers child cleanup below
+  #
   if (Forks::Super::CONFIG("getpgrp")) {
-    $Forks::Super::SETPGRP_SUCCESSFUL = setpgrp(0, $$);
-    $job->{pgid} = getpgrp();
-    if ($job->{debug}) {
-      _debug("Forks::Super::Job::config_timeout_child: ",
+    $Forks::Super::ORIG_PGRP = getpgrp(0);
+    setpgrp(0, $$);
+    $Forks::Super::NEW_PGRP = $job->{pgid} = getpgrp(0);
+    $Forks::Super::NEW_SETSID = 0;
+    if ($Forks::Super::NEW_PGRP != $Forks::Super::ORIG_PGRP) {
+      if ($job->{debug}) {
+	_debug("Forks::Super::Job::config_timeout_child: ",
 	     "Child process group changed to $job->{pgid}");
+      }
+    } else {
+      # setpgrp didn't work, try POSIX::setsid
+      $Forks::Super::NEW_SETSID = POSIX::setsid();
+      $job->{pgid} = $Forks::Super::NEW_PGRP = getpgrp(0);
+      if ($job->{debug}) {
+	_debug("Forks::Super::Job::config_timeout_child: ",
+	       "Child process started new session $Forks::Super::NEW_SETSID, ",
+	       "process group $Forks::Super::NEW_PGRP");
+      }
     }
   }
 
   if ($timeout < 1) {
     if ($Forks::Super::IMPORT{":test"}) {
-      die "quick timeout\n";
+      croak "Forks::Super: quick timeout\n";
     } 
     croak "Forks::Super::Job::config_timeout_child(): quick timeout";
   }
 
   $SIG{ALRM} = sub { 
     warn "Forks::Super: child process timeout\n";
-    exit 1;
+    $Forks::Super::TIMEDOUT = 1;
+    if (Forks::Super::CONFIG("getpgrp") &&
+	($Forks::Super::NEW_SETSID ||
+	 $Forks::Super::NEW_PGRP != $Forks::Super::ORIG_PGRP)) {
+      $Forks::Super::DISABLE_TERM = 1;
+      my $nk = kill 'TERM', -getpgrp(0);
+      $Forks::Super::DISABLE_TERM = 0;      
+    }
+    exit 255;
   };
   if (Forks::Super::CONFIG("alarm")) {
     alarm $timeout;
@@ -2723,6 +2776,43 @@ sub config_timeout_child {
       "timeout,expiration options ignored.\n";
   }
   return;
+}
+
+END {
+  # clean up child
+  if ($$ != $Forks::Super::MAIN_PID) {
+    if (Forks::Super::CONFIG("alarm")) {
+      alarm 0;
+    }
+    if ($Forks::Super::TIMEDOUT && Forks::Super::CONFIG("getpgrp")) {
+      if ($Forks::Super::DISABLE_TERM) {
+	# our child process received its own SIGTERM that got sent out
+	# to its children/process group. We intended the exit status
+	# here to be as if it had die'd.
+	$? = 255 << 8;
+      }
+
+
+      # try to kill off any grandchildren
+      if ($Forks::Super::ORIG_PGRP == $Forks::Super::NEW_PGRP) {
+	carp "Forks::Super::child_exit: original setpgrp call failed, ",
+	  "child-of-child process might not be terminated.\n";
+      } else {
+	setpgrp(0, $Forks::Super::MAIN_PID);
+	$Forks::Super::NEWNEW_PGRP = getpgrp(0);
+	if ($Forks::Super::NEWNEW_PGRP == $Forks::Super::NEW_PGRP) {
+	  carp "Forks::Super::child_exit: final setpgrp call failed, ",
+	    "child-of-child processes might not be terminated.\n";
+	} else {
+	  my $num_killed = kill 'TERM', -$Forks::Super::NEW_PGRP;
+	  if ($num_killed && $Forks::Super::NEW_PGRP) {
+	    Forks::Super::debug("Forks::Super::child_exit: sent SIGTERM to ",
+				"$num_killed grandchildren");
+	  }
+	}
+      }
+    }
+  }
 }
 
 #
@@ -2791,7 +2881,7 @@ sub config_os_child {
       } else {
 	carp "Forks::Super::Job::config_os_child(): ",
 	  "Win32::Process::Open call failed for Windows PID $winpid, ",
-	  "can not update CPU affinity";
+	  "can not update CPU affinity\n";
       }
     } elsif ($^O=~/linux/i && Forks::Super::CONFIG("/bin/taskset")) {
       $n = sprintf "0%o", $n;
@@ -2813,7 +2903,7 @@ sub config_os_child {
 	  }
 	} else {
 	  carp "Forks::Super::Job::config_os_child(): ",
-	    "Invliad handle for Win32 thread id $thread_id";
+	    "Invalid handle for Win32 thread id $thread_id\n";
 	}
       }
     } elsif (Forks::Super::CONFIG('BSD::Process::Affinity')) {
@@ -2862,8 +2952,9 @@ sub _get_win32_thread_api {
       Win32::API->new('kernel32', "int GetThreadPriority(HANDLE h)");
 
     if ($win32_thread_api->{"_error"}) {
-      carp "error in Win32::API thread initialization: ",
-	$win32_thread_api->{"_error"};
+      carp "Forks::Super::Job::_get_win32_thread_api: ",
+	"error in Win32::API thread initialization: ",
+	$win32_thread_api->{"_error"}, "\n";
     }
     $Forks::Super::Job::WIN32_THREAD_API = $win32_thread_api;
     $Forks::Super::Job::WIN32_THREAD_API_INITIALIZED++;
@@ -2934,7 +3025,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.14
+Version 0.15
 
 =head1 SYNOPSIS
 

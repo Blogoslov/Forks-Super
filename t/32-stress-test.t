@@ -12,10 +12,9 @@ use warnings;
 # 
 
 #
-# On Cygwin, this test sometimes hangs for exactly five minutes.
-# See the note in  find-limits.pl
+# This test can cause the kernel to complain 
 #
- 
+
 
 # $SIG_DEBUG is special flag to instruct SIGCHLD handler to record what goes on
 $Forks::Super::SIG_DEBUG = 1;

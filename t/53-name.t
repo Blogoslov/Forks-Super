@@ -74,6 +74,7 @@ waitall;
 ok($j1->{start} <= $j2->{start}, "respected start dependency by name");
 ok($j3->{start} < $j2->{start}, "non-dependent job started before dependent job");
 
+$Forks::Super::ON_BUSY = "queue";
 $t = Forks::Super::Time();
 $p1 = fork { sub => sub {sleep 3}, name => "circle1", depend_on => "circle2" };
 $p2 = fork { sub => sub {sleep 3}, name => "circle2", depend_on => "circle1" };

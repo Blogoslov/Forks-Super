@@ -31,7 +31,7 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, timeout => 10 };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid, "wait successful");
+ok($p == $pid, "wait successful; expected $pid got $p");
 ok($t < 9, "job completed before timeout ${t}s expected ~5s");
 ok($? == 0, "job completed with zero exit status");
 
@@ -41,9 +41,9 @@ $pid = fork { 'sub' => sub { sleep 5; exit 0 }, timeout => 0 };
 $t = Forks::Super::Time();
 $p = wait;
 $t = Forks::Super::Time() - $t;
-ok($p == $pid, "wait successful");
+ok($p == $pid, "wait successful; expected $pid got $p");
 ok($t <= 1, "fast fail timeout=${t}s, expected <=1s");
-ok($? != 0, "job failed with non-zero status");
+ok($? != 0, "job failed with non-zero status $?");
 
 #######################################################
 
@@ -85,7 +85,7 @@ SKIP: {
   if (!Forks::Super::CONFIG("getpgrp")) {
     skip "setpgrp() unavailable. Skipping tests about timing out grandchildren.", 10;
   }
-  if (getpgrp(0) != $$) {
+  if (0 && getpgrp(0) != $$) {
     skip "current pgrp is != current pid -- test to time out grandchildren probably won't work", 10;
   }
 
@@ -96,7 +96,8 @@ SKIP: {
 			   "t/out/spawn.pids.$$", "3", "15" ] };
   $p = wait;
   $t = Forks::Super::Time() - $t;
-  ok($p == $pid && $t >= 5 && $t <= 7, "external prog took ${t}s, expected 5-7s");
+  ok($p == $pid && $t >= 5 && $t <= 7, 
+	"external prog took ${t}s, expected 5-7s");
   if ($t < 14) {
     sleep 15 - $t;
   }
@@ -126,16 +127,16 @@ SKIP: {
   $job = Forks::Super::Job::get($pid);
   $pgid = $job->{pgid};
   $p = waitpid -$ppgid, 0;
-  ok($p == $pid && $pgid == $ppgid);
+  ok($p == $pid && $pgid == $ppgid, "child pgid set to parent pgid");
 
   $pid = fork { timeout => 3, sub => sub { sleep 5 } };
   $job = Forks::Super::Job::get($pid);
   $pgid = $job->{pgid};
-  ok($pgid != $ppgid);
+  ok($pgid != $ppgid, "child pgid != parent pgid with timeout");
   $p = waitpid -$ppgid, 0;
-  ok($p == -1);
+  ok($p == -1, "waitpid on parent pgid returns -1");
   $p = waitpid -$pgid, 0;
-  ok($p == $pid);
+  ok($p == $pid, "waitpid on child pgid returns child pid");
 }
 
 ##########################################################
