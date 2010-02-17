@@ -10,7 +10,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 use base 'Exporter'; # our @ISA = qw(Exporter);
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -3025,7 +3025,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.15
+Version 0.16
 
 =head1 SYNOPSIS
 

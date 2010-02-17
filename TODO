@@ -25,9 +25,9 @@ Possible TODOs:
         fork { stdout => \@output, stderr => \@error }
 
                 when the child process completes, collect its stdout and stderr
-                output into the specified arrays. This will conserve filehandles
-                in the parent. But it doesn't allow you to read child 
-		output while the child is running.
+                output into the specified arrays. This will conserve 
+		filehandles in the parent. But it doesn't allow you to 
+		read child output while the child is running.
 
 		Could implement this in terms of a "collect output callback".
 
@@ -37,12 +37,14 @@ Possible TODOs:
 		names, accessible in the parent at something like 
 		$Forks::Super::CHILD_FH{$pid}{X}
 
-        incorporate CPU load into system busy-ness calc (see Parallel::ForkControl)
-		(Parallel::ForkControl uses uptime(1) as  a "cheap linux only hack"
+        incorporate CPU load into system busy-ness calc (see 
+		Parallel::ForkControl) (Parallel::ForkControl uses uptime(1) 
+		as  a "cheap linux only hack"
 		See also: Win32::Process::CpuUsage, Sys::CPU, Sys::CpuLoad).
 
-	incorporate free memory into system busy-ness calc (Parallel::ForkControl)
-		(Parallel::ForkControl says "non functional")
+	incorporate free memory into system busy-ness calc 
+		(Parallel::ForkControl)	(Parallel::ForkControl says 
+		"non functional")
 
     ___	implement child handles through IO::Pipe objects
 
@@ -53,11 +55,11 @@ Possible TODOs:
     _x_ fork { cpu_affinity => $bitmask }
 
                 <OLD POD>
-                On supported systems with multiple cores, and after the successful
-                creating of the child process, attempt to set the CPU affinity for
-                the child process. $mask is typically a bitmask with the lowest level
-                bits indicating whether the lowest numbered CPU's should be used
-                by this process.
+                On supported systems with multiple cores, and after the 
+		successful creating of the child process, attempt to set 
+		the CPU affinity for the child process. $mask is typically 
+		a bitmask with the lowest level bits indicating whether the 
+		lowest numbered CPU's should be used by this process.
                 </OLD POD>
 
                 _X_ linux [where /bin/taskset is avail]
@@ -109,11 +111,9 @@ Possible TODOs:
 		Forks::Super::Filehandle
 		Forks::Super::Timeout
 		Forks::Super::Uninterruptable
+		Forks::Super::Depend
 
     ___	kill_all($signal), kill($signal, @jobs)
 
 	Deliver a signal to all jobs or to a list of jobs.
-
-    _X_ found end cleanup function issue in Linux with an nfs drive.
-	Update end cleanup code
 

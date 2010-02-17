@@ -8,6 +8,12 @@ use warnings;
 # result is a tie'd scalar, so exercise fetch/store
 #
 
+SKIP: {
+
+  if (!Forks::Super::CONFIG("YAML")) {
+    skip "YAML not available, skipping bg_eval tests", 27;
+  }
+
 my $t = Time();
 my $x = bg_eval { sleep 3 ; return 42 };
 $t = Time();
@@ -101,3 +107,5 @@ ok($$x == 19, "scalar bg_eval with lots of options");
 $t = Time() - $t;
 ok($t > 7.85, "bg_eval with delay took ${t}s, expected ~8s");
 ok($w == 14 + 1 + 2 + 5, "bg_eval finish callback");
+
+};

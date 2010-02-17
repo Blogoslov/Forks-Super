@@ -7,7 +7,7 @@ use ExtUtils::MakeMaker;
 # many of them are OS dependent
 #
 
-my @recommends = ("Time::HiRes" => 0);
+my @recommends = ("Time::HiRes" => 0, "YAML" => 0);
 if ($^O eq "MSWin32") {
   push @recommends, ("Win32" => 0, 
 		     "Win32::Process" => 0,
