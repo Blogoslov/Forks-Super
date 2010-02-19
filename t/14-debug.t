@@ -12,7 +12,7 @@ my $debug_file = "t/out/debug1-$^O-$].out";
 if (-f $debug_file) {
   unlink $debug_file;
 }
-if (!open(Forks::Super::DEBUG, ">", $debug_file)) {
+if (!open($Forks::Super::Debug::DEBUG_fh, ">", $debug_file)) {
  #SKIP: {
  #   skip "skipping debug tests: can't open debug output file $!", 8;
  # }
@@ -92,4 +92,5 @@ ok($out4 > 0, "job debugging on");
 ok($out4 < $out3, "undebug on, child debug disabled $out3 > $out4");
 
 close LOCK;
+
 

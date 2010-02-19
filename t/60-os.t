@@ -21,7 +21,7 @@ sub win32_getpriority {
   my ($thread_id) = @_;
   sleep 1;
   $thread_id = abs($thread_id);
-  my $api = Forks::Super::Job::_get_win32_thread_api();
+  my $api = Forks::Super::Job::OS::_get_win32_thread_api();
   my $handle = $api->{OpenThread}->Call(0x0060, 0, $thread_id);
   if ($handle) {
     local $!;
@@ -38,7 +38,7 @@ sub win32_getpriority {
 SKIP: {
   if ($^O eq "MSWin32") {
     if (!Forks::Super::CONFIG("Win32::API") ||
-	defined Forks::Super::Job::_get_win32_thread_api->{"_error"}) {
+	defined Forks::Super::Job::OS::_get_win32_thread_api->{"_error"}) {
       skip "getpriority() not avail on Win32", 2;
     }
   }
@@ -93,7 +93,7 @@ SKIP: {
     }
   } elsif ($^O eq "MSWin32" && Forks::Super::CONFIG("Win32::API")) {
     sleep 2;
-    my $x = Forks::Super::Job::_get_win32_thread_api();
+    my $x = Forks::Super::Job::OS::_get_win32_thread_api();
     my $handle = $x->{"OpenThread"}->Call(0x0060, 0, abs($pid3));
     undef $!;
     my $y = $x->{"SetThreadAffinityMask"}->Call($handle, 3);

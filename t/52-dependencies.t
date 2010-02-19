@@ -88,7 +88,7 @@ ok($j4->{state} eq "DEFERRED", "job 4 waiting");
 
 # without calling run_queue(), first set of jobs might 
 # finish before queue is examined
-Forks::Super::run_queue();
+Forks::Super::Queue::run_queue();
 
 waitall;
 ok($j4->{start} >= $j2->{start}, "job 4 respected depend_start for job2");

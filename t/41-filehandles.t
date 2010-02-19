@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 42;
+use Test::More tests => 28;
 use strict;
 use warnings;
 if (Forks::Super::CONFIG("alarm")) {
@@ -107,140 +107,6 @@ ok($err[-1] eq "$msg\n", "got expected line from child error");
 waitall;
 
 #######################################################
-
-# test join, read_stdout
-
-$pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 10,
-	    get_child_stdin => 1, get_child_stdout => 1, join_child_stderr => 1 };
-ok(isValidPid($pid), "started job with join");
-
-$msg = sprintf "the message is %x", rand() * 99999999;
-$z = print {$Forks::Super::CHILD_STDIN{$pid}} "$msg\n";
-ok($z > 0, "successful print to child STDIN");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value defined");
-ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
-ok($Forks::Super::CHILD_STDOUT{$pid} eq $Forks::Super::CHILD_STDERR{$pid}, 
-   "child stdout and stderr go to same fh");
-$t = time;
-@out = ();
-while (time < $t+12) {
-  while ((my $line = Forks::Super::read_stdout($pid))) {
-    push @out, $line;
-  }
-}
-
-###### these 5 tests were a failure point on versions 0.04,0.05 ######
-###### failure point in 0.06 because of "Timeout" #######
-
-# perhaps some warning message was getting into the output stream
-if (@out != 3) {
-  print STDERR "\ntest join+read stdout: failure imminent.\n";
-  print STDERR "Expecting three lines but what we get is:\n";
-  my $i;
-  print STDERR map { ("Output line ", ++$i , ": $_") } @out;
-  print STDERR "\n";
-}
-
-@out = grep { !/alarm\(\) not available/ } @out;
-ok(@out == 3, "read ".(scalar @out)." [3] lines from child STDOUT:   @out");
-ok($out[-3] =~ /the message is/, "first line matches expected pattern");
-ok($out[-3] eq "$msg\n", "first line matches expected pattern");
-ok($out[-2] eq "0:$msg\n", "second line matches expected pattern");
-ok($out[-1] eq "1:$msg\n", "third line matches expected pattern");
-waitall;
-
-#######################################################
-
-# test read_stderr -- this is the last significant failure point from 0.08
-# the usual error is that @err contains one line instead of two
-# let's retest with debugging if we detect that this test is going to fail ...
-
-sub read_stderr_test {
-
-  $pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
-		  get_child_stdin => 1, get_child_stdout => 0, 
-		  get_child_stderr => 1 };
-
-  my $z = 0;
-  if (isValidPid($pid)) {
-    my $msg = sprintf "the message is %x", rand() * 99999999;
-    my $pid_stdin_fh = $Forks::Super::CHILD_STDIN{$pid};
-
-    $z = print $pid_stdin_fh "$msg\n";
-    if ($Forks::Super::DEBUG) {
-      Forks::Super::debug("Printed \"$msg\\n\" to child stdin ($pid). Result:$z");
-    }
-    sleep 1;
-    $z = print $pid_stdin_fh "That was a test\n";
-    if ($Forks::Super::DEBUG) {
-      Forks::Super::debug("Printed \"That was a test\\n\" to child stdin ($pid).",
-                          " Result:$z");
-    }
-    sleep 1;
-    close $Forks::Super::CHILD_STDIN{$pid};
-    if ($Forks::Super::DEBUG) {
-      Forks::Super::debug("Closed filehandle to $pid STDIN");
-    }
-  }
-  return ($z,$pid);
-}
-
-($z,$pid) = &read_stderr_test;
-ok(isValidPid($pid), "started job with join");
-ok($z > 0, "successful print to child STDIN");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
-ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined");
-ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
-$t = time;
-@out = ();
-@err = ();
-while (time < $t+12) {
-  my @data = Forks::Super::read_stdout($pid);
-  if ($Forks::Super::DEBUG && defined $data[0]) {
-    Forks::Super::debug("Read from child $pid stdout: [ ", @data,  " ]");
-  }
-  push @out, @data if @data>0 and $data[0] ne "";
-
-  @data = Forks::Super::read_stderr($pid);
-  if ($Forks::Super::DEBUG && defined $data[0]) {
-    Forks::Super::debug("Read from child $pid stderr: [ ", @data,  " ]");
-  }
-  push @err, @data if @data>0 and $data[0] ne "";
-}
-ok(@out == 0, "received no output from child");
-@err = grep { !/alarm\(\) not available/ } @err;
-
-if (@err != 2) {
-  print STDERR "\ntest read stderr: failure imminent.\n";
-  print STDERR "Expecting two lines but what we get is:\n";
-  my $i;
-  print STDERR map { ("Error line ", ++$i , ": $_") } @err;
-  print STDERR "\n";
-  print STDERR "Rerunning read_stderr test with debugging on ...\n";
-
-  # retest with debugging -- let's see if we can figure out what's going on
-  $Forks::Super::DEBUG = 1;
-  ($z,$pid) = &read_stderr_test;
-  $t = time;
-  $i = 0;
-  @err = ();
-  while (time < $t+12) {
-    my @data = Forks::Super::read_stderr($pid);
-    push @err, @data if @data>0 and $data[0] ne "";
-  }
-  print STDERR "Standard error from retest:\n";
-  print STDERR map { ("Error line ", ++$i, ": $_") } @err;
-  @err = grep { !/repeater:/ && !/alarm/ } @err;
-}
-
-ok(@err == 2, "received 2 lines from child stderr");
-ok($err[0] =~ /the message is/, "got expected first line from child error");
-ok($err[-1] =~ /a test/, "got expected second line from child error");
-waitall; 
-$Forks::Super::DEBUG = 0;
-
-##################################################
 # test read_stderr -- this is the last significant failure point from 0.08
 # the usual error is that @err contains one line instead of two
 # let's retest with debugging if we detect that this test is going to fail ...
@@ -368,5 +234,43 @@ for (my $i=0; $i<@pdata; $i++) {
 }
 ok($pc_equal);
 
+##########################################################
 
-__END__
+# exercise stdout, stdin, stderr 
+
+my $input = "Hello world\n";
+my $output = "";
+my $error = "overwrite me!";
+$pid = fork { stdin => $input, stdout => \$output, stderr => \$error,
+		sub => sub {
+		  sleep 1;
+		  while(<STDIN>) {
+		    print STDERR "Got input: $_";
+		    chomp;
+		    my $a = reverse $_;
+		    print $a, "\n";
+		  }
+		  } };
+ok($output eq "" && $error =~ /overwrite/, 
+   "output/error not updated until child is complete");
+waitpid $pid, 0;
+ok($output eq "dlrow olleH\n", "updated output from stdout");
+ok($error !~ /overwrite/, "error ref was overwritten");
+ok($error eq "Got input: $input");
+
+my @input = ("Hello world\n", "How ", "is ", "it ", "going?\n");
+my $orig_output = $output;
+$pid = fork { stdin => \@input , stdout => \$output,
+		sub => sub {
+		  sleep 1;
+		  while (<STDIN>) {
+		    chomp;
+		    my $a = reverse $_;
+		    print length($_), $a, "\n";
+		  }
+		} };
+ok($output eq $orig_output, "output not updated until child is complete");
+waitpid $pid, 0;
+ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
+
+

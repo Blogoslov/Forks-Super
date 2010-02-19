@@ -9,8 +9,7 @@ use warnings;
 # go directly to the job queue.
 #
 
-# is delay tag respected ?
-$Forks::Super::ON_BUSY = "queue";
+$Forks::Super::ON_BUSY = "block";
 
 my $now = Forks::Super::Time();
 my $future = Forks::Super::Time() + 10;
@@ -31,11 +30,10 @@ ok($j1->{start} - $j1->{created} >= 5, "job start time after creation time");
 ok($j2->{start} - $j2->{created} >= 9.9,
    "j2 created $j2->{created}, started $j2->{start}, expected 10s diff");
 
-$Forks::Super::ON_BUSY = "block";
 $now = time;
 
 my $t = Time();
-$p1 = fork { sub => sub { sleep 3 } , delay => 5 };
+$p1 = fork { sub => sub { sleep 3 } , delay => 5, on_busy => 'block' };
 $t = Time() - $t;
 ok($t >= 4, "delayed job blocked took ${t}s expected >=5s");
 ok(isValidPid($p1), "delayed job blocked and ran");
@@ -44,7 +42,8 @@ ok($j1->{state} eq "ACTIVE", "state of delayed job is ACTIVE");
 
 $future = time + 10;
 $t = time;
-$p2 = fork { sub => sub { sleep 3 } , start_after => $future };
+$p2 = fork { sub => sub { sleep 3 } , start_after => $future, 
+	on_busy => 'block' };
 $t = time - $t;
 ok($t >= 4, "start_after job blocked");
 ok(isValidPid($p2), "start_after job blocked and ran");

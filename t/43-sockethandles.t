@@ -281,5 +281,51 @@ for (my $i=0; $i<@pdata; $i++) {
 }
 ok($pc_equal);
 
+#######################################################################
+
+
+# exercise stdout, stdin, stderr 
+if (0) {
+
+#
+# XXX - needs work
+# 
+
+my $input = "Hello world\n";
+my $output = "";
+my $error = "overwrite me!";
+$pid = fork { stdin => $input, stdout => \$output, stderrx => \$error, child_fh => "sock",
+		sub => sub {
+		  sleep 1;
+		  while(<STDIN>) {
+		    print STDERR "Got input: $_";
+		    chomp;
+		    my $a = reverse $_;
+		    print $a, "\n";
+		  }
+		  }, debug => 1 };
+ok($output eq "" && $error =~ /overwrite/, 
+   "output/error not updated until child is complete");
+waitpid $pid, 0;
+ok($output eq "dlrow olleH\n", "updated output from stdout");
+ok($error !~ /overwrite/, "error ref was overwritten");
+ok($error eq "Got input: $input");
+
+my @input = ("Hello world\n", "How ", "is ", "it ", "going?\n");
+my $orig_output = $output;
+$pid = fork { stdin => \@input , stdout => \$output, child_fh => "sock",
+		sub => sub {
+		  sleep 1;
+		  while (<STDIN>) {
+		    chomp;
+		    my $a = reverse $_;
+		    print length($_), $a, "\n";
+		  }
+		} };
+ok($output eq $orig_output, "output not updated until child is complete");
+waitpid $pid, 0;
+ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
+
+}
 
 __END__

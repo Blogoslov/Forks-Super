@@ -12,12 +12,12 @@ use warnings;
 $Forks::Super::MAX_PROC = 2;
 $Forks::Super::ON_BUSY = "queue";
 
-ok(@Forks::Super::QUEUE == 0, "initial queue is empty");
+ok(@Forks::Super::Queue::QUEUE == 0, "initial queue is empty");
 my $pid1 = fork { sub => sub { sleep 5 } };
 my $pid2 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1) && isValidPid($pid2), "two successful fork calls");
 my $pid3 = fork { sub => sub { sleep 5 } };
-ok(@Forks::Super::QUEUE == 1, "third fork call is deferred");
+ok(@Forks::Super::Queue::QUEUE == 1, "third fork call is deferred");
 ok($pid3 < -10000, "deferred job has large negative id");
 my $j = Forks::Super::Job::get($pid3);
 ok(defined $j, "job object avail for deferred job");
@@ -48,7 +48,8 @@ my $urgent = fork { sub => sub { sleep 3 } , queue_priority => 1 };
 
 ok(!isValidPid($ordinary) && !isValidPid($mild) && !isValidPid($urgent),
    "three deferred jobs created");
-ok($ordinary > $mild && $mild > $urgent, "defered jobs created in right order");
+ok($ordinary > $mild && $mild > $urgent, 
+	"defered jobs created in right order");
 
 waitall;
 

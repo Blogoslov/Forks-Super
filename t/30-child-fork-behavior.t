@@ -37,7 +37,7 @@ if ($pid3 == 0) {
 }
 $p = wait;
 ok($p == $pid3, "blocking wait");
-ok(25 == $? >> 8, "child fork used CORE::fork");
+ok(25 == $? >> 8, "child fork used CORE::fork status $?");
 
 
 
