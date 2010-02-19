@@ -5,7 +5,7 @@ use Forks::Super::Config qw(:all);
 use Forks::Super::Queue qw(:all);
 use Forks::Super::Wait qw(:all);
 use Forks::Super::Job;
-use Tie::Enum;
+use Forks::Super::Tie::Enum;
 use 5.007003;     # for "safe" signals -- see perlipc
 use Exporter;
 use POSIX ':sys_wait_h';
@@ -16,7 +16,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 use base 'Exporter';
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -65,7 +65,7 @@ sub _init {
     }
   };
 
-  tie $ON_BUSY, 'Tie::Enum', qw(block fail queue);
+  tie $ON_BUSY, 'Forks::Super::Tie::Enum', qw(block fail queue);
   $ON_BUSY = 'block';
 
   Forks::Super::Queue::init();
@@ -105,7 +105,7 @@ sub import {
       if ($args[$i] =~ /^:test/) {
 	no warnings;
 	*Forks::Super::Job::carp = *Forks::Super::carp
-	  = *Tie::Enum::carp = sub { warn @_ };
+	  = *Forks::Super::Tie::Enum::carp = sub { warn @_ };
 	*Forks::Super::Job::croak = *Forks::Super::croak = sub { die @_ };
 	$Forks::Super::Config::IS_TEST = 1;
 	$Forks::Super::Config::IS_TEST_CONFIG = 1 if $args[$i] =~ /config/;
@@ -707,7 +707,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.20
+Version 0.21
 
 =head1 SYNOPSIS
 
@@ -998,10 +998,10 @@ as soon as they are created.
 B<Note: API change since v0.10.>
 
 Launches a child process and makes the child process's 
-STDIN, STDOUT, and/or STDERR filehandles available to
+C<STDIN>, C<STDOUT>, and/or C<STDERR> filehandles available to
 the parent process in the scalar variables
-$Forks::Super::CHILD_STDIN{$pid}, $Forks::Super::CHILD_STDOUT{$pid},
-and/or $Forks::Super::CHILD_STDERR{$pid}, where $pid is the PID
+C<$Forks::Super::CHILD_STDIN{$pid}>, C<$Forks::Super::CHILD_STDOUT{$pid}>,
+and/or C<$Forks::Super::CHILD_STDERR{$pid}>, where C<$pid> is the PID
 return value from the fork call. This feature makes it possible,
 even convenient, for a parent process to communicate with a
 child, as this contrived example shows.
@@ -1089,10 +1089,6 @@ to prevent your script from reading on an empty socket
 
 =cut 
 
-It is an open question (that is to say: I personally haven't researched it)
-whether opening socket handles counts against your program's limit
-of simultaneous open filehandles.
-
 =head3 Socket and file handle gotchas
 
 Some things to keep in mind when using socket or file handles
@@ -1132,6 +1128,10 @@ about reading from a handle after you have
 already read past the end. You may find it useful for your
 parent and child processes to follow some convention (for example,
 a special word like C<"__END__">) to denote the end of input.
+
+=back
+
+=over 4
 
 =item C<< fork { stdin => $input } >>
 

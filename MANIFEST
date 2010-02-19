@@ -4,7 +4,6 @@ lib/Forks/Super.pm
 lib/Forks/Super/Config.pm
 lib/Forks/Super/Debug.pm
 lib/Forks/Super/Job.pm
-lib/Forks/Super/Job.pod
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Util.pm
 lib/Forks/Super/Wait.pm
@@ -12,7 +11,7 @@ lib/Forks/Super/Job/Callback.pm
 lib/Forks/Super/Job/Ipc.pm
 lib/Forks/Super/Job/OS.pm
 lib/Forks/Super/Job/Timeout.pm
-lib/Tie/Enum.pm
+lib/Forks/Super/Tie/Enum.pm
 Makefile.PL
 MANIFEST
 README

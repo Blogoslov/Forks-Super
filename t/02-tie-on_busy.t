@@ -8,6 +8,8 @@ use Test::More tests => 6;
 #     block  fail  queue
 #
 
+*Forks::Super::Tie::Enum::carp = sub { };
+
 for my $valid (qw(Block block FAIL Queue)) {
   $Forks::Super::ON_BUSY = $valid;
   ok($Forks::Super::ON_BUSY eq lc $valid);

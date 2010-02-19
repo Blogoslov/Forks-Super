@@ -198,8 +198,8 @@ ok($output eq "" && $error =~ /overwrite/,
 waitpid $pid, 0;
 ok($output eq "brown\ndog\nfox\njumps\nlazy\nover\nquick\nthe\nthe\n",
    "updated output from stdout");
-ok($error !~ /overwrite/, "error ref was overwritten");
-ok($error eq "", "error ref was overwritten");
+ok(!$error || $error !~ /overwrite/, "error ref was overwritten");
+ok(!defined $error || $error eq "", "error ref was overwritten");
 
 my @input = ("tree 1\n","bike 2\n","camera 3\n","car 4\n","hand 5\n","gun 6\n");
 my $orig_output = $output;

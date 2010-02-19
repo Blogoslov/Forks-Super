@@ -1,7 +1,7 @@
 package Forks::Super::Queue;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
-use Tie::Enum;
+use Forks::Super::Tie::Enum;
 use Carp;
 use Exporter;
 use base 'Exporter';
@@ -27,7 +27,8 @@ sub get_default_priority {
 
 sub init {
   $QUEUE_MONITOR_FREQ = 30;
-  tie $Forks::Super::QUEUE_INTERRUPT, 'Tie::Enum', ('', keys %SIG);
+  tie $Forks::Super::QUEUE_INTERRUPT, 'Forks::Super::Tie::Enum', 
+    ('', keys %SIG);
   $Forks::Super::QUEUE_INTERRUPT = 'USR1' if grep {/USR1/} keys %SIG;
   $INHIBIT_QUEUE_MONITOR = $^O eq "MSWin32";
 }

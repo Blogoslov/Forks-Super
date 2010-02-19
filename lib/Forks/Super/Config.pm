@@ -68,9 +68,6 @@ sub _CONFIG_module {
   if ($@) {
     carp "Forks::Super::CONFIG: ",
       "Module $module could not be loaded: $@\n" if $warn;
-      if ($IS_TEST) {
-	print STDERR "CONFIG\{$module\} failed\n";
-      }
     return 0;
   }
 
