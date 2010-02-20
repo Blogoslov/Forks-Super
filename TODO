@@ -117,3 +117,15 @@ Possible TODOs:
 
 	Deliver a signal to all jobs or to a list of jobs.
 
+    ___ in bg_eval and bg_qx, set 
+	$Forks::Super::LAST_JOB_ID, $Forks::Super::LAST_JOB to access
+	job information of a job launched from bg_eval or bg_qx.
+	Bash users will recognize the similarity of capturing the
+	$! variable in a bash script to capture the PID of the
+	last background process that was launched.
+
+	From there you can get state information, exit status,
+	run times, or all kinds of good information about the job.
+
+
+

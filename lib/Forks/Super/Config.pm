@@ -8,12 +8,18 @@ use warnings;
 
 our @EXPORT_OK = qw(CONFIG);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG);
+our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %signo);
 
 sub init {
   %CONFIG = (filehandles => 1);
   $IS_TEST = 0;
   $IS_TEST_CONFIG = 0;
+
+  use Config;
+  my $i = 0;
+  if (defined $Config::Config{"sig_name"}) {
+    %signo = map { $_ => $i++ } split / /, $Config::Config{"sig_name"};
+  }
 }
 
 sub init_child {

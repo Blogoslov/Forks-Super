@@ -1,10 +1,10 @@
 package Forks::Super;
+use Forks::Super::Job;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
 use Forks::Super::Config qw(:all);
 use Forks::Super::Queue qw(:all);
 use Forks::Super::Wait qw(:all);
-use Forks::Super::Job;
 use Forks::Super::Tie::Enum;
 use 5.007003;     # for "safe" signals -- see perlipc
 use Exporter;
@@ -16,7 +16,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 use base 'Exporter';
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -24,7 +24,7 @@ my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
 			bg_eval bg_qx);
 my @export_ok_vars = qw(%CHILD_STDOUT %CHILD_STDERR %CHILD_STDIN);
 our @EXPORT_OK = (@export_ok_func, @export_ok_vars);
-our %EXPORT_TAGS = ( 'test' =>  [ 'isValidPid', 'Time', 'bg_eval' ],
+our %EXPORT_TAGS = ( 'test' =>  [ 'isValidPid', 'Time', 'bg_eval', 'bg_qx' ],
 		     'test_config' => [ 'isValidPid', 'Time', 'bg_eval' ],
 		     'filehandles' => [ @export_ok_vars ],
 		     'all' => [ @export_ok_func ] );
@@ -105,8 +105,10 @@ sub import {
       if ($args[$i] =~ /^:test/) {
 	no warnings;
 	*Forks::Super::Job::carp = *Forks::Super::carp
+	  = *Forks::Super::Job::Timeout::carp
+	  = *Forks::Super::Job::Ipc::carp
 	  = *Forks::Super::Tie::Enum::carp = sub { warn @_ };
-	*Forks::Super::Job::croak = *Forks::Super::croak = sub { die @_ };
+	# *Forks::Super::Job::croak = *Forks::Super::croak = sub { die @_ };
 	$Forks::Super::Config::IS_TEST = 1;
 	$Forks::Super::Config::IS_TEST_CONFIG = 1 if $args[$i] =~ /config/;
       }
@@ -495,10 +497,14 @@ sub bg_eval (&;@) {
   my $p = $$;
   my ($result, @result);
   if (wantarray) {
-    tie @result, 'Forks::Super::BackgroundTieArray', $code, @other_options;
+    require Forks::Super::Tie::BackgroundArray;
+    tie @result, 'Forks::Super::Tie::BackgroundArray', 
+      'eval', $code, @other_options;
     return @result;
   } else {
-    tie $result, 'Forks::Super::BackgroundTieScalar', $code, @other_options;
+    require Forks::Super::Tie::BackgroundScalar;
+    tie $result, 'Forks::Super::Tie::BackgroundScalar', 
+      'eval', $code, @other_options;
     if ($$ != $p) {
       # a WTF observed on MSWin32
       croak "Forks::Super::bg_eval: ",
@@ -508,188 +514,31 @@ sub bg_eval (&;@) {
   }
 }
 
-sub Forks::Super::BackgroundTieScalar::TIESCALAR {
-  my ($class, $code, %other_options) = @_;
-  my $self = { code => $code, value_set => 0 };
-  $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
-			  sub => sub {
-			    my $Result = $code->();
-			    print STDOUT YAML::Dump($Result);
-			  } };
-  $self->{job} = Forks::Super::Job::get($self->{job_id});
-  $self->{value} = undef;
-  bless $self, $class;
-  return $self;
-}
-
-sub Forks::Super::BackgroundTieScalar::_retrieve_value {
-  my $self = shift;
-  if (!$self->{job}->is_complete) {
-    my $pid = Forks::Super::waitpid $self->{job_id}, 0;
-    if ($pid != $self->{job}->{real_pid}) {
-      carp "Forks::Super::bg_eval: failed to retrieve result from process!\n";
-      $self->{value_set} = 1;
-      return;
-    }
+sub bg_qx ($;@) {
+  my ($command, @other_options) = @_;
+  if (@other_options > 0 && ref $other_options[0] eq "HASH") {
+    @other_options = %{$other_options[0]};
   }
-  my ($result) = YAML::Load( join'', Forks::Super::read_stdout($self->{job_id}) );
-  $self->{value_set} = 1;
-  return $self->{value} = $result;
-}
-
-sub Forks::Super::BackgroundTieScalar::FETCH {
-  my $self = shift;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return $self->{value};
-}
-
-sub Forks::Super::BackgroundTieScalar::STORE {
-  my ($self, $new_value) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  my $old_value = $self->{value};
-  $self->{value} = $new_value;
-  return $old_value;
-}
-
-sub Forks::Super::BackgroundTieArray::TIEARRAY {
-  my ($classname, $code, %other_options) = @_;
-  my $self = { code => $code, value_set => 0, value => undef };
-  $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
-	  sub => sub {
-	    my @Result = $code->();
-	    print STDOUT YAML::Dump(@Result);
-	  } };
-  $self->{job} = Forks::Super::Job::get($self->{job_id});
-  bless $self, $classname;
-  return $self;
-}
-
-sub Forks::Super::BackgroundTieArray::_retrieve_value {
-  my $self = shift;
-  if (!$self->{job}->is_complete) {
-    my $pid = Forks::Super::waitpid $self->{job_id}, 0;
-    if ($pid != $self->{job}->{real_pid}) {
-      carp "Forks::Super::bg_eval: failed to retrieve result from process\n";
-      $self->{value_set} = 1;
-      return;
-    }
-  }
-  my @result = YAML::Load( join'', Forks::Super::read_stdout($self->{job_id}) );
-  $self->{value} = [ @result ];
-  $self->{value_set} = 1;
-  return;
-}
-
-sub Forks::Super::BackgroundTieArray::FETCH {
-  my ($self, $index) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return $self->{value}->[$index];
-}
-
-sub Forks::Super::BackgroundTieArray::STORE {
-  my ($self, $index, $new_value) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  my $old_value = $self->{value}->[$index];
-  $self->{value}->[$index] = $new_value;
-  return $old_value;
-}
-
-sub Forks::Super::BackgroundTieArray::FETCHSIZE {
-  my $self = shift;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return scalar @{$self->{value}};
-}
-
-sub Forks::Super::BackgroundTieArray::STORESIZE {
-  my ($self, $count) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  my $diff = $count - $self->FETCHSIZE();
-  if ($diff > 0) {
-    push @{$self->{value}}, (undef) x $diff;
+  my $p = $$;
+  my (@result, $result);
+  if (wantarray) {
+    require Forks::Super::Tie::BackgroundArray;
+    tie @result, 'Forks::Super::Tie::BackgroundArray',
+      'qx', $command, @other_options;
+    return @result;
   } else {
-    splice @{$self->{value}}, $diff;
+    require Forks::Super::Tie::BackgroundScalar;
+    tie $result, 'Forks::Super::Tie::BackgroundScalar',
+      'qx', $command, @other_options;
+    if ($$ != $p) {
+      # a WTF observed on MSWin32
+      croak "Forks::Super::bg_eval: ",
+	"Inconsistency in process IDs: $p changed to $$!\n";
+    }
+    return \$result;
   }
 }
 
-sub Forks::Super::BackgroundTieArray::DELETE {
-  my ($self, $index) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return delete $self->{value}->[$index];
-}
-
-sub Forks::Super::BackgroundTieArray::CLEAR {
-  my $self = shift;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  $self->{value} = [];
-}
-
-sub Forks::Super::BackgroundTieArray::PUSH {
-  my ($self, @list) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  push @{$self->{value}}, @list;
-  return $self->FETCHSIZE();
-}
-
-sub Forks::Super::BackgroundTieArray::UNSHIFT {
-  my ($self, @list) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  unshift @{$self->{value}}, @list;
-  return $self->FETCHSIZE();
-}
-
-sub Forks::Super::BackgroundTieArray::POP {
-  my $self = shift;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return pop @{$self->{value}};
-}
-
-sub Forks::Super::BackgroundTieArray::SHIFT {
-  my $self = shift;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return shift @{$self->{value}};
-}
-
-sub Forks::Super::BackgroundTieArray::SPLICE {
-  my ($self, $offset, $length, @list) = @_;
-  $offset = 0 if !defined $offset;
-  $length = $self->FETCHSIZE() - $offset if !defined $length;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return splice @{$self->{value}}, $offset, $length, @list;
-}
-
-sub Forks::Super::BackgroundTieArray::EXISTS {
-  my ($self, $index) = @_;
-  if (!$self->{value_set}) {
-    $self->_retrieve_value;
-  }
-  return exists $self->{value}->[$index];
-}
 1;
 # ================================================================== #
 ######################################################################
@@ -707,7 +556,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.21
+Version 0.22
 
 =head1 SYNOPSIS
 
@@ -1710,6 +1559,66 @@ will return an empty list if the operation takes longer than
 60 seconds. Any valid options for the C<fork> call are also valid
 options for C<bg_eval>, except for C<exec>, C<cmd>, C<sub>, and
 C<child_fh>.
+
+=item C<< $reference = bg_qx $command >>
+
+=item C<< $reference = bg_qx $command, { option => value , ... } >>
+
+Executes the specified shell command in a background process. When the
+parent process dereferences the result, it uses interprocess communication
+to retrieve the output from the child process, waiting until the child
+finishes if necessary. The deferenced value will contain the output
+from the command.
+
+Think of this command as a background version of Perl's backticks
+or C<qx()> function.
+
+The background job will be spawned with the C<Forks::Super::fork> call,
+and the command will block, fail, or defer a background job in accordance
+with all of the other rules of this module. Additional options may be
+passed to C<bg_eval>  that will be provided to the C<fork> call. For
+example, this command
+
+    $result = bg_qx "nslookup joe.schmoe.com", { timeout => 15 };
+
+will run C<nslookup> in a background process for up to 15 seconds.
+The expression C<$$result> will then contain all of the output
+produced by the process up until the time it was terminated.
+Most valid options for the C<fork> call are also valid
+options for C<bg_eval>, including timeouts, delays, job dependencies,
+names, and callback. The only invalid options for C<bg_eval> are
+C<cmd>, C<sub>, C<exec>, and C<child_fh>.
+
+=item C<< @result = bg_qx $command >>
+
+=item C<< @result = bg_qx $command, { option => value , ... } >>
+
+Like the scalar context form of the C<bg_qx> command, but
+loads output of the specified command into an array,
+one element per line (as defined by the current record separator
+C<$/>). The command will run in a background process. The first
+time that an element of the array is accessed, the parent
+will retrieve the output of the command, waiting until the child
+finishes if necessary. 
+
+Think of this command as a background version of Perl's backticks
+or C<qx()> function.
+
+The background job will be spawned with the C<Forks::Super::fork> call,
+and the command will block, fail, or defer a background job in accordance
+with all of the other rules of this module. Additional options may be
+passed to C<bg_eval>  that will be provided to the C<fork> call. For
+example, this command
+
+    @result = bg_qx "ssh $remotehost who", { timeout => 15 };
+
+will run in a background process for up to 15 seconds. C<@result>
+will then contain all of the output
+produced by the process up until the time it was terminated.
+Most valid options for the C<fork> call are also valid
+options for C<bg_eval>, including timeouts, delays, job dependencies,
+names, and callback. The only invalid options for C<bg_eval> are
+C<cmd>, C<sub>, C<exec>, and C<child_fh>.
 
 =back
 

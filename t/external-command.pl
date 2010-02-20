@@ -26,6 +26,23 @@
 
 use strict;
 
+my $flag_on_error = 0;
+my $STATUS=0;
+$SIG{"INT"} = sub { $STATUS=2; die $^O eq "MSWin32" ? "die INT\n" : "";};
+
+END {
+  $?=$STATUS if $STATUS;
+  if ($flag_on_error) {
+    print STDERR "FLAG $?\n";
+  }
+  print OUT "\n";
+  print STDOUT "\n";
+  close OUT;
+  close STDOUT;
+  close STDERR;
+}
+
+
 $| = 1;
 foreach my $arg (@ARGV) {
   my ($key,$val) = split /=/, $arg;
@@ -45,6 +62,7 @@ foreach my $arg (@ARGV) {
   } elsif ($key eq "--sleep" or $key eq "-s") {
     sleep $val || 1;
   } elsif ($key eq "--exit" or $key eq "-x") {
+    $flag_on_error = 0;
     exit $val || 0;
   } elsif ($key eq "--input" or $key eq "-y") {
     my $y = <STDIN>;
@@ -52,15 +70,13 @@ foreach my $arg (@ARGV) {
       print $y;
     }
     print STDERR "received message $y";
+  } elsif ($key eq "--newline" or $key eq "-n") {
+    print "\n";
+  } elsif ($key eq "--flag" or $key eq "-F") {
+    $flag_on_error = 1;
   }
 }
-END {
-  print OUT "\n";
-  print STDOUT "\n";
 
-  close OUT;
-  close STDOUT;
-  close STDERR;
-}
+$flag_on_error = 0;
 
 exit 0;

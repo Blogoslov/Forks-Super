@@ -8,10 +8,10 @@ use Forks::Super::Debug qw(debug);
 use Forks::Super::Util qw(is_number qualify_sub_name);
 use Forks::Super::Config qw(:all);
 use Forks::Super::Queue qw(queue_job);
+use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Timeout;
 use Forks::Super::Job::Callback qw(run_callback);
-use Forks::Super::Job::Ipc;
 use Exporter;
 use base 'Exporter';
 use Carp;
@@ -621,7 +621,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.21
+0.22
 
 =head1 SYNOPSIS
 

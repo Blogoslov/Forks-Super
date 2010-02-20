@@ -1,5 +1,5 @@
 
-Forks::Super version 0.21
+Forks::Super version 0.22
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -91,6 +91,9 @@ to perform all of its functions without using them:
 
     Time::HiRes
 
+The bg_eval function, to evaluate Perl code in the background,
+requires YAML. 
+
 Certain operating system dependent features may not work
 (usually failing silently) if these OS-specific modules
 are not installed:
@@ -102,9 +105,10 @@ are not installed:
 
 WINDOWS
 
-This module contains many known issues when it is
-used with Windows systems. See the  README.windows
-file for important information.
+Some features of this module do not work or work a
+little differently with Windows systems. See the
+README.windows file included in this distribution
+for important information.
 
 
 COPYRIGHT AND LICENCE

@@ -11,6 +11,8 @@ lib/Forks/Super/Job/Callback.pm
 lib/Forks/Super/Job/Ipc.pm
 lib/Forks/Super/Job/OS.pm
 lib/Forks/Super/Job/Timeout.pm
+lib/Forks/Super/Tie/BackgroundArray.pm
+lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
 Makefile.PL
 MANIFEST
@@ -48,6 +50,7 @@ t/53-name.t
 t/60-os.t
 t/61-callbacks.t
 t/62-bg_eval.t
+t/63-bg_qx.t
 t/tie-enum.tt
 t/external-command.pl
 t/find-limits.pl

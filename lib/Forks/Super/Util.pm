@@ -51,9 +51,7 @@ sub is_number {
 # return zero.
 sub isValidPid {
   my ($pid) = @_;
-  return $^O eq "MSWin32"
-    ? $pid != 0 && $pid != -1 && $pid >= -50000
-    : $pid > 0;
+  return $^O eq "MSWin32" ? $pid != 0 && $pid != -1 && $pid >= -50000 : $pid > 0;
 }
 
 sub set_productive_pause_code (&) {

@@ -331,11 +331,11 @@ sub _set_fh_dir {
 
 END {
   if ($$ == ($Forks::Super::MAIN_PID || $MAIN_PID)) {
-    _untrap_signals();
     $SIG{CHLD} = 'DEFAULT';
-    if (defined $Forks::Super::FH_DIR && !$Forks::Super::DONT_CLEANUP) {
+    if (defined $Forks::Super::FH_DIR && 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
       END_cleanup();
     }
+    _untrap_signals();
   }
 }
 
@@ -383,19 +383,18 @@ sub END_cleanup {
   }
 
   if (defined $FH_DIR_DEDICATED) {
-    if (0 && $Forks::Super::IMPORT{":test"}) {
-      print STDERR "END_cleanup(): removing $Forks::Super::FH_DIR\n";
-    } else {
-      if ($DEBUG) {
-	debug('END block: clean up files in ',
+    if ($DEBUG) {
+      debug('END block: clean up files in ',
 	    "dedicated IPC file dir $Forks::Super::FH_DIR");
-      }
     }
 
     my $clean_up_ok = File::Path::rmtree($Forks::Super::FH_DIR, 0, 1);
     if ($clean_up_ok <= 0) {
       warn "Forks::Super END:",
 	"Clean up of $Forks::Super::FH_DIR may not have succeeded.\n";
+      if ($Forks::Super::DONT_CLEANUP < 0) {
+	return;
+      }
     }
 
     # There are two unusual features of MSWin32 to note here:
@@ -405,7 +404,7 @@ sub END_cleanup {
     #    child processes have completed.
 
     if (-d $Forks::Super::FH_DIR) {
-      if (0 == rmdir $Forks::Super::FH_DIR) {
+      if (0 == rmdir $Forks::Super::FH_DIR && 0 <= ($Forks::Super::DONT_CLEANUP || 0)) {
 	if ($^O eq "MSWin32") {
 	  warn "Forks::Super END: ",
 	    "Must wait for all children to finish before ",
