@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 18;
+use Test::More tests => 20;
 use strict;
 use warnings;
 
@@ -14,15 +14,17 @@ use warnings;
 sub child_signal_hijacker {
   my %complete;
 
-  $SIGNAL::TIME = time;
+  $SIGNAL::TIME = Forks::Super::Util::Time();
   for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
     $complete{$cj}++;
   }
-  Forks::Super::handle_CHLD(@_);
+  Forks::Super::Sigchld::handle_CHLD(@_);
+  %LAST::COMPLETE = ();
   for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
     unless (delete $complete{$cj}) {
       #print "NEW COMPLETE JOB: ", $cj->toString(), "\n";
       $LAST::COMPLETE = $cj;
+      $LAST::COMPLETE{$cj}++;
     }
   }
 }
@@ -39,9 +41,9 @@ if (defined $pid && $pid == 0) {
 ok(defined $pid && isValidPid($pid), "valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
-my $t = time;
+my $t = Forks::Super::Util::Time();
 sleep 6;   # ACK! sleep can be interrupted by CHLD signal!
-$t = time - $t;
+$t = Forks::Super::Util::Time() - $t;
 SKIP: {
   if ($^O eq "MSWin32") {
     Forks::Super::pause();
@@ -51,8 +53,11 @@ SKIP: {
 }
 ok($j->{state} eq "COMPLETE", "job state is COMPLETE");
 SKIP: {
-  skip "No implicit SIGCHLD handling on Win32", 2 if $^O eq "MSWin32";
-  ok($LAST::COMPLETE eq $j, "job caught in SIGCHLD handler");
+  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq "MSWin32";
+
+  # XXXXXX - pass test (1) and fail test (2) would be ok
+  ok(defined $LAST::COMPLETE{$j}, "job caught in SIGCHLD handler/$j"); ### 5 ###
+  ok($LAST::COMPLETE eq $j, "job caught in SIGCHLD handler/$LAST::COMPLETE"); ### 6 ###
   ok(abs($SIGNAL::TIME - $j->{end}) < 2, "short delay in SIGCHLD handler");
 }
 sleep 1;
@@ -74,14 +79,17 @@ if (defined $pid && $pid == 0) {
 ok(defined $pid && isValidPid($pid), "valid pid $pid");
 $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
-$t = Forks::Super::Time();  # uses Time::HiRes if available, otherwise same as time
+$t = Forks::Super::Util::Time();
 Forks::Super::pause(6);   # ACK! sleep can be interrupted by CHLD signal!
-$t = Forks::Super::Time() - $t;
-ok($t > 5.7, "Forks::Super::pause(6) took ${t}s expected 6");
+$t = Forks::Super::Util::Time() - $t;
+ok($t > 5.7 && $t < 7.1, "Forks::Super::pause(6) took ${t}s expected 6");
 ok($j->{state} eq "COMPLETE", "complete state");
 SKIP: {
-  skip "No implicit SIGCHLD handling on Win32", 2 if $^O eq "MSWin32";
-  ok($LAST::COMPLETE eq $j, "job in SIGCHLD handler");
+  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq "MSWin32";
+
+  # XXXXXX pass test (1) and fail test (2) would be ok
+  ok(defined $LAST::COMPLETE{$j}, "job in SIGCHLD handler/$j"); ### 15 ###
+  ok($LAST::COMPLETE eq $j, "job in SIGCHLD handler/$LAST::COMPLETE"); ### 16 ###
   ok(abs($SIGNAL::TIME - $j->{end}) < 2, "short delay in SIGCHLD handler");
 }
 $p = wait;
@@ -89,17 +97,3 @@ ok($pid == $p, "wait reaped correct job");
 ok($j->{state} eq "REAPED", "job state changed to REAPED in wait");
 ok($j->{reaped} - $j->{end} > 1,
 	"reaped at $j->{reaped}, ended at $j->{end}");
-#print $j->toString();
-
-
-__END__
--------------------------------------------------------
-
-Feature:	CHLD signal handler
-
-What to test:	Receives signal when children complete
-		Changes state to COMPLETE
-		Can handle children completing at same time
-		See what happens when signal interrupts long sleep call
-
--------------------------------------------------------

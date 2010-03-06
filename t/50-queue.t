@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 17;
+use Test::More tests => 15;
 use strict;
 use warnings;
 
@@ -12,7 +12,7 @@ use warnings;
 $Forks::Super::MAX_PROC = 2;
 $Forks::Super::ON_BUSY = "queue";
 
-ok(@Forks::Super::Queue::QUEUE == 0, "initial queue is empty");
+ok(@Forks::Super::Queue::QUEUE == 0, "$$\\initial queue is empty");
 my $pid1 = fork { sub => sub { sleep 5 } };
 my $pid2 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1) && isValidPid($pid2), "two successful fork calls");
@@ -61,13 +61,14 @@ ok($jo->{state} eq "REAPED" && $jm->{state} eq "REAPED" &&
    $ju->{state} eq "REAPED",
    "deferred jobs reaped after waitall");
 if (Forks::Super::CONFIG("Time::HiRes")) {
-  ok($jo->{start} > $ju->{start}, "respect queue priority HR");
-  ok($jm->{start} > $jo->{start}, "respect queue priority HR");
-  ok($jo->{end} > $ju->{end}, "respect queue priority HR");
-  ok($jm->{end} > $jo->{end}, "respect queue priority HR");
+  ok($jo->{start} > $ju->{start}, "respect queue priority HR jm=" . $jm->{start}
+	. ",jo=" . $jo->{start} . ",ju=" . $ju->{start});
+  ok($jm->{start} > $jo->{start}, "respect queue priority start HR"); ### 15 HR ###
+
+  # can't guarantee the order that the jobs will be reaped,
+  # so don't test whether the end times are in the expected order.
+
 } else {
   ok($jo->{start} >= $ju->{start}, "respect queue priority");
   ok($jm->{start} >= $jo->{start}, "respect queue priority");
-  ok($jo->{end} >= $ju->{end}, "respect queue priority");
-  ok($jm->{end} >= $jo->{end}, "respect queue priority");
 }

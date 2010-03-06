@@ -1,5 +1,11 @@
 Revision history for Forks-Super
 
+0.24    2010-03-05
+        Fix cleanup of IPC files.
+
+0.23    2010-02-20
+        Implemented timeouts on wait,waitpid,waitall calls.
+
 0.22    2010-02-19
         Added bg_qx function
 
@@ -20,9 +26,9 @@ Revision history for Forks-Super
         Added exec and callback options. Added bg_eval function.
 
 0.12    2009-12-31
-        Added name attribute. waitpid, dependencies, and job lookup by job name.
-        Fixed named subroutine. Impl tied scalars for $ON_BUSY,$QUEUE_INTERRUPT.
-        On child timeout, all child subprocesses are killed.
+        Added name attribute. waitpid, dependencies, and job lookup by job 
+        name. Fixed named subroutine. Impl tied scalars for $ON_BUSY,
+        $QUEUE_INTERRUPT. On child timeout, all child subprocesses are killed.
 
 0.11    2009-12-18
         Fixes for some tests.

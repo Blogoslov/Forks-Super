@@ -1,10 +1,10 @@
-.cvsignore
 Changes
 lib/Forks/Super.pm
 lib/Forks/Super/Config.pm
 lib/Forks/Super/Debug.pm
 lib/Forks/Super/Job.pm
 lib/Forks/Super/Queue.pm
+lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Util.pm
 lib/Forks/Super/Wait.pm
 lib/Forks/Super/Job/Callback.pm
@@ -34,6 +34,7 @@ t/14-debug.t
 t/20-wait.t
 t/21-waitpid.t
 t/22-waitall.t
+t/23-wait-timeout.t
 t/30-child-fork-behavior.t
 t/31-chld-signal.t
 t/32-stress-test.t

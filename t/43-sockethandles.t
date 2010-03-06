@@ -101,10 +101,10 @@ ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 @err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
-ok($out[0] eq "0:$msg\n", "got expected first line from child output");
-ok($out[1] eq "1:$msg\n", "got expected second line from child output");
-ok($out[2] eq "2:$msg\n", "got expected third line from child output");
-ok($err[-1] eq "$msg\n", "got expected line from child error");
+ok($out[0] eq "0:$msg\n", "got Expected first line from child output");
+ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
+ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
+ok($err[-1] eq "$msg\n", "got Expected line from child error");
 waitall;
 
 #######################################################
@@ -148,10 +148,10 @@ if (@out != 3) {
 
 @out = grep { !/alarm\(\) not available/ } @out;
 ok(@out == 3, "read ".(scalar @out)." [3] lines from child STDOUT:   @out"); # 18 #
-ok($out[-3] =~ /the message is/, "first line matches expected pattern");
-ok($out[-3] eq "$msg\n", "first line matches expected pattern");
-ok($out[-2] eq "0:$msg\n", "second line matches expected pattern");
-ok($out[-1] eq "1:$msg\n", "third line matches expected pattern");
+ok($out[-3] =~ /the message is/, "first line matches Expected pattern");
+ok($out[-3] eq "$msg\n", "first line matches Expected pattern");
+ok($out[-2] eq "0:$msg\n", "second line matches Expected pattern");
+ok($out[-1] eq "1:$msg\n", "third line matches Expected pattern");
 waitall;
 
 #######################################################
@@ -191,7 +191,7 @@ sub read_stderr_test {
 ok(isValidPid($pid), "started job with join");
 ok($z > 0, "successful print to child STDIN");
 ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
-ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined");
+ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined pid $pid");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
 $t = time;
 @out = ();
@@ -230,8 +230,8 @@ if (@err != 2) {
 }
 
 ok(@err == 2, "received 2 lines from child stderr");
-ok($err[0] =~ /the message is/, "got expected first line from child error");
-ok($err[-1] =~ /a test/, "got expected second line from child error");
+ok($err[0] =~ /the message is/, "got Expected first line from child error");
+ok($err[-1] =~ /a test/, "got Expected second line from child error");
 waitall; 
 $Forks::Super::DEBUG = 0;
 
@@ -327,5 +327,7 @@ waitpid $pid, 0;
 ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
 
 }
+
+use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
 
 __END__

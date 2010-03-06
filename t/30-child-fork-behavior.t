@@ -16,7 +16,7 @@ if ($pid1 == 0) {
 }
 my $p = waitpid $pid1,0;
 ok($p == $pid1, "waitpid reaped child");
-ok(23 == $? >> 8, "child failed to fork as expected");
+ok(23 == $? >> 8, "child failed to fork as Expected");
 
 
 $Forks::Super::CHILD_FORK_OK = 1;

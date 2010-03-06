@@ -1,3 +1,7 @@
+#
+# Forks::Super::Queue - routines to manage "deferred" jobs
+#
+
 package Forks::Super::Queue;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
@@ -11,11 +15,22 @@ use warnings;
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID, $QUEUE_MONITOR_FREQ);
+our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID);
+
+our $QUEUE_MONITOR_FREQ;
 our $DEFAULT_QUEUE_PRIORITY = 0;
 our $INHIBIT_QUEUE_MONITOR = 1;
 our $NEXT_DEFERRED_ID = -100000;
 our $OLD_SIG;
+our $VERSION = $Forks::Super::Debug::VERSION;
+our $MAIN_PID = $$;
+our $QUEUE_MONITOR_LAUNCHED = 0;
+our $_LOCK = 0; # ??? can this prevent crash -- no, but it can cause deadlock
+our $CHECK_FOR_REAP = 1;
+# set flag if the program is shutting down. Use flag in queue_job()
+# to suppress warning messages
+our $DURING_GLOBAL_DESTRUCTION = 0;
+
 # use var $Forks::Super::QUEUE_INTERRUPT, not lexical package var
 
 
@@ -35,6 +50,9 @@ sub init {
 
 sub init_child {
   @QUEUE = ();
+  if (defined $SIG{"USR2"}) {
+    $SIG{'USR2'} = 'DEFAULT';
+  }
   undef $QUEUE_MONITOR_PID;
   if ($Forks::Super::QUEUE_INTERRUPT 
       && Forks::Super::Config::CONFIG("SIGUSR1")) {
@@ -59,6 +77,7 @@ sub init_child {
 sub _launch_queue_monitor {
   return unless Forks::Super::Config::CONFIG("SIGUSR1");
   return if defined $QUEUE_MONITOR_PID;
+  return if $QUEUE_MONITOR_LAUNCHED++;
   
   $OLD_SIG = $SIG{$Forks::Super::QUEUE_INTERRUPT};
   $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::Queue::check_queue;
@@ -67,12 +86,20 @@ sub _launch_queue_monitor {
   if (not defined $QUEUE_MONITOR_PID) {
     warn "Forks::Super: ",
       "queue monitoring sub process could not be launched: $!\n";
+    undef $QUEUE_MONITOR_PPID;
     return;
   }
   if ($QUEUE_MONITOR_PID == 0) {
+    if ($DEBUG) {
+      debug("Launching queue monitor process $$ ",
+	    "SIG $Forks::Super::QUEUE_INTERRUPT ",
+	    "PPID $QUEUE_MONITOR_PPID ",
+	    "FREQ $QUEUE_MONITOR_FREQ ");
+    }
+
     defined &Forks::Super::init_child 
       ? Forks::Super::init_child() : init_child();
-    $SIG{QUIT} = 'DEFAULT';
+    $SIG{QUIT} = sub { exit 0 }; # 'DEFAULT';
     for (;;) {
       sleep $QUEUE_MONITOR_FREQ;
       kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID;
@@ -85,15 +112,24 @@ sub _launch_queue_monitor {
 sub _kill_queue_monitor {
   if (defined $QUEUE_MONITOR_PPID && $$ == $QUEUE_MONITOR_PPID) {
     if (defined $QUEUE_MONITOR_PID && $QUEUE_MONITOR_PID > 0) {
-      if (kill 'QUIT', $QUEUE_MONITOR_PID) {
+      my $nk = kill 'QUIT', $QUEUE_MONITOR_PID;
+      if ($DEBUG) {
+	debug("killing queue monitor process: $nk");
+      }
+      if ($nk) {
 	undef $QUEUE_MONITOR_PID;
-	# $SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_SIG;
+	undef $QUEUE_MONITOR_PPID;
+	if (defined $OLD_SIG) {
+	  $SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_SIG;
+	}
       }
     }
   }
 }
 
+
 END {
+  $DURING_GLOBAL_DESTRUCTION = 1;
   _kill_queue_monitor();
 }
 
@@ -104,23 +140,37 @@ END {
 #
 sub queue_job {
   my $job = shift;
+  if ($DURING_GLOBAL_DESTRUCTION) {
+    return;
+  }
   if (defined $job) {
     $job->{state} = 'DEFERRED';
     $job->{pid} = $NEXT_DEFERRED_ID--;
     $Forks::Super::ALL_JOBS{$job->{pid}} = $job;
+    if ($DEBUG) {
+      debug("queueing job ", $job->toString());
+    }
   }
 
   my @q = grep { $_->{state} eq 'DEFERRED' } @Forks::Super::ALL_JOBS;
   @QUEUE = @q;
-
   if (@QUEUE > 0 && !$QUEUE_MONITOR_PID && !$INHIBIT_QUEUE_MONITOR) {
     _launch_queue_monitor();
   }
-  if (@QUEUE == 0) {
-    _kill_queue_monitor();
-  }
   return;
 }
+
+our $_REAP;
+
+sub _check_for_reap {
+  if ($CHECK_FOR_REAP && $_REAP > 0) {
+    if ($DEBUG) {
+      debug("reap during queue examination -- restart");
+    }
+    return 1;
+  }
+}
+
 
 #
 # attempt to launch all jobs that are currently in the
@@ -129,8 +179,14 @@ sub queue_job {
 sub run_queue {
   my ($ignore) = @_;
   return if @QUEUE <= 0;
-
-  # XXX - synchronize this function?
+  # XXX - run_queue from child ok if $Forks::Super::CHILD_FORK_OK 
+  return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
+  queue_job();
+  return if @QUEUE <= 0;
+  if ($_LOCK++ > 0) {
+    $_LOCK--;
+    return;
+  }
 
   # tasks for run_queue:
   #   assemble all DEFERRED jobs
@@ -141,33 +197,49 @@ sub run_queue {
   my $job_was_launched;
   do {
     $job_was_launched = 0;
+    $_REAP = 0;
     my @deferred_jobs = sort { $b->{queue_priority} <=> $a->{queue_priority} }
       grep { defined $_->{state} &&
 	       $_->{state} eq 'DEFERRED' } @Forks::Super::ALL_JOBS;
     foreach my $job (@deferred_jobs) {
       if ($job->can_launch) {
-	debug("Launching deferred job $job->{pid}")
-	  if $job->{debug};
+	if ($job->{debug}) {
+	  debug("Launching deferred job $job->{pid}")
+	}
 	$job->{state} = "LAUNCHING";
+
+	# if this loop gets interrupted to handle a child,
+	# we might be launching jobs in the wrong order.
+	# If we detect that an interruption has happened,
+	# abort and restart the loop.
+	# To disable this check, set $Forks::Super::Queue::CHECK_FOR_REAP := 0
+
+	if (_check_for_reap()) {
+	  $job->{state} = "DEFERRED";
+	  $job_was_launched = 1;
+	  last;
+	}
 	my $pid = $job->launch();
 	if ($pid == 0) {
 	  if (defined $job->{sub} or defined $job->{cmd} 
 	      or defined $job->{exec}) {
+	    $_LOCK--;
 	    croak "Forks::Super::run_queue(): ",
 	      "fork on deferred job unexpectedly returned ",
 		"a process id of 0!\n";
 	  }
+	  $_LOCK--;
 	  croak "Forks::Super::run_queue(): ",
 	    "deferred job must have a 'sub', 'cmd', or 'exec' option!\n";
 	}
 	$job_was_launched = 1;
 	last;
       } elsif ($job->{debug}) {
-	debug("Still must wait to launch job $job->{pid}");
+	debug("Still must wait to launch job ", $job->toShortString());
       }
     }
   } while ($job_was_launched);
-  queue_job(); # refresh @QUEUE
+  $_LOCK--;
   return;
 }
 
@@ -182,8 +254,55 @@ sub run_queue {
 # or  Forks::Super::run_queue  manually from time to time.
 #
 sub check_queue {
-  run_queue();
+  run_queue() if !$_LOCK;
   return;
 }
 
 1;
+
+__END__
+
+_head1 NAME
+
+Forks::Super::Queue - manage deferred background tasks for L<Forks::Super>
+
+_head1 SYNOPSIS
+
+    use Forks::Super;
+    Forks::Super::Queue::run_queue();
+
+_head1 DESCRIPTION
+
+Occassionally background tasks that are intended to run from the
+L<Forks::Super> module must wait before they can be run (see
+L<"Deferred processes" in Forks::Super|Forks::Super/"Deferred processes">).
+The Forks::Super::Queue module contains functions and package variables
+to manage the collection of deferred processes.
+
+Under normal operation, the Forks::Super module will periodically
+call C<Forks::Super::Queue::run_queue()> and remove jobs from the queue,
+if possible. In situations where it does make sense for the Forks::Super
+user to invoke the C<run_queue> function, it can also be done implicitly
+through the L<Forks::Super::pause|Forks::Super/Forks::Super::pause($delay)>
+method. See the C<pause> function in Forks::Super and the
+L<"Special tips for Windows systems"|Forks::Super/"Special tips for Windows systems">.
+
+_head1 FUNCTIONS
+
+_over 4
+
+_item C<Forks::Super::Queue::run_queue()>
+
+Instructs this module to examine jobs in the queue
+and to dispatch the jobs that are eligible to launch.
+
+Normally, the Forks::Super module user will not need
+to call this method expicitly.
+
+_back
+
+_head1 SEE ALSO
+
+C<< L<Forks::Super> >>, C<< L<Forks::Super::Job> >>
+
+_cut

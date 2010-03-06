@@ -30,6 +30,7 @@ while ($counter_count >= 0) {
   print "$counter_count\n";
   $counter_count--;
   sleep 1;
+  # sleep 1 if $counter_count < 7; # give heavily loaded systems a better chance to pass
 }
 close OUT;
 

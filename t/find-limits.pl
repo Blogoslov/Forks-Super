@@ -20,7 +20,7 @@ use warnings;
 #
 ###############################################################
 
-  my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
+my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
 
 # for best results, only one process should be testing limits at a time
 open(LOCK, ">>", "t/out/.lock-flim");
@@ -28,6 +28,9 @@ flock LOCK, 2;
 
 my %LIMITS = ();
 $LIMITS{file} = $ARGV[0] || "t/out/limits.$^O.$]";
+
+
+&find_max_open_filehandles;
 &find_max_fork;
 
 close LOCK;
@@ -77,10 +80,30 @@ sub find_max_fork {
     1 while wait > -1;
   };
   print "Result: $r / $@\n";
+  return $r;
 }
 
-# XXX - TODO
+#
+# determine the maximum number of open filehandles allowed
+# by a process on this system.
+#
 sub find_max_open_filehandles {
+  my $i = 0;
+  undef $!;
+  my $j = $$;
+  my @fh = ();
+  while (open (my $fh, ">", "xxx.$j")) {
+    $i++;
+    push @fh, $fh;
+  }
+  my $err = $!;
+  close $_ for @fh;
+  print STDERR "Msg for $i open files: $err\n";
+  $LIMITS{maxfilehandle} = $i;
+  &write_limits;
+  unlink "xxx.$j";
+
+  return $i;
 }
 
 # XXX - TODO

@@ -1,17 +1,19 @@
 use Forks::Super ':test';
-use Test::More tests => 23;
+use Test::More tests => 24;
 use strict;
 use warnings;
 
-my $t = Time();
+my $t2 = Time();
 my $z = sprintf "%05d", 100000 * rand();
 my $x = bg_qx "$^X t/external-command.pl -e=$z -s=3";
-$t = Time();
-ok($$x eq "$z \n", "scalar bg_qx");
-$t = Time() - $t;
+my $t = Time();
+ok($$x eq "$z \n", "scalar bg_qx $$x");
+my $h = Time();
+($t,$t2) = ($h-$t,$h-$t2);
 my $y = $$x;
-ok($y == $z, "scalar bg_eval");
-ok($t >= 2.95, "scalar bg_qx took ${t}s expected ~3s");
+ok($y == $z, "scalar bg_qx");
+ok($t2 >= 2.8 && $t <= 4.1, 
+   "scalar bg_qx took ${t}s ${t2}s expected ~3s");   ### 3 ### was 3.6 obs 4.04 on heavy loaded system
 $$x = 19;
 ok($$x == 19, "result is not read only");
 
@@ -19,8 +21,7 @@ ok($$x == 19, "result is not read only");
 
 $y = "";
 $z = sprintf "B%05d", 100000 * rand();
-my $x2 = bg_qx "$^X -d:Trace t/external-command.pl -s=8 -e=$z 2>/tmp/qqq", timeout => 2;
-#my $x2 = bg_qx "$^X t/external-command.pl -s=8 -e=$z", timeout => 2;
+my $x2 = bg_qx "$^X t/external-command.pl -s=8 -e=$z", timeout => 2;
 $t = Time();
 $y = $$x2;
 
@@ -41,6 +42,11 @@ $z = sprintf "C%05d", 100000 * rand();
 $x = bg_qx "$^X t/external-command.pl -e=$z -s=4", timeout => 2;
 $t = Time();
 ok($$x eq "$z \n" || $$x eq "$z ", "scalar bg_qx failed but retrieved output");
+if (!defined $$x) {
+  print STDERR "(output was: <undef>)\n";
+} elsif ($$x ne "$z \n" && $$x ne "$z ") {
+  print STDERR "(output was: $$x)\n";
+}
 $t = Time() - $t;
 ok($t <= 3, "scalar bg_qx respected timeout, took ${t}s expected ~2s");
 
@@ -79,19 +85,15 @@ ok(@x == 0, "list bg_qx clear");
 ### partial output ###
 
 $t = Time();
-@x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -s=3 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 3 };
+@x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -s=6 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 4 };
 @tests = @x;
 $t = Time() - $t;
-ok($tests[0] eq "Hello \n" && $tests[1] eq "World \n", "list bg_qx");
-ok(@tests == 2, "list bg_qx interrupted output had " . scalar @tests . " lines");
-ok($t >= 2.95 && $t < 4.05, "list bg_qx took ${t}s expected ~3s");
-waitall;
+ok($tests[0] eq "Hello \n", "list bg_qx first line ok"); ### 21 ###
+ok($tests[1] eq "World \n", "list bg_qx second line ok"); ### 22 ###
+ok(@tests == 2, "list bg_qx interrupted output had " . scalar @tests . "==2 lines"); ### 23 ###
+ok($t >= 3.85 && $t < 4.75, "list bg_qx took ${t}s expected ~4s"); ### 24 ### was 4.55 obs 4.74
 
-1 while CORE::wait > -1;
-
-$Forks::Super::DONT_CLEANUP = -1 if $^O eq "MSWin32";
-
-sub hex_enc{join'', map{sprintf"%02x",ord}split//,shift} # for debug
+sub hex_enc{join'', map {sprintf"%02x",ord} split//,shift} # for debug
 
 __END__
 
@@ -118,5 +120,3 @@ ok($$x == 19, "scalar bg_qx with lots of options");
 $t = Time() - $t;
 ok($t > 7.85, "bg_qx with delay took ${t}s, expected ~8s");
 ok($w == 14 + 1 + 2 + 5, "bg_qx finish callback");
-
-

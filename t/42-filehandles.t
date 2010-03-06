@@ -1,5 +1,6 @@
 use Forks::Super ':test';
 use Test::More tests => 38;
+use Carp;
 use strict;
 use warnings;
 
@@ -11,6 +12,7 @@ use warnings;
 #
 
 
+$SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
 
 
 #######################################################
@@ -20,7 +22,7 @@ my (@cmd,$pid,$fh_in,$z,$t,$fh_out,$fh_err,@out,@err,$msg);
 
 $pid = fork { exec => [ @cmd ], timeout => 5, child_fh => "all" };
 
-ok(isValidPid($pid), "fork successful");
+ok(isValidPid($pid), "$$\\fork successful");
 ok(defined $Forks::Super::CHILD_STDIN{$pid}, "\%CHILD_STDIN defined [exec,child_fh]");
 ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "\%CHILD_STDOUT defined");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "\%CHILD_STDERR defined");
@@ -44,6 +46,7 @@ while (time < $t+6) {
 # this is a failure point on many systems
 # perhaps some warning message is getting in the output stream?
 if (@out != 3 || @err != 1) {
+  $Forks::Super::DONT_CLEANUP = 1;
   print STDERR "\nbasic ipc test [exec]: failure imminent\n";
   print STDERR "We expect three lines from stdout and one from stderr\n";
   print STDERR "What we get is:\n";
@@ -55,10 +58,10 @@ if (@out != 3 || @err != 1) {
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT [exec]");
 ok(@err == 1, scalar @err . " == 1 line from STDERR [exec]");
-ok($out[0] eq "$msg\n", "got expected first line from child [exec]");
-ok($out[1] eq "$msg\n", "got expected second line from child [exec]");
-ok($out[2] eq "\n", "got expected third line from child [exec]");
-ok($err[0] =~ /received message $msg/, "got expected msg on child stderr [exec]");
+ok($out[0] eq "$msg\n", "got Expected first line from child [exec]");
+ok($out[1] eq "$msg\n", "got Expected second line from child [exec]");
+ok($out[2] eq "\n", "got Expected third line from child [exec]");
+ok($err[0] =~ /received message $msg/, "got Expected msg on child stderr [exec]");
 waitall;
 
 #######################################################
@@ -96,6 +99,7 @@ if (@out != 4
 	|| $out[-4] !~ /the message is/
 	|| $out[-3] !~ /$msg/
 	|| ($out[-2] !~ /$msg/ && $out[-1] !~ /$msg/)) {
+  $Forks::Super::DONT_CLEANUP = 1;
   print STDERR "\ntest join+read stdout: failure imminent.\n";
   print STDERR "Expecting four lines but what we get is:\n";
   my $i;
@@ -107,19 +111,19 @@ if (@out != 4
   my $file = $job->{fh_config}->{f_out};
   print STDERR "Output file was \"$file\"\n";
   open(F, "<", $file);
-  print STDERR "File contents:\n-----------\n",<F>,"------------------\n";
+  print STDERR "File contents:\n------------\n",<F>,"------------\n";
   close F;
 
 }
 
 @out = grep { !/alarm\(\) not available/ } @out;
 ok(@out == 4, scalar @out . " should be 4"); # 18 #
-ok($out[-4] =~ /the message is/, "got expected first line from child");
-ok($out[-4] eq "$msg\n", "got expected first line from child");
-ok($out[-3] eq "$msg\n", "got expected second line from child");
+ok($out[-4] =~ /the message is/, "got Expected first line from child");
+ok($out[-4] eq "$msg\n", "got Expected first line from child");
+ok($out[-3] eq "$msg\n", "got Expected second line from child");
 ok($out[-2] eq "received message $msg\n"
-	|| $out[-1] eq "received message $msg\n", "got expected third line from child");
-ok($out[-1] eq "\n" || $out[-2] eq "\n", "got expected fourth line from child");
+	|| $out[-1] eq "received message $msg\n", "got Expected third line from child");
+ok($out[-1] eq "\n" || $out[-2] eq "\n", "got Expected fourth line from child");
 waitall;
 
 #######################################################
@@ -152,6 +156,7 @@ while (time < $t+7) {
 # maybe some warning message is getting in the output stream
 
 if (@out != 0 || @err != 2) {
+  $Forks::Super::DONT_CLEANUP = 1;
   print STDERR "\n+stderr -stdout test: failure imminent\n";
   print STDERR "We expect no lines from stdout and two from stderr\n";
   print STDERR "What we get is:\n";
@@ -162,9 +167,9 @@ if (@out != 0 || @err != 2) {
 }
 
 ok(@out == 0, "got no output from child");
-ok(@err == 2, "recevied error msg from child");
-ok($err[0] =~ /received message $msg/, "got expected first line from child error msg");
-ok($err[1] =~ /a test/, "got expected second line from child error msg");
+ok(@err == 2, "received error msg from child " . scalar @err . "\n$err[0]\n");
+ok($err[0] =~ /received message $msg/, "got Expected first line from child error msg");
+ok($err[1] =~ /a test/, "got Expected second line from child error msg");
 waitall; 
 
 ##################################################
@@ -210,22 +215,8 @@ my @output = split /\n/, $output;
 ok($output[0] eq "bike 2" && $output[2] eq "car 4" && $output[3] eq "gun 6",
 "read input from ARRAY ref");
 
+use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
+
 __END__
--------------------------------------------------------
 
-Feature:	fork with filehandles (file)
-
-What to test:	cmd style
-		parent can send data to child through child_stdin{}
-		child can send data to parent through child_stdout{}
-		child can send data to parent through child_stderr{}
-		join_stdout option puts child stdout/stderr through same fh
-		parent detects when child is complete and closes filehandles
-		parent can clear eof on child filehandles
-		clean up
-		parent/child back-and-forth proof of concept 
-		master/slave proof-of-concept
-
--------------------------------------------------------
-
-
+# XXX - test Forks::Super::Job::close_fh($pid)

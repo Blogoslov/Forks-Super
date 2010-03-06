@@ -44,11 +44,11 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
 $p1 = fork { sub => sub { sleep 3 }, name => "simple" };
-$t = Forks::Super::Time();
+$t = Forks::Super::Util::Time();
 $p2 = fork { sub => sub { sleep 3 }, depend_on => "simple", queue_priority => 10 };
 $p3 = fork { sub => sub { }, queue_priority => 5 };
-$t = Forks::Super::Time() - $t;
-ok($t <= 1.5, "quick return for queued job ${t}s expected <=1s");
+$t = Forks::Super::Util::Time() - $t;
+ok($t <= 1.5, "fast return for queued job ${t}s expected <=1s"); ### 11 ###
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 $j3 = Forks::Super::Job::get($p3);
@@ -60,11 +60,11 @@ ok($j1->{end} <= $j2->{start}, "respected depend_on by name");
 ok($j3->{start} < $j2->{start}, "non-dependent job started before dependent job");
 
 $p1 = fork { sub => sub { sleep 3 }, name => "simple2", delay => 3 };
-$t = Forks::Super::Time();
+$t = Forks::Super::Util::Time();
 $p2 = fork { sub => sub { sleep 3 }, depend_start => "simple2", queue_priority => 10 };
 $p3 = fork { sub => sub {}, queue_priority => 5 };
-$t = Forks::Super::Time() - $t;
-ok($t <= 1.5, "quick return for queued job ${t}s expected <= 1s");
+$t = Forks::Super::Util::Time() - $t;
+ok($t <= 1.5, "fast return for queued job ${t}s expected <= 1s"); ### 15 ###
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 $j3 = Forks::Super::Job::get($p3);
@@ -74,20 +74,35 @@ waitall;
 ok($j1->{start} <= $j2->{start}, "respected start dependency by name");
 ok($j3->{start} < $j2->{start}, "non-dependent job started before dependent job");
 
+
+
+# named dependency
+# first job doesn't really have any dependencies, should start right away
+# second job depends on first job
+
 $Forks::Super::ON_BUSY = "queue";
-$t = Forks::Super::Time();
+
+$t = Forks::Super::Util::Time();
 $p1 = fork { sub => sub {sleep 3}, name => "circle1", depend_on => "circle2" };
+my $t2 = Forks::Super::Util::Time();
 $p2 = fork { sub => sub {sleep 3}, name => "circle2", depend_on => "circle1" };
+my $t3 = Forks::Super::Util::Time();
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',
    "jobs with apparent circular dependency in correct state");
+my $t31 = Forks::Super::Util::Time();
 waitall();
-$t = Forks::Super::Time() - $t;
-ok($t > 5.5 && $t < 8.0, "Took ${t}s for dependent jobs - expected ~6s");
+my $t4 = Forks::Super::Util::Time();
+($t,$t2,$t3,$t31) = ($t4-$t,$t4-$t2,$t4-$t3,$t4-$t31);
+ok($t > 5.5 && $t < 8.0, "Took ${t}s ${t2}s ${t3}s ${t31} for dependent jobs - expected ~6s"); ### 20 ###
 ok($j1->{end} <= $j2->{start}, "handled circular dependency");
 
-$t = Forks::Super::Time();
+
+
+
+
+$t = Forks::Super::Util::Time();
 $p1 = fork { sub => sub {sleep 3}, name => "dup1" };
 $p2 = fork { sub => sub {sleep 2}, name => "dup1", delay => 2 };
 $p3 = fork { sub => sub {sleep 1}, depend_start => "dup1", depend_on => $p2 };
@@ -97,11 +112,11 @@ $j3 = Forks::Super::Job::get($p3);
 ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED' && $j3->{state} eq 'DEFERRED',
    "jobs in correct states");
 waitall;
-ok($j3->{start} >= $j1->{start} && $j3->{start} >= $j2->{start},"resepected depend_start by name");
+ok($j3->{start} >= $j1->{start} && $j3->{start} >= $j2->{start},
+	"resepected depend_start by name");
 ok($j2->{start} >= $j1->{start} + 1.5, "respected depend_start+delay");
 ok($j3->{start} >= $j2->{end}, "resepected depend_on with depend_start");
 
 if (Forks::Super::CONFIG("alarm")) {
     alarm 0;
 }
-

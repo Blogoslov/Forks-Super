@@ -7,24 +7,21 @@ use warnings;
 # test forking and invoking a shell command
 #
 
-open(LOCK, ">>", "t/out/.lock-t11");
-flock LOCK, 2;
-
-
+my $output = "t/out/test13.$$";
 my @cmd = ($^X,"t/external-command.pl",
-	"-o=t/out/test", "-e=Hello,", "-e=Whirled",
+	"-o=$output", "-e=Hello,", "-e=Whirled",
 	"-P", "-x=0");
 my $cmd = "@cmd";
 
 # test  fork  exec => \@
 
-unlink "t/out/test";
+unlink $output;
 my $pid = fork {exec => \@cmd };
 ok(isValidPid($pid), "fork to \@command successful");
 my $p = Forks::Super::wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-my $z = do { my $fh; open($fh, "<", "t/out/test"); my $zz = join '', <$fh>; close $fh; $zz };
+my $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z, 
@@ -34,13 +31,13 @@ ok($z eq $target_z,
 
 # test  fork  exec => $
 
-unlink "t/out/test";
+unlink $output;
 $pid = fork { exec => $cmd };
 ok(isValidPid($pid), "fork to \$command successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-$z = do { my $fh; open($fh, "<", "t/out/test"); my $zz = join '', <$fh>; close $fh; $zz };
+$z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z,
@@ -52,11 +49,11 @@ ok($z eq $target_z,
 
 $pid = fork { exec => [ $^X, "t/external-command.pl", "-s=5" ] };
 ok(isValidPid($pid), "fork to external command");
-my $t = Forks::Super::Time();
+my $t = Forks::Super::Util::Time();
 $p = wait;
-$t = Forks::Super::Time() - $t;
+$t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "wait reaped correct pid");
-ok($t > 4.5 && $t < 6.5, "background command ran for ${t}s, expected 5-6s");
+ok($t > 4.5 && $t < 6.5, "background command ran for ${t}s, expected 5-6s"); ### 11 ###
 
 ##################################################################
 
@@ -76,4 +73,4 @@ $p = wait;
 ok($p == $pid, "wait reaped correct pid");
 ok($? == 0, "captured correct zero status");
 
-close LOCK;
+unlink $output;

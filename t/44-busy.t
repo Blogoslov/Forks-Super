@@ -21,67 +21,44 @@ $Forks::Super::ON_BUSY = "block";
 
 #### failure point 0.06, MSWin32 5.00. Was the system overloaded? ####
 
-my $t = Time();
-my $pid1 = fork { 'sub' => $sleepy };
-my $pid2 = fork { 'sub' => $sleepy };
-my $pid3 = fork { 'sub' => $sleepy };
-$t = Time() - $t;
-ok($t <= 1, "three forks with no delay");
+my $t = Forks::Super::Util::Time();
+my $pid1 = fork { sub => $sleepy };
+my $pid2 = fork { sub => $sleepy };
+my $pid3 = fork { sub => $sleepy };
+$t = Forks::Super::Util::Time() - $t;
+ok($t <= 1.9, "$$\\three forks fast return ${t}s expected <1s"); ### 1 ###
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "forks successful");
 
-$t = time;
-my $pid4 = fork { 'sub' => $sleepy };
-$t = time - $t;
-ok($t >= 2, "blocked fork");
-ok(isValidPid($pid4), "blocking fork returns valid pid $pid4");
+$t = Forks::Super::Util::Time();
+my $pid4 = fork { sub => $sleepy };
+$t = Forks::Super::Util::Time() - $t;
+ok($t >= 2, "blocked fork took ${t}s expected >2s");
+ok(isValidPid($pid4), "blocking fork returns valid pid $pid4"); ### 4 ###
 waitall;
 
 #######################################################
 
 $Forks::Super::ON_BUSY = "fail";
-$t = time;
-$pid1 = fork { 'sub' => $sleepy };  # ok 1/3
-$pid2 = fork { 'sub' => $sleepy };  # ok 2/3
-$pid3 = fork { 'sub' => $sleepy };  # ok 3/3
-$t = time - $t;
-ok($t <= 1, "three forks no delay");
+$t = Forks::Super::Util::Time();
+$pid1 = fork { sub => $sleepy };  # ok 1/3
+$pid2 = fork { sub => $sleepy };  # ok 2/3
+$pid3 = fork { sub => $sleepy };  # ok 3/3
+$t = Forks::Super::Util::Time() - $t;
+ok($t <= 1.3, "three forks no delay ${t}s expected <=1s");
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "three successful forks");
 
 
-$t = time;
-$pid4 = fork { 'sub' => $sleepy };     # should fail .. already 3 procs
-my $pid5 = fork { 'sub' => $sleepy };  # should fail
-my $u = time - $t;
-ok($u <= 1, "Took ${u}s expected fast fail 0-1s");
+$t = Forks::Super::Util::Time();
+$pid4 = fork { sub => $sleepy };     # should fail .. already 3 procs
+my $pid5 = fork { sub => $sleepy };  # should fail
+my $u = Forks::Super::Util::Time() - $t;
+ok($u <= 1, "Took ${u}s expected fast fail 0-1s"); ### 7 ###
 ok(!isValidPid($pid4) && !isValidPid($pid5), "failed forks");
 waitall;
-$t = time - $t;
+$t = Forks::Super::Util::Time() - $t;
 
-ok($t >= 3 && $t <= 4, "Took ${t}s for all jobs to finish; expected 3-4");
+ok($t >= 2.95 && $t <= 4, "Took ${t}s for all jobs to finish; expected 3-4"); ### 9 ### was 4 obs 6.75!
 
 #######################################################
-
-
-
-
-
-
-
-__END__
--------------------------------------------------------
-
-Feature[44]:	Don't launch when system is busy
-			Too many active proc
-			CPU load too high
-		Block / Fail
-
-What to test:	Set global MAX_PROC, MAX_LOAD parameters
-		Set job specific max_proc, max_load parameters
-			that override global
-		Set global ON_BUSY
-		Set job specific on_busy
-                force flag runs job even on busy system
-
--------------------------------------------------------

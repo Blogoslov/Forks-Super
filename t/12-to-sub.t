@@ -42,30 +42,19 @@ sub internal_command {
   close OUT;
 }
 
-
-
-
-
-# test  fork  sub => $
-#
-# XXX - not satisfied with this. Should be able to use 'internal_command' and the
-#       fork routine should be able to attach it to the calling package.
-#
-
-open(LOCK, ">>", "t/out/.lock-t12");
-flock LOCK, 2;
+my $output = "t/out/test12.$$";
 
 # test fork => $::
 
-unlink "t/out/test2";
+unlink $output;
 my $pid = fork { sub => 'main::internal_command',
-		args => [ "-o=t/out/test2", "-e=Hello,", 
+		args => [ "-o=$output", "-e=Hello,", 
                           "-e=Wurrled", "-p" ] };
 ok(isValidPid($pid), "fork to \$qualified::subroutineName successful, pid=$pid");
 my $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-my $z = do { my $fh; open($fh, "<", "t/out/test2"); my $zz = join '', <$fh>; close $fh; $zz };
+my $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Wurrled $pid";
 ok($z eq $target_z, 
@@ -75,15 +64,15 @@ ok($z eq $target_z,
 
 # test fork => $
 
-unlink "t/out/test2";
+unlink $output;
 $pid = fork { sub => 'internal_command',
-	      args => [ "-o=t/out/test2", "-e=Hello,", 
+	      args => [ "-o=$output", "-e=Hello,", 
                         "-e=Wurrled", "-p" ] };
 ok(isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-$z = do { my $fh; open($fh, "<", "t/out/test2"); my $zz = join '', <$fh>; close $fh; $zz };
+$z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Wurrled $pid";
 ok($z eq $target_z, 
@@ -93,14 +82,14 @@ ok($z eq $target_z,
 
 # test  fork  sub => \&
 
-unlink "t/out/test2";
+unlink $output;
 $pid = fork { sub => \&internal_command,
-		args => ["-o=t/out/test2", "-e=Hello,", "-e=Wurrled", "-p" ] };
+		args => ["-o=$output", "-e=Hello,", "-e=Wurrled", "-p" ] };
 ok(isValidPid($pid), "fork to \\\&subroutine successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-$z = do { my $fh; open($fh, "<", "t/out/test2"); my $zz = join '', <$fh>; close $fh; $zz };
+$z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Wurrled $pid";
 ok($z eq $target_z,
@@ -110,9 +99,9 @@ ok($z eq $target_z,
 
 # test fork to anonymous sub
 
-unlink "t/out/test2";
+unlink $output;
 $pid = fork { sub => sub { my (@x) = @_;
-			   open(T, ">", "t/out/test2");
+			   open(T, ">", $output);
 			   print T "@x - $$\n";
 			   close T;
 			   exit 1;	
@@ -122,7 +111,7 @@ ok(isValidPid($pid), "fork to anonymous sub successful");
 $p = wait;
 ok($?>>8 == 1, "child status $? \$? != 0");
 ok($pid == $p, "wait reaped child $pid == $p");
-$z = do { my $fh; open($fh, "<", "t/out/test2"); my $zz = join '', <$fh>; close $fh; $zz };
+$z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello - World - $pid";
 ok($z eq $target_z,
@@ -134,11 +123,11 @@ ok($z eq $target_z,
 
 $pid = fork { sub => sub { sleep 3 } };
 ok(isValidPid($pid), "fork to sleepy sub ok");
-my $t = time;
+my $t = Forks::Super::Util::Time();
 $p = wait;
-$t = time - $t;
+$t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "wait on sleepy sub ok");
-ok($t >= 3 && $t <= 4, "background sub ran ${t}s, expected 3-4s");
+ok($t >= 2.9 && $t <= 4, "background sub ran ${t}s, expected 3-4s"); ### 19 ###
 
 ##################################################################
 
@@ -160,4 +149,5 @@ $p = wait;
 ok($? == 0, "captured correct zero status from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");
 
-close LOCK;
+unlink $output;
+

@@ -28,7 +28,7 @@ use strict;
 
 my $flag_on_error = 0;
 my $STATUS=0;
-$SIG{"INT"} = sub { $STATUS=2; die $^O eq "MSWin32" ? "die INT\n" : "";};
+$SIG{"INT"} = sub { $STATUS=2; die $^O eq "MSWin32" ? "die INT\n" : "\n";};
 
 END {
   $?=$STATUS if $STATUS;

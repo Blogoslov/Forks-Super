@@ -13,7 +13,7 @@ $| = 1;
 # verify every step of the life-cycle of a child process
 
 my $pid = fork;
-ok(defined $pid, "pid defined after fork") if $$==$Forks::Super::MAIN_PID;
+ok(defined $pid, "$$\\pid defined after fork") if $$==$Forks::Super::MAIN_PID;
 
 if ($pid == 0) {
   sleep 2;
@@ -35,7 +35,7 @@ ok($? != $job->{status}, "job status not available yet");
 my $p = waitpid $pid,0;
 ok($job->{state} eq "REAPED", "job status REAPED after waitpid");
 ok($p == $pid, "reaped correct pid");
-ok($? == 256, "system status is $?, expected 256");
+ok($? == 256, "system status is $?, Expected 256");
 ok($? == $job->{status}, "captured correct job status");
 
 #########################################################

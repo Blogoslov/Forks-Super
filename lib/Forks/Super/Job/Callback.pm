@@ -1,5 +1,15 @@
+#
+# Forks::Super::Job::Callback - manage callback functions
+#    that are called in the parent at certain points in the
+#    lifecycle of a child process
+# implements
+#    fork { callback => \&sub }
+#    fork { callback => { event => code , event => code , ... } }
+
+
 package Forks::Super::Job::Callback;
 use Forks::Super::Util qw(qualify_sub_name);
+use Forks::Super::Debug qw(:all);
 use Exporter;
 use base 'Exporter';
 use Carp;
@@ -8,6 +18,7 @@ use warnings;
 
 our @EXPORT_OK = qw(run_callback);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
+our $VERSION = $Forks::Super::Util::VERSION;
 
 sub run_callback {
   my ($job, $callback) = @_;
@@ -29,7 +40,12 @@ sub run_callback {
   $callback = delete $job->{$key};
 
   no strict 'refs';
-  $callback->($job, $job->{pid});
+  if (ref $callback eq "HASH") {
+    Carp::confess("bad callback: $callback ",
+		  "(did you forget to specify \"sub\" { }?)");
+  } else {
+    $callback->($job, $job->{pid});
+  }
 }
 
 sub preconfig_callbacks {
@@ -53,7 +69,11 @@ sub preconfig_callbacks {
 
 sub config_callback_child {
   my $job = shift;
-  delete $job->{$_} for grep { /^_?callback/ } keys %$job;
+  for my $callback (grep { /^callback/ || /^_callback/ } keys %$job) {
+    # this looks odd, but it clears up a SIGSEGV that was happening here
+    $job->{$callback} = '';
+    delete $job->{$callback};
+  }
 }
 
 

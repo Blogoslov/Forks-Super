@@ -11,6 +11,7 @@ our @EXPORT_OK = qw(debug $DEBUG);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
 
 our ($DEBUG, $DEBUG_fh);
+our $VERSION = $Forks::Super::Util::VERSION;
 
 open($DEBUG_fh, '>&STDERR')
   or $DEBUG_fh = *STDERR 

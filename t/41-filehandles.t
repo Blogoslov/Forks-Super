@@ -100,10 +100,10 @@ ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 @err = grep { !/alarm\(\) not available/ } @err; # exclude warning to child STDERR
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
-ok($out[0] eq "0:$msg\n", "got expected first line from child output");
-ok($out[1] eq "1:$msg\n", "got expected second line from child output");
-ok($out[2] eq "2:$msg\n", "got expected third line from child output");
-ok($err[-1] eq "$msg\n", "got expected line from child error");
+ok($out[0] eq "0:$msg\n", "got Expected first line from child output");
+ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
+ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
+ok($err[-1] eq "$msg\n", "got Expected line from child error");
 waitall;
 
 #######################################################
@@ -189,8 +189,8 @@ if (@err != 2) {
 }
 
 ok(@err == 2, "received 2 lines from child stderr");
-ok($err[0] =~ /the message is/, "got expected first line from child error");
-ok($err[-1] =~ /a test/, "got expected second line from child error");
+ok($err[0] =~ /the message is/, "got Expected first line from child error");
+ok($err[-1] =~ /a test/, "got Expected second line from child error");
 waitall; 
 $Forks::Super::DEBUG = 0;
 
@@ -225,14 +225,14 @@ waitall;
 foreach (@pids) {
   push @cdata, Forks::Super::read_stdout($_);
 }
-ok(@pdata == @cdata);
+ok(@pdata == @cdata, "Master/slave produced ".scalar @pdata."/".scalar @cdata." lines"); ### 21 ###
 @pdata = sort @pdata;
 @cdata = sort @cdata;
 my $pc_equal = 1;
 for (my $i=0; $i<@pdata; $i++) {
   $pc_equal=0 if $pdata[$i] ne $cdata[$i];
 }
-ok($pc_equal);
+ok($pc_equal, "master/slave produced same data"); ### 22 ###
 
 ##########################################################
 
@@ -252,7 +252,7 @@ $pid = fork { stdin => $input, stdout => \$output, stderr => \$error,
 		  }
 		  } };
 ok($output eq "" && $error =~ /overwrite/, 
-   "output/error not updated until child is complete");
+   "output($output)/error($error) not updated until child is complete"); ### 23 ###
 waitpid $pid, 0;
 ok($output eq "dlrow olleH\n", "updated output from stdout");
 ok($error !~ /overwrite/, "error ref was overwritten");
@@ -272,5 +272,8 @@ $pid = fork { stdin => \@input , stdout => \$output,
 ok($output eq $orig_output, "output not updated until child is complete");
 waitpid $pid, 0;
 ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
+
+
+use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
 
 

@@ -1,6 +1,7 @@
 #
 # Forks::Super::Job - object representing a task to perform in 
 #                     a background process
+# See the subpackages for some implementation details
 #
 
 package Forks::Super::Job;
@@ -8,18 +9,18 @@ use Forks::Super::Debug qw(debug);
 use Forks::Super::Util qw(is_number qualify_sub_name);
 use Forks::Super::Config qw(:all);
 use Forks::Super::Queue qw(queue_job);
+use Forks::Super::Job::Timeout;
 use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
 use Forks::Super::Job::OS;
-use Forks::Super::Job::Timeout;
 use Forks::Super::Job::Callback qw(run_callback);
 use Exporter;
 use base 'Exporter';
 use Carp;
-use IO::Handle;
 use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
+our $VERSION = '0.24';
 
 sub new {
   my ($class, $opts) = @_;
@@ -30,8 +31,15 @@ sub new {
   $this->{created} = Forks::Super::Util::Time();
   $this->{state} = 'NEW';
   $this->{ppid} = $$;
+  if (!defined $this->{debug}) {
+    $this->{debug} = $Forks::Super::Debug::DEBUG;
+  }
   push @ALL_JOBS, $this;
-  return bless $this, 'Forks::Super::Job';
+  bless $this, 'Forks::Super::Job';
+  if ($this->{debug}) {
+    debug("New job created: ", $this->toString());
+  }
+  return $this;
 }
 
 sub is_complete {
@@ -246,6 +254,7 @@ sub launch {
     warn "Forks::Super::launch: ",
       "system fork call returned undef. Retrying ...\n";
     pause(1 + ($job->{retries} || 1) - $retries);
+    $pid = CORE::fork();
   }
 
 
@@ -306,7 +315,7 @@ sub launch {
     local $ENV{_FORK_PID} = $$ if $^O eq "MSWin32";
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
     my $c1 = system( @{$job->{cmd}} );
-    debug("Exit code of $job->{pid} was $c1") if $job->{debug};
+    debug("Exit code of $$ was $c1") if $job->{debug};
     exit $c1 >> 8;
   } elsif ($job->{style} eq 'exec') {
     local $ENV{_FORK_PPID} = $$ if $^O eq "MSWin32";
@@ -534,10 +543,10 @@ sub config_parent {
   if (Forks::Super::Config::CONFIG("getpgrp")) {
     $job->{pgid} = getpgrp($job->{pid});
 
-    # when  timeout =>   or   expiration =>  is used, PGID of child will be
-    # set to child PID
+    # when  timeout =>   or   expiration =>  is used, 
+    # PGID of child will be set to child PID
     # XXX - tragically this is not always true. Do the parent settings matter
-    #       though?
+    #       though? Should comment out these lines and test
     if (defined $job->{timeout} or defined $job->{expiration}) {
       $job->{pgid} = $job->{real_pid};
     }
@@ -574,7 +583,7 @@ sub toString {
   my $job = shift;
   my @to_display = qw(pid state create);
   foreach my $attr (qw(real_pid style cmd exec sub args start end reaped 
-		       status closure pgid)) {
+		       status closure pgid child_fh queue_priority)) {
     push @to_display, $attr if defined $job->{$attr};
   }
   my @output = ();
@@ -586,7 +595,27 @@ sub toString {
       push @output, "$attr=" . $job->{$attr};
     }
   }
-  return '{' . join (q{;},@output), '}';
+  return '{' . join ( ';' , @output), '}';
+}
+
+sub toShortString {
+  my $job = shift;
+  if (defined $job->{short_string}) {
+    return $job->{short_string};
+  }
+  my @to_display = ();
+  foreach my $attr (qw(pid state cmd exec sub args closure real_pid)) {
+    push @to_display, $attr if defined $job->{$attr};
+  }
+  my @output;
+  foreach my $attr (@to_display) {
+    if (ref $job->{$attr} eq 'ARRAY') {
+      push @output, "$attr=[" . join(",", @{$job->{$attr}}) . "]";
+    } else {
+      push @output, "$attr=" . $job->{$attr};
+    }
+  }
+  return $job->{short_string} = "{" . join(";",@output) . "}";
 }
 
 #
@@ -621,7 +650,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.22
+0.24
 
 =head1 SYNOPSIS
 
@@ -820,7 +849,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 Copyright (c) 2009-2010, Marty O'Brien.
 
-This program is free software; you can redistribute it and/or modify it
+This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.8.8 or,
 at your option, any later version of Perl 5 you may have available. 
 

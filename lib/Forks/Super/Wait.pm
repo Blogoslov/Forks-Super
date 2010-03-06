@@ -1,6 +1,6 @@
 package Forks::Super::Wait;
 use Forks::Super::Job;
-use Forks::Super::Util qw(is_number isValidPid pause);
+use Forks::Super::Util qw(is_number isValidPid pause Time);
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Config;
 use Forks::Super::Queue;
@@ -11,8 +11,9 @@ use Carp;
 use strict;
 use warnings;
 
-our @EXPORT_OK = qw(wait waitpid waitall);
+our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
+our $VERSION = $Forks::Super::Util::VERSION;
 
 our ($productive_pause_code, $productive_waitpid_code);
 our $REAP_NOTHING_MSGS = 0;
@@ -24,20 +25,23 @@ sub set_productive_waitpid_code (&) {
   $productive_waitpid_code = shift;
 }
 
+use constant TIMEOUT => -1.5;
+
 sub wait {
+  my $timeout = shift || 0;
+  $timeout = 1E-6 if $timeout < 0;
   debug("invoked Forks::Super::wait") if $DEBUG;
-  return Forks::Super::Wait::waitpid(-1,0);
+  return Forks::Super::Wait::waitpid(-1,0,$timeout);
 }
 
 sub waitpid {
-  my ($target,$flags,@dummy) = @_;
+  my ($target,$flags,$timeout,@dummy) = @_;
   $productive_waitpid_code->() if $productive_waitpid_code;
+  $timeout = 0 if !defined $timeout;
+  $timeout = 1E-6 if $timeout < 0;
 
   if (@dummy > 0) {
     carp "Forks::Super::waitpid: Too many arguments\n";
-    foreach my $dflag (@dummy) {
-      $flags |= $dflag;
-    }
   }
   if (not defined $flags) {
     carp "Forks::Super::waitpid: Not enough arguments\n";
@@ -53,11 +57,11 @@ sub waitpid {
   # return -1 if there are no eligible procs to wait for
   my $no_hang = ($flags & WNOHANG) != 0;
   if (is_number($target) && $target == -1) {
-    return _waitpid_any($no_hang);
+    return _waitpid_any($no_hang, $timeout);
   } elsif (defined $ALL_JOBS{$target}) {
-    return _waitpid_target($no_hang, $target);
+    return _waitpid_target($no_hang, $target, $timeout);
   } elsif (0 < (my @wantarray = Forks::Super::Job::getByName($target))) {
-    return _waitpid_name($no_hang, $target);
+    return _waitpid_name($no_hang, $target, $timeout);
   } elsif (!is_number($target)) {
     return -1;
   } elsif ($target > 0) {
@@ -69,18 +73,26 @@ sub waitpid {
     } else {
       $target = -$target;
     }
-    return _waitpid_pgrp($no_hang, $target);
+    return _waitpid_pgrp($no_hang, $target, $timeout);
   } else {
     return -1;
   }
 }
 
 sub waitall {
+  my $timeout = shift || 86400;
+  $timeout = 1E-6 if $timeout < 0;
   my $waited_for = 0;
+  my $expire = Time() + $timeout ;
   debug("Forks::Super::waitall(): waiting on all procs") if $DEBUG;
+  my $pid;
   do {
-    $productive_pause_code->() if $productive_pause_code;
-  } while isValidPid(Forks::Super::Wait::wait()) && ++$waited_for;
+    # $productive_waitpid_code->() if $productive_waitpid_code;
+    $pid = Forks::Super::Wait::wait($expire - Time());
+    if ($DEBUG) {
+      debug("Forks::Super::waitall: caught pid $pid");
+    }
+  } while isValidPid($pid) && ++$waited_for && Time() < $expire;
   return $waited_for;   # future enhancement: return 0 or -1 on timeout
 }
 
@@ -148,7 +160,7 @@ sub _reap {
     if ($REAP_NOTHING_MSGS % 10 == 0) {
       if (0 && $productive_waitpid_code) {
 	$productive_waitpid_code->();
-#      } elsif (defined &Forks::Super::handle_CHLD) {
+#      } elsif (defined &Forks::Super::Sigchld::handle_CHLD) {
 #	Forks::Super::handle_CHLD(-1);
       } elsif (defined $SIG{CHLD} && ref $SIG{CHLD} eq "CODE") {
 	$SIG{CHLD}->(-1);
@@ -171,10 +183,14 @@ sub _reap {
 
 # wait on any process
 sub _waitpid_any {
-  my ($no_hang) = @_;
+  my ($no_hang,$timeout) = @_;
+  my $expire = Time() + ($timeout || 86400);
   my ($pid, $nactive) = _reap();
   unless ($no_hang) {
     while (!isValidPid($pid) && $nactive > 0) {
+      if (Time() >= $expire) {
+	return TIMEOUT;
+      }
       pause();
       ($pid, $nactive) = _reap();
     }
@@ -188,7 +204,8 @@ sub _waitpid_any {
 
 # wait on a specific process
 sub _waitpid_target {
-  my ($no_hang, $target) = @_;
+  my ($no_hang, $target, $timeout) = @_;
+  my $expire = Time() + ($timeout || 86400);
   my $job = $ALL_JOBS{$target};
   if (not defined $job) {
     return -1;
@@ -202,6 +219,9 @@ sub _waitpid_target {
   } else {
     # block until job is complete.
     while ($job->{state} ne 'COMPLETE' and $job->{state} ne 'REAPED') {
+      if (Time() >= $expire) {
+	return TIMEOUT;
+      }
       pause();
       Forks::Super::Queue::run_queue() if $job->{state} eq 'DEFERRED';
     }
@@ -211,7 +231,8 @@ sub _waitpid_target {
 }
 
 sub _waitpid_name {
-  my ($no_hang, $target) = @_;
+  my ($no_hang, $target, $timeout) = @_;
+  my $expire = Time() + ($timeout || 86400);
   my @jobs = Forks::Super::Job::getByName($target);
   if (@jobs == 0) {
     return -1;
@@ -232,6 +253,9 @@ sub _waitpid_name {
   # otherwise block until a job is complete
   @jobs = grep { $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED' } @jobs_to_wait_for;
   while (@jobs == 0) {
+    if (Time() >= $expire) {
+      return TIMEOUT;
+    }
     pause();
     Forks::Super::Queue::run_queue() 
 	if grep {$_->{state} eq 'DEFERRED'} @jobs_to_wait_for;
@@ -243,10 +267,14 @@ sub _waitpid_name {
 
 # wait on any process from a specific process group
 sub _waitpid_pgrp {
-  my ($no_hang, $target) = @_;
+  my ($no_hang, $target, $timeout) = @_;
+  my $expire = Time() + ($timeout || 86400);
   my ($pid, $nactive) = _reap($target);
   unless ($no_hang) {
     while (!isValidPid($pid) && $nactive > 0) {
+      if (Time() >= $expire) {
+	return TIMEOUT;
+      }
       pause();
       ($pid, $nactive) = _reap($target);
     }
@@ -259,7 +287,7 @@ sub _waitpid_pgrp {
 #
 # bastards arise when a child finishes quickly and has been
 # reaped in the SIGCHLD handler before the parent has finished
-# initializing the job's state.   See  Forks::Super::handle_CHLD() .
+# initializing the job's state.   See  Forks::Super::Sigchld::handle_CHLD() .
 #
 sub _handle_bastards {
   foreach my $pid (keys %Forks::Super::BASTARD_DATA) {

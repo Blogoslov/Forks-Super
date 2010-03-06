@@ -1,3 +1,10 @@
+#
+# Forks::Super::Job::Timeout
+# implementation of
+#     fork { timeout => ... }
+#     fork { expiration => ... }
+#
+
 package Forks::Super::Job::Timeout;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
@@ -6,6 +13,7 @@ use Carp;
 use strict;
 use warnings;
 
+our $VERSION = $Forks::Super::Debug::VERSION;
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
 our $TIMEDOUT = 0;
@@ -69,7 +77,7 @@ sub config_timeout_child {
 
   if ($timeout < 1) {
     if ($Forks::Super::IMPORT{":test"}) {
-      croak "Forks::Super: quick timeout\n";
+      die "Forks::Super: quick timeout\n";
     }
     croak "Forks::Super::Job::config_timeout_child(): quick timeout";
   }
@@ -81,7 +89,7 @@ sub config_timeout_child {
       if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
 	local $SIG{INT} = 'IGNORE';
 	$DISABLE_INT = 1;
-	kill -($Super::Forks::Config::signo{"INT"} || 2), getpgrp(0);
+	kill -($Forks::Super::Config::signo{"INT"} || 2), getpgrp(0);
 	$DISABLE_INT = 0;
       }
     }
@@ -104,7 +112,7 @@ sub config_timeout_child {
 
 END {
   # clean up child
-  if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) {
+  if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) { # FSJ::Timeout END {}
     if (Forks::Super::Config::CONFIG("alarm")) {
       alarm 0;
     }
@@ -137,6 +145,15 @@ END {
       }
     }
   }
+  1; # done
+}
+
+sub warm_up {
+  # force loading of some modules in the parent process
+  # so that fast fail (see t/40-timeout.t, tests #8,17)
+  # aren't slowed down when they encounter the croak call.
+  eval { croak "preload.\n" };
+  return $@;
 }
 
 1;

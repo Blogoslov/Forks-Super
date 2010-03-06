@@ -9,6 +9,7 @@ use warnings;
 our @EXPORT_OK = qw(CONFIG);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %signo);
+our $VERSION = $Forks::Super::Debug::VERSION;
 
 sub init {
   %CONFIG = (filehandles => 1);

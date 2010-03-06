@@ -21,10 +21,10 @@ ok(\&waitpid eq \&Forks::Super::waitpid, "waitpid exported to default namespace"
 
 ok(\&waitall eq \&Forks::Super::waitall, "waitall exported to default namespace");
 
-my $t = fork {'__test' => 14}  ;
-ok($t == 14, "fork invokes Forks::Super::fork, not CORE::fork");
+my $test = fork {'__test' => 14}  ;
+ok($test == 14, "fork invokes Forks::Super::fork, not CORE::fork");
 
-$t = fork '__test' => 14  ;
-ok($t == 14, "fork invokes Forks::Super::fork, not CORE::fork");
+$test = fork '__test' => 14  ;
+ok($test == 14, "fork invokes Forks::Super::fork, not CORE::fork");
 
 __END__

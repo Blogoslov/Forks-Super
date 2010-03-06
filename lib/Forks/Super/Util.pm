@@ -1,22 +1,23 @@
 #
 # Forks::Super::Util - useful routines that could be helpful
-#                      to any of the other Forks::Super::XXX
+#                      to any of the other Forks::Super::Xxx
 #                      packages
 # 
 
 package Forks::Super::Util;
-
 use Exporter;
 use base 'Exporter';
 use Carp;
 use strict;
 use warnings;
 
+our $VERSION = '0.24';
 our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-our $DEFAULT_PAUSE = 0.25;
+our $DEFAULT_PAUSE = 0.10;
 our ($Time_HiRes_avail, $something_productive, $something_else_productive);
+our $_PAUSE = 0;
 
 my $x = eval "use Time::HiRes";
 if ($@) {
@@ -40,18 +41,20 @@ sub is_number {
   my $a = shift;
   $a =~ s/^\s+//;
   $a =~ s/\s+$//;
-  $a =~ s/e[+-]?\d+$//i;
-  $a =~ s/^[\+\-]//;
-  $a =~ /^\d+.?\d*$/ || $a =~ /^\.\d+/;
+
+  # from Scalar::Util::PP::looks_like_number:
+  return $a =~ /^[+-]?[0-9]+$/ ||
+    $a =~ /^([+-]?)(?=[0-9]|\.[0-9])[0-9]*(\.[0-9]*)?([Ee]([+-]?[0-9]+))?$/;
 }
 
-# a portable way to check the return value of fork()
+# portable function call to check the return value of fork()
 # and see if the call succeeded. For a fork() call that
 # results in a "deferred" job, this function will
 # return zero.
 sub isValidPid {
   my ($pid) = @_;
-  return $^O eq "MSWin32" ? $pid != 0 && $pid != -1 && $pid >= -50000 : $pid > 0;
+  return 0 if !defined $pid || !is_number($pid);
+  return $^O eq "MSWin32" ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
 }
 
 sub set_productive_pause_code (&) {
@@ -66,24 +69,34 @@ sub set_other_productive_pause_code (&) {
 sub pause {
   my $start = Forks::Super::Util::Time();
   my $delay = shift || $DEFAULT_PAUSE;
+  my $unproductive = shift || 0;
   my $expire = $start + ($delay || 0.25);
 
+  $_PAUSE++; # prevent too much productive code from nested pause calls
+
   if ($Time_HiRes_avail) {
-    while (Forks::Super::Util::Time() < $expire) {
-      if ($something_productive) {
+    my $time_left = $expire - Forks::Super::Util::Time();
+    while ($time_left > 0) {
+      if ($_PAUSE < 2 && $something_productive && !$unproductive) {
 	$something_productive->();
+	$time_left = $expire - Forks::Super::Util::Time();
+	last if $time_left <= 0;
       }
-      Time::HiRes::sleep(0.1 * ($delay || 1));
+      my $resolution = $time_left > $DEFAULT_PAUSE ? $DEFAULT_PAUSE : $time_left * 0.5 + 0.01;
+      Time::HiRes::sleep($resolution || 0.25);
+      $time_left = $expire - Forks::Super::Util::Time();
     }
   } else {
     my $stall = $delay * 0.1;
     $stall = 0.1 if $stall < 0.1;
     $stall = $delay if $stall > $delay;
-    $stall = 0.10 if $stall > 0.10;
+    $stall = $DEFAULT_PAUSE if $stall > $DEFAULT_PAUSE;
 
     while ($delay > 0) {
-      if ($something_productive) {
+      if ($_PAUSE < 2 && $something_productive && !$unproductive) {
 	$something_productive->();
+	$delay = Forks::Super::Util::Time() - $expire;
+	last if $delay <= 0;
       }
 
       if ($stall >= 1) {
@@ -95,18 +108,20 @@ sub pause {
     }
   }
 
-  if ($something_else_productive) {
+  if ($_PAUSE > 1 || $unproductive) {
+  } elsif ($something_else_productive) {
     $something_else_productive->();
   } elsif ($something_productive) {
     $something_productive->();
   }
+  $_PAUSE = 0;
   return Time() - $start;
 }
 
 #
 # prepend package qualifier from current context to a scalar subroutine name.
 # Useful when passing an unqualified name of a subroutine declared in the 
-# calling package to a Forks::Super or Forks::Super::XXX method 
+# calling package to a Forks::Super or Forks::Super::Xxx method 
 # that takes a code ref.
 #
 sub qualify_sub_name {
@@ -126,5 +141,3 @@ sub qualify_sub_name {
 }
 
 1;
-
-

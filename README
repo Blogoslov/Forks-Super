@@ -1,5 +1,5 @@
 
-Forks::Super version 0.22
+Forks::Super version 0.24
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -16,8 +16,8 @@ and managing them, including:
    *  setting deadlines
 
       can specify a deadline (in relative or absolute
-      time) for a background process to complete. 
-      The background process will be killed if it does
+      time) for a background process to complete,
+      with the background process being killed if it does
       not complete by the deadline.
 
    *  throttling
@@ -45,6 +45,11 @@ and managing them, including:
       Parent process can have access to STDIN, STDOUT,
       and STDERR filehandles of child processes to
       facilitate interprocess communication
+
+   *  timeouts on wait,waitpid calls
+
+      extended  wait  and  waitpid  functions can take
+      an optional timeout argument
       
    *  operating system features
 
@@ -61,17 +66,11 @@ The typical installation recipe
    make test
    make install
 
-usually works. A few of the tests are subject to some
-hard-to-investigate race conditions and may fail
-intermittently. Running "make test" again or installing
-the "Time::HiRes" module may increase the chance of
-passing the test phase. Some of the tests are also more
-likely to fail on a heavily loaded system.
-
-Tests from the file "t/60-os.t" cover the operating-
-system dependent functionality of this module. These
-tests may fail on some configurations, but that should
-not discourage you from installing this module.
+usually works. The unit tests assume they are
+running on a moderately loaded system; intermittent
+failures are more likely on a heavily loaded
+system. Running "make test" will often work
+if you run it again.
 
 
 DEPENDENCIES

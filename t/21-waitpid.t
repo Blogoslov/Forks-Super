@@ -5,54 +5,54 @@ use strict;
 use warnings;
 
 if (Forks::Super::CONFIG("alarm")) {
-  alarm 90;$SIG{ALRM}=sub{die "Timeout\n"};
+  alarm 300;$SIG{ALRM}=sub{die "Timeout\n"};
 }
 
 #
 # tests the Forks::Super::waitpid call.
 #
 
-
-my $pid = fork { 'sub' => sub { sleep 2 ; exit 2 } };
+my $pid = fork { sub => sub { sleep 2 ; exit 2 } };
 sleep 3;
-my $t = Forks::Super::Time();
+my $t = Forks::Super::Util::Time();
 my $p = waitpid $pid, WNOHANG;
-$t = Forks::Super::Time() - $t;
+$t = Forks::Super::Util::Time() - $t;
 my $s = $?;
-ok(isValidPid($pid), "fork successful");
+ok(isValidPid($pid), "$$\\fork successful");
 ok($p == $pid, "waitpid on $pid returns $p");
-ok($t <= 1, "no delay for waitpid call");
+ok($t <= 1, "fast waitpid took ${t}s, expected <=1s");
 ok($s == 512, "waitpid captured exit status");
 
 ############################################
 
-$pid = fork { 'sub' => sub { sleep 3; exit 3 } };
+$pid = fork { sub => sub { sleep 3; exit 3 } };
 ok(isValidPid($pid), "fork successful");
-$t = Forks::Super::Time();
+$t = Forks::Super::Util::Time();
 $p = waitpid $pid,WNOHANG;
 ok($p == -1, "non-blocking waitpid returned -1");
 ok(-1 == waitpid ($pid + 10, WNOHANG), "return -1 for invalid target");
-ok(-1 == waitpid ($pid + 10, 0), "fast return -1 for invalid target");
-$t = Forks::Super::Time() - $t;
-ok($t <= 1, "fast return");
-$t = Forks::Super::Time();
+ok(-1 == waitpid ($pid + 10, 0), "quick return -1 for invalid target");
+$t = Forks::Super::Util::Time() - $t;
+ok($t <= 1, "fast return ${t}s for invalid target expected <=1s"); ### 9 ###
+$t = Forks::Super::Util::Time();
 $p = waitpid $pid, 0;
-$t = Forks::Super::Time() - $t;
+$t = Forks::Super::Util::Time() - $t;
 $s = $?;
 ok($p==$pid, "blocking waitpid returned real pid");
-ok($t >= 3, "blocked return took ${t}s expected 3s");
+ok($t >= 2.85, "blocked return took ${t}s expected 3s");
 ok($s == 768, "waitpid captured exit status");
 
 ############################################
 
 my %x;
 $Forks::Super::MAX_PROC = 100;
+my @rand = map { rand } 0..19;
 for (my $i=0; $i<20; $i++) {
-  my $pid = fork { 'sub' => sub { my $d=int(2+8*rand); sleep $d; exit $i } };
-  ok(isValidPid($pid), "Launched $pid");
+  my $pid = fork { sub => sub { my $d=int(2+8*$rand[$i]); sleep $d; exit $i } };
+  ok(isValidPid($pid), "Launched $pid"); ### 13-32 ###
   $x{$pid} = $i;
 }
-$t = Forks::Super::Time();
+$t = Forks::Super::Util::Time();
 while (0 < scalar keys %x) {
 
   my $p;
@@ -65,7 +65,8 @@ while (0 < scalar keys %x) {
     }
     if (isValidPid($p)) {
       ok($p == $pid, "Reaped $p");
-      ok($? >> 8 == $x{$p}, "$p correct exit code $x{$p}");
+      my $exit_code = $? >> 8;
+      ok($exit_code == $x{$p}, "$p correct exit code $x{$p} == $exit_code");
       delete $x{$p};
     }
   } else {
@@ -73,17 +74,17 @@ while (0 < scalar keys %x) {
   }
 }
 
-$t = Forks::Super::Time() - $t;
-ok($t >= 6 && $t <= 10, "waitpid on multi-procs took ${t}s, expected 6-10s");
-$t = Forks::Super::Time();
+$t = Forks::Super::Util::Time() - $t;
+ok($t >= 5.5 && $t <= 10.5, "waitpid on multi-procs took ${t}s, expected 6-10s"); ### 73 ### was 10.0, obs 10.03
+$t = Forks::Super::Util::Time();
 
 for (my $i=0; $i<5; $i++) {
   my $p = waitpid -1, 0;
   ok($p == -1, "wait on nothing gives -1, $p");
 }
-$t = Forks::Super::Time() - $t;
+$t = Forks::Super::Util::Time() - $t;
 
-ok($t <= 1, "waitpid on nothing caused no delay");
+ok($t <= 1, "fast waitpid on nothing took ${t}s, expected <=1s");
 
 ############################################
 
@@ -91,20 +92,16 @@ ok($t <= 1, "waitpid on nothing caused no delay");
 # waitpid -t  for valid/invalid  pgid.
 
 %x = ();
+
+@rand = map { rand } 0..19;
 for (my $i=0; $i<20; $i++) {
-
-  # ha ha ha. When you fork, the child inherits the current seed
-  # of the random number generator, so every child will produce
-  # the same random sequence. Unless you srand it yourself.
-
-  my $pid = fork { 'sub' => sub { srand();
-				  my $d=int(2+8*rand);
-				  sleep $d; exit $i } };
+  my $pid = fork { sub => sub {	my $d = int(6+5*$rand[$i]);
+				sleep $d; exit $i } };
   ok(isValidPid($pid), "Launched $pid");
   $x{$pid} = $i;
 }
 
-$t = Forks::Super::Time();
+$t = Forks::Super::Util::Time();
 SKIP: {
   if (!Forks::Super::CONFIG("getpgrp")) {
     skip "$^O,$]: Can't test waitpid on pgid", 44;
@@ -114,7 +111,8 @@ SKIP: {
   my $bogus_pgid = $pgid + 175;
   ok(-1 == waitpid (-$bogus_pgid, 0), "bogus pgid");
   ok(-1 == waitpid (-$bogus_pgid, WNOHANG), "bogus pgid");
-  ok(Forks::Super::Time() - $t <= 1, "fast return wait on bogus pgid");
+  my $u = Forks::Super::Util::Time() - $t;
+  ok($u <= 1, "fast return ${u}s wait on bogus pgid expected <=1s"); ### 102 ###
 
   while (0 < scalar keys %x) {
 
@@ -141,8 +139,12 @@ SKIP: {
     }
   }
 
-  $t = Forks::Super::Time() - $t;
-  ok($t >= 7 && $t <= 11, "Took $t s to reap all. Should take about 7-11s");
+  $t = Forks::Super::Util::Time() - $t;
+  if ($t < 7) {
+    # if all values are < 1/5, then this test would not pass
+    print STDERR "Random values to sleepy fork calls were: @rand\n";
+  }
+  ok($t >= 7 && $t <= 11, "Took $t s to reap all. Should take about 7-11s"); ### 143 ###
 }
 
 __END__

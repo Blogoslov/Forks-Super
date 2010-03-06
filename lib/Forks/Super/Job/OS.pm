@@ -1,9 +1,18 @@
+#
+# Forks::Super::Job::OS
+# implementation of
+#     fork { name => ... , os_priority => ... , 
+#            cpu_affinity => 0x... }
+#
+
 package Forks::Super::Job::OS;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Carp;
 use strict;
 use warnings;
+
+our $VERSION = $Forks::Super::Debug::VERSION;
 
 #
 # If desired and if the platform supports it, set
@@ -69,8 +78,21 @@ sub config_os_child {
     if ($^O =~ /cygwin/i && Forks::Super::Config::CONFIG("Win32::Process")) {
       my $winpid = Win32::Process::GetCurrentProcessID();
       my $processHandle;
-      if (Win32::Process::Open($processHandle, $winpid, 0)) {
+
+      local $SIG{SEGV} = sub {
+	warn "********************************************************\n",
+	     "* Forks::Super: set CPU affinity failed:               *\n",
+	     "* Win32::Process::SetAffinityMask() caused a SIGSEGV.  *\n",
+	     "* Recommend upgrading to at least Win32::Process v0.14 *\n",
+	     "********************************************************\n";	  
+      };
+      if (! defined $winpid) {
+	carp "Forks::Super::Job::config_os_child(): ",
+	  "Win32::Process::GetCurrentProcessID() returned <undef>\n";
+      } elsif (Win32::Process::Open($processHandle, $winpid, 0)) {
+	$Forks::Super::OS::SET_PROCESS_AFFINITY = 1;
 	$processHandle->SetProcessAffinityMask($n);
+	$Forks::Super::OS::SET_PROCESS_AFFINITY = 0;
       } else {
 	carp "Forks::Super::Job::config_os_child(): ",
 	  "Win32::Process::Open call failed for Windows PID $winpid, ",
@@ -117,8 +139,7 @@ sub config_os_child {
 
 sub _get_win32_thread_api {
   if (!$Forks::Super::Job::WIN32_THREAD_API_INITIALIZED) {
-    local $!;
-    undef $!;
+    local $! = undef;
     my $win32_thread_api = 
       # needed for setting CPU affinity
       { "GetCurrentThreadId" =>

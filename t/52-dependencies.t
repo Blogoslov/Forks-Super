@@ -23,11 +23,11 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
 my $pid1 = fork { sub => sub { sleep 5 } };
-my $t = Forks::Super::Time();
+my $t = Forks::Super::Util::Time();
 my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, queue_priority => 10 };
 my $pid3 = fork { sub => sub { }, queue_priority => 5 };
-$t = Forks::Super::Time() - $t;
-ok($t <= 1.5, "quick return ${t}s for queued job, expected <= 1s");
+$t = Forks::Super::Util::Time() - $t;
+ok($t <= 1.5, "fast return ${t}s for queued job, expected <= 1s"); ### 1 ###
 my $j1 = Forks::Super::Job::get($pid1);
 my $j2 = Forks::Super::Job::get($pid2);
 my $j3 = Forks::Super::Job::get($pid3);
@@ -47,14 +47,14 @@ $pid1 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1), "job 1 started");
 $j1 = Forks::Super::Job::get($pid1);
 
-$t = time;
+$t = Forks::Super::Util::Time();
 $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1 };
 $j2 = Forks::Super::Job::get($pid2);
 ok($j1->{state} eq "COMPLETE", "job 1 complete when job 2 starts");
 $pid3 = fork { sub => sub { } };
 $j3 = Forks::Super::Job::get($pid3);
-$t = time - $t;
-ok($t >= 5, "job 2 took 5s to start");
+$t = Forks::Super::Util::Time() - $t;
+ok($t >= 4.85, "job 2 took ${t}s to start expected >5s"); ### 8 ###
 
 ok($j2->{state} eq "ACTIVE", "job 2 still running");
 waitall;
@@ -98,21 +98,3 @@ ok($j4->{start} < $j3->{start}, "low priority job 4 start before job 3");
 if (Forks::Super::CONFIG("alarm")) {
   alarm 0;
 }
-
-__END__
-    $pid1 = fork { cmd => $job1 };
-    $pid2 = fork { cmd => $job2, depend_on => $pid1 };            # put on queue until job 1 is complete
-    $pid4 = fork { cmd => $job4, depend_start => [$pid2,$pid3] }; # put on queue until jobs 2 and 3 have started
-
-
-__END__
--------------------------------------------------------
-
-Feature:	Job start dependencies
-
-		Make the system busy
-		Create a job that will get deferred
-		Create a job with start dependency
-		Start time of 2nd job >= start time of 1st job
-
--------------------------------------------------------
