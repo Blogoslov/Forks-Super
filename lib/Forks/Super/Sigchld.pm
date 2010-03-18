@@ -24,7 +24,7 @@ sub handle_CHLD {
 
 #
 # does re-installing the signal handler prevent child from
-# being reaped in a timely manner? 
+# being reaped in a timely manner?
 # With this block below enabled, Test 40#11 sometimes took 5s
 # instead of 3s ...
 #
@@ -42,7 +42,9 @@ sub handle_CHLD {
   $_SIGCHLD++;
   if ($_SIGCHLD > 1) {
     if ($SIG_DEBUG) {
-      push @CHLD_HANDLE_HISTORY, "synch $$ $_SIGCHLD $_SIGCHLD_CNT $sig\n";
+      use Time::HiRes;
+      my $z = Time::HiRes::gettimeofday() - $^T;
+      push @CHLD_HANDLE_HISTORY, "synch $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
     }
     $_SIGCHLD--;
     return;
@@ -50,7 +52,9 @@ sub handle_CHLD {
 
 
   if ($SIG_DEBUG) {
-    push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig\n";
+    use Time::HiRes;
+    my $z = Time::HiRes::gettimeofday() - $^T;
+    push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
   if ($sig ne "-1" && $DEBUG) {
     debug("Forks::Super::handle_CHLD(): $sig received");
@@ -75,8 +79,11 @@ sub handle_CHLD {
       $Forks::Super::Queue::_REAP = 1;
       debug("Forks::Super::handle_CHLD(): ",
 	    "preliminary reap for $pid status=$status") if $DEBUG;
-      push @CHLD_HANDLE_HISTORY, "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status\n"
-	if $SIG_DEBUG;
+      if ($SIG_DEBUG) {
+	use Time::HiRes;
+	my $z = Time::HiRes::gettimeofday() - $^T;
+	push @CHLD_HANDLE_HISTORY, "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
+      }
 
       $Forks::Super::Queue::_REAP = 1;
       my $j = $Forks::Super::ALL_JOBS{$pid};
@@ -99,7 +106,9 @@ sub handle_CHLD {
     $Forks::Super::Queue::_REAP = 1;
   }
   if ($SIG_DEBUG) {
-    push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig\n";
+    use Time::HiRes;
+    my $z = Time::HiRes::gettimeofday() - $^T;
+    push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
   $_SIGCHLD--;
   Forks::Super::Queue::run_queue() if $nhandled > 0;

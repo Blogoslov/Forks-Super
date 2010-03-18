@@ -139,7 +139,7 @@ $p = Forks::Super::wait;
 ok($p == $pid, "wait on false sub ok");
 ok($?>>8 == 7, "captured correct non-zero status");
 ok($Forks::Super::ALL_JOBS{$pid}->{status} == 7 << 8,
-  $Forks::Super::ALL_JOBS{$pid}->toString() . " what's the deal?");
+   "captured exit status from sub with exit statement");
 
 ##################################################################
 

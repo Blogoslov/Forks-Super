@@ -1,5 +1,5 @@
 #
-# Forks::Super::Job - object representing a task to perform in 
+# Forks::Super::Job - object representing a task to perform in
 #                     a background process
 # See the subpackages for some implementation details
 #
@@ -20,7 +20,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.24';
+our $VERSION = '0.26';
 
 sub new {
   my ($class, $opts) = @_;
@@ -31,6 +31,9 @@ sub new {
   $this->{created} = Forks::Super::Util::Time();
   $this->{state} = 'NEW';
   $this->{ppid} = $$;
+  if (!defined $this->{_is_bg}) {
+    $this->{_is_bg} = 0;
+  }
   if (!defined $this->{debug}) {
     $this->{debug} = $Forks::Super::Debug::DEBUG;
   }
@@ -96,7 +99,7 @@ sub can_launch {
 
 sub _can_launch_delayed_start_check {
   my $job = shift;
-  return 1 if !defined $job->{start_after} || 
+  return 1 if !defined $job->{start_after} ||
     Forks::Super::Util::Time() >= $job->{start_after};
 
   debug('Forks::Super::Job::_can_launch(): ',
@@ -105,7 +108,7 @@ sub _can_launch_delayed_start_check {
   # delay option should normally be associated with queue on busy behavior.
   # any reason not to make this the default ?
   #  delay + fail   is pretty dumb
-  #  delay + block  is like sleep + fork 
+  #  delay + block  is like sleep + fork
 
   $job->{_on_busy} = 'QUEUE' if not defined $job->{on_busy};
   #$job->{_on_busy} = 'QUEUE' if not defined $job->{_on_busy};
@@ -159,8 +162,25 @@ sub count_active_processes {
       $_->{state} eq 'ACTIVE'
 	and $_->{pgid} == $optional_pgid } @ALL_JOBS;
   }
-  return scalar grep { defined $_->{state} 
+  return scalar grep { defined $_->{state}
 			 && $_->{state} eq 'ACTIVE' } @ALL_JOBS;
+}
+
+sub count_alive_processes {
+  my ($count_bg, $optional_pgid) = @_;
+  my @alive = grep { $_->{state} eq 'ACTIVE' ||
+		     $_->{state} eq 'COMPLETE' ||
+		     $_->{state} eq 'DEFERRED' ||
+		     $_->{state} eq 'LAUNCHING' || # rare
+		     $_->{state} eq 'SUSPENDED' # reserved for future use
+		   } @ALL_JOBS;
+  if (!$count_bg) {
+    @alive = grep { $_->{_is_bg} == 0 } @alive;
+  }
+  if (defined $optional_pgid) {
+    @alive = grep { $_->{pgid} == $optional_pgid } @alive;
+  }
+  return scalar @alive;
 }
 
 #
@@ -168,9 +188,8 @@ sub count_active_processes {
 # to do on all operating systems.
 #
 sub get_cpu_load {
-  # check CONFIG about how to get_cpu_load
-  # not implemented
-  return 0.0;
+  return Forks::Super::Job::OS::get_cpu_load();
+  # return 0.0;
 }
 
 
@@ -182,11 +201,9 @@ sub get_cpu_load {
 sub _can_launch {
   # no warnings qw(once);
 
-  # XXX - need better handling of case  $max_proc = "0"
-
   my $job = shift;
   my $max_proc = defined $job->{max_proc}
-    ? $job->{max_proc} : $Forks::Super::MAX_PROC || 0;
+    ? $job->{max_proc} : $Forks::Super::MAX_PROC;
   my $max_load = defined $job->{max_load}
     ? $job->{max_load} : $Forks::Super::MAX_LOAD;
   my $force = defined $job->{max_load} && $job->{force};
@@ -224,6 +241,10 @@ sub _can_launch {
     if $job->{debug};
   return 1;
 }
+
+our ($WIN32_PROC, $WIN32_PROC_PID);
+sub get_win32_proc { return $WIN32_PROC; }
+sub get_win32_proc_pid { return $WIN32_PROC_PID; }
 
 #
 # make a system fork call and configure the job object
@@ -272,7 +293,7 @@ sub launch {
 
   if (Forks::Super::Util::isValidPid($pid)) { # parent
     $ALL_JOBS{$pid} = $job;
-    if (defined $job->{state} && 
+    if (defined $job->{state} &&
 	$job->{state} ne 'NEW' &&
 	$job->{state} ne 'LAUNCHING' &&
 	$job->{state} ne 'DEFERRED') {
@@ -311,11 +332,40 @@ sub launch {
   Forks::Super::init_child() if defined &Forks::Super::init_child;
   $job->config_child;
   if ($job->{style} eq 'cmd') {
-    local $ENV{_FORK_PPID} = $$ if $^O eq "MSWin32";
-    local $ENV{_FORK_PID} = $$ if $^O eq "MSWin32";
+
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
-    my $c1 = system( @{$job->{cmd}} );
-    debug("Exit code of $$ was $c1") if $job->{debug};
+    my $c1;
+    if ($^O eq "MSWin32") {
+      local $ENV{_FORK_PPID} = $$;
+      local $ENV{_FORK_PID} = $$;
+
+      if (1 && Forks::Super::Config::CONFIG("Win32::Process")) {
+
+	# XXX - is this ok for commands with redirected STDIN?
+	my $pid = open my $proch, "-|", join(' ',@{$job->{cmd}});
+	Win32::Process::Open($WIN32_PROC, $pid, 0);
+	$WIN32_PROC_PID = $pid;
+
+	# if desired, this is the place to set OS priority,
+	# process CPU affinity, other OS features.
+	if (defined $job->{cpu_affinity}) {
+	  $WIN32_PROC->SetProcessAffinityMask($job->{cpu_affinity})
+	    || Forks::Super::Job::OS::Win32::set_cpu_affinity_for_win32_process(
+			   $WIN32_PROC, $job->{cpu_affinity});
+	}
+
+	CORE::waitpid $pid, 0;
+	close $proch;
+	$c1 = $?;
+	debug("Exit code of $$ was $c1") if $job->{debug};
+      } else {
+	$c1 = system( @{$job->{cmd}} );
+	debug("Exit code of $$ was $c1") if $job->{debug};
+      }
+    } else {
+      $c1 = system( @{$job->{cmd}} );
+      debug("Exit code of $$ was $c1") if $job->{debug};
+    }
     exit $c1 >> 8;
   } elsif ($job->{style} eq 'exec') {
     local $ENV{_FORK_PPID} = $$ if $^O eq "MSWin32";
@@ -376,7 +426,7 @@ sub getByPid {
   my $id = shift;
   if (is_number($id)) {
     my @j = grep { (defined $_->{pid} && $_->{pid} == $id) ||
-		   (defined $_->{real_pid} && $_->{real_pid} == $id) 
+		   (defined $_->{real_pid} && $_->{real_pid} == $id)
 		 } @ALL_JOBS;
     return $j[0] if @j > 0;
   }
@@ -541,9 +591,9 @@ sub config_parent {
   my $job = shift;
   $job->config_fh_parent;
   if (Forks::Super::Config::CONFIG("getpgrp")) {
-    $job->{pgid} = getpgrp($job->{pid});
+    $job->{pgid} = getpgrp($job->{real_pid});
 
-    # when  timeout =>   or   expiration =>  is used, 
+    # when  timeout =>   or   expiration =>  is used,
     # PGID of child will be set to child PID
     # XXX - tragically this is not always true. Do the parent settings matter
     #       though? Should comment out these lines and test
@@ -582,7 +632,7 @@ sub config_debug_child {
 sub toString {
   my $job = shift;
   my @to_display = qw(pid state create);
-  foreach my $attr (qw(real_pid style cmd exec sub args start end reaped 
+  foreach my $attr (qw(real_pid style cmd exec sub args start end reaped
 		       status closure pgid child_fh queue_priority)) {
     push @to_display, $attr if defined $job->{$attr};
   }
@@ -625,9 +675,9 @@ sub printAll {
   print "ALL JOBS\n";
   print "--------\n";
   foreach my $job
-    (sort {$a->{pid} <=> $b->{pid} || 
+    (sort {$a->{pid} <=> $b->{pid} ||
 	     $a->{created} <=> $b->{created}} @ALL_JOBS) {
-      
+
       print $job->toString(), "\n";
       print "----------------------------\n";
     }
@@ -643,14 +693,13 @@ sub init_child {
 
 __END__
 
-# put POD here
 =head1 NAME
 
 Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.24
+0.26
 
 =head1 SYNOPSIS
 
@@ -695,7 +744,7 @@ be of interest to an end-user. Most of these should not be overwritten.
 
 =item pid
 
-Process ID or job ID. For deferred processes, this will be a 
+Process ID or job ID. For deferred processes, this will be a
 unique large negative number (a job ID). For processes that
 were not deferred, this valud is the process ID of the
 child process that performed this job's task.
@@ -754,7 +803,7 @@ receive a C<SIGCHLD> signal, but have not been reaped.
 
 =item C<REAPED>
 
-For jobs that have been reaped by a call to C<Forks::Super::wait>, 
+For jobs that have been reaped by a call to C<Forks::Super::wait>,
 C<Forks::Super::waitpid>, or C<Forks::Super::waitall>.
 
 =item C<SUSPENDED>
@@ -770,8 +819,8 @@ C<perlvar>. Will be undefined until the job is complete.
 
 =item style
 
-One of the strings C<natural>, C<cmd>, or C<sub>, indicating whether
-the initial C<fork> call returned from the child process or whether
+One of the strings C<natural>, C<cmd>, or C<sub>, indicating
+whether the initial C<fork> call returned from the child process or whether
 the child process was going to run a shell command or invoke a Perl
 subroutine and then exit.
 
@@ -783,7 +832,7 @@ The shell command to run that was supplied in the C<fork> call.
 
 =item args
 
-The name of or reference to CODE to run and the subroutine 
+The name of or reference to CODE to run and the subroutine
 arguments that were supplied in the C<fork> call.
 
 =item _on_busy
@@ -794,7 +843,7 @@ the string values C<block>, C<fail>, or C<queue>.
 
 =item queue_priority
 
-If this job was deferred, the relative priority of this 
+If this job was deferred, the relative priority of this
 job.
 
 =item can_launch
@@ -827,7 +876,7 @@ be killed.
 
 =item os_priority
 
-Value supplied to the C<fork> call about desired 
+Value supplied to the C<fork> call about desired
 operating system priority for the job.
 
 =item cpu_affinity
@@ -851,6 +900,6 @@ Copyright (c) 2009-2010, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.8.8 or,
-at your option, any later version of Perl 5 you may have available. 
+at your option, any later version of Perl 5 you may have available.
 
 =cut

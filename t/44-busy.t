@@ -40,12 +40,12 @@ waitall;
 #######################################################
 
 $Forks::Super::ON_BUSY = "fail";
-$t = Forks::Super::Util::Time();
 $pid1 = fork { sub => $sleepy };  # ok 1/3
 $pid2 = fork { sub => $sleepy };  # ok 2/3
+$t = Forks::Super::Util::Time();
 $pid3 = fork { sub => $sleepy };  # ok 3/3
 $t = Forks::Super::Util::Time() - $t;
-ok($t <= 1.3, "three forks no delay ${t}s expected <=1s");
+ok($t <= 1.3, "three forks no delay ${t}s expected <=1s"); ### 5 ###
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "three successful forks");
 

@@ -1,10 +1,16 @@
+#
+# Forks::Super::Tie::BackgroundArray - an array context value that
+#    is calculated in a background task
+#
+
 package Forks::Super::Tie::BackgroundArray;
 use Forks::Super;
+use Forks::Super::Wait 'WREAP_BG_OK';
 use Carp;
 
 # an array that is evaluated in a child process.
-# the first time an element of the array is dereferenced, 
-# retrieve the output from the child, 
+# the first time an element of the array is dereferenced,
+# retrieve the output from the child,
 # waiting for the child to finish if necessary
 
 
@@ -18,16 +24,19 @@ sub TIEARRAY {
 					     sub => sub {
 					       my @Result = $command_or_code->();
 					       print STDOUT YAML::Dump(@Result);
-					     } };
+					     }, _is_bg => 2 };
   } elsif ($style eq "qx") {
     $self->{command} = $command_or_code;
     $self->{delimiter} = $/;
     $self->{stdout} = "";
     $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
 					     cmd => $command_or_code,
-					     stdout => \$self->{stdout} };
+					     stdout => \$self->{stdout},
+					     _is_bg => 2};
   }
   $self->{job} = Forks::Super::Job::get($self->{job_id});
+  $Forks::Super::LAST_JOB_ID = $self->{job_id};
+  $Forks::Super::LAST_JOB = $self->{job};
   bless $self, $classname;
   return $self;
 }
@@ -35,7 +44,7 @@ sub TIEARRAY {
 sub _retrieve_value {
   my $self = shift;
   if (!$self->{job}->is_complete) {
-    my $pid = Forks::Super::waitpid $self->{job_id}, 0;
+    my $pid = Forks::Super::waitpid $self->{job_id}, WREAP_BG_OK;
     if ($pid != $self->{job}->{real_pid}) {
       carp "Forks::Super::bg_eval: failed to retrieve result from process\n";
       $self->{value_set} = 1;

@@ -1,3 +1,9 @@
+#
+# Forks::Super::Config package - determines what features and
+#         modules are available on the current system
+#
+
+
 package Forks::Super::Config;
 use Forks::Super::Debug qw(debug);
 use Carp;
@@ -56,7 +62,7 @@ sub CONFIG {
   }
 
   # check for OS-dependent Perl functionality
-  if ($module eq "getpgrp" or $module eq "alarm" 
+  if ($module eq "getpgrp" or $module eq "alarm"
       or $module eq "SIGUSR1" or $module eq "getpriority"
       or $module eq "select4") {
 
@@ -113,7 +119,7 @@ sub _CONFIG_Perl_component {
     # but USR1 might still appear in keys %SIG.
 
     my $SIG = join " ", " ", keys %SIG, " ";
-    my $target_sig = defined $Forks::Super::QUEUE_INTERRUPT 
+    my $target_sig = defined $Forks::Super::QUEUE_INTERRUPT
       ? $Forks::Super::QUEUE_INTERRUPT : "";
     $CONFIG{"SIGUSR1"} =
       $SIG =~ / $target_sig / ? 1 : 0;
@@ -137,22 +143,37 @@ sub _CONFIG_Perl_component {
 
 sub _CONFIG_external_program {
   my ($external_program) = @_;
+
   if (-x $external_program) {
     if ($IS_TEST_CONFIG) {
       print STDERR "CONFIG\{$external_program\} enabled\n";
     }
     return $external_program;
-  } elsif (-x "/usr$external_program") {
-    if ($IS_TEST_CONFIG) {
-      print STDERR "CONFIG\{/usr$external_program\} enabled\n";
-    }
-    return $CONFIG{$external_program} = "/usr$external_program";
-  } else {
-    if ($IS_TEST) {
-      print STDERR "CONFIG\{$external_program\} failed\n";
-    }
-    return 0;
   }
+
+  my $xprogram = $external_program;
+  $xprogram =~ s:^/::;
+  my $which = `which $xprogram 2>/dev/null`;   # won't work on all systems
+  $which =~ s/\s+$//;
+  if ($which && -x $which) {
+    if ($IS_TEST_CONFIG) {
+      print STDERR "CONFIG\{$external_program\} enabled\n";
+    }
+    return $CONFIG{$external_program} = $CONFIG{$which} = $which;
+  }
+
+  # poor man's which
+  my @path1 = split /:/, $ENV{PATH};
+  my @path2 = split /;/, $ENV{PATH};
+  foreach my $path (@path1, @path2, ".") {
+    if (-x "$path/$xprogram") {
+      if ($IS_TEST_CONFIG) {
+	print STDERR "CONFIG\{$external_program\} enabled\n";
+      }
+      return $CONFIG{$external_program} = "$path/$xprogram";
+    }
+  }
+  return 0;
 }
 
 1;

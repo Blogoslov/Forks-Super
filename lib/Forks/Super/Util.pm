@@ -2,7 +2,7 @@
 # Forks::Super::Util - useful routines that could be helpful
 #                      to any of the other Forks::Super::Xxx
 #                      packages
-# 
+#
 
 package Forks::Super::Util;
 use Exporter;
@@ -11,7 +11,7 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.24';
+our $VERSION = '0.26';
 our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
@@ -27,13 +27,13 @@ if ($@) {
 }
 
 sub Time {
-  return $Time_HiRes_avail 
+  return $Time_HiRes_avail
     ? scalar Time::HiRes::gettimeofday() : CORE::time();
 }
 
 sub Ctime {
   my $t = Time();
-  return sprintf "%02d:%02d:%02d.%03d: ", 
+  return sprintf "%02d:%02d:%02d.%03d: ",
     ($t/3600)%24, ($t/60)%60, $t%60, ($t*1000)%1000;
 }
 
@@ -120,8 +120,8 @@ sub pause {
 
 #
 # prepend package qualifier from current context to a scalar subroutine name.
-# Useful when passing an unqualified name of a subroutine declared in the 
-# calling package to a Forks::Super or Forks::Super::Xxx method 
+# Useful when passing an unqualified name of a subroutine declared in the
+# calling package to a Forks::Super or Forks::Super::Xxx method
 # that takes a code ref.
 #
 sub qualify_sub_name {

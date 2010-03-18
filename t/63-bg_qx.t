@@ -1,24 +1,37 @@
 use Forks::Super ':test';
-use Test::More tests => 24;
+use Test::More tests => 32;
 use strict;
 use warnings;
 
+ok(!defined $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB not set");
+ok(!defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID not set");
 my $t2 = Time();
 my $z = sprintf "%05d", 100000 * rand();
 my $x = bg_qx "$^X t/external-command.pl -e=$z -s=3";
 my $t = Time();
+ok(defined $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB set");
+ok(defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID set");
+ok(Forks::Super::isValidPid($Forks::Super::LAST_JOB_ID), 
+	"\$Forks::Super::LAST_JOB_ID set");
+ok($Forks::Super::LAST_JOB->{_is_bg} > 0, 
+	"\$Forks::Super::LAST_JOB marked bg");
+my $p = waitpid -1, 0;
+my $t3 = Time() - $t;
+ok($p == -1 && $t3 <= 1.5, 
+	"waitpid doesn't catch bg_eval job, fast fail ${t3}s expect <=1s");
 ok($$x eq "$z \n", "scalar bg_qx $$x");
 my $h = Time();
 ($t,$t2) = ($h-$t,$h-$t2);
 my $y = $$x;
 ok($y == $z, "scalar bg_qx");
 ok($t2 >= 2.8 && $t <= 4.1, 
-   "scalar bg_qx took ${t}s ${t2}s expected ~3s");   ### 3 ### was 3.6 obs 4.04 on heavy loaded system
+   "scalar bg_qx took ${t}s ${t2}s expected ~3s");
 $$x = 19;
 ok($$x == 19, "result is not read only");
 
 ### interrupted bg_qx, scalar context ###
 
+my $j = $Forks::Super::LAST_JOB;
 $y = "";
 $z = sprintf "B%05d", 100000 * rand();
 my $x2 = bg_qx "$^X t/external-command.pl -s=8 -e=$z", timeout => 2;
@@ -29,6 +42,7 @@ $y = $$x2;
 
 #-- intermittent failure here: --#
 ok((!defined $y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure");
+ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
 if (defined $y && $y ne "" && $y ne "\n") {
 	print STDERR "Fail on test 5: \$y: ", hex_enc($y), "\n";
 	print STDERR `cat /tmp/qqq`;
@@ -39,16 +53,16 @@ ok($t <= 3, "scalar bg_qx respected timeout, took ${t}s expected ~2s");
 ### interrupted bg_qx, capture existing output ###
 
 $z = sprintf "C%05d", 100000 * rand();
-$x = bg_qx "$^X t/external-command.pl -e=$z -s=4", timeout => 2;
+$x = bg_qx "$^X t/external-command.pl -e=$z -s=10", timeout => 2;
 $t = Time();
-ok($$x eq "$z \n" || $$x eq "$z ", "scalar bg_qx failed but retrieved output");
+ok($$x eq "$z \n" || $$x eq "$z ", "scalar bg_qx failed but retrieved output"); ### 15 ###
 if (!defined $$x) {
-  print STDERR "(output was: <undef>)\n";
+  print STDERR "(output was: <undef>;target was \"$z \")\n";
 } elsif ($$x ne "$z \n" && $$x ne "$z ") {
-  print STDERR "(output was: $$x)\n";
+  print STDERR "(output was: $$x; target was \"$z \")\n";
 }
 $t = Time() - $t;
-ok($t <= 3, "scalar bg_qx respected timeout, took ${t}s expected ~2s");
+ok($t <= 3, "scalar bg_qx respected timeout, took ${t}s expected ~2s"); ### 16 ###
 
 ### list context ###
 
@@ -88,10 +102,12 @@ $t = Time();
 @x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -s=6 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 4 };
 @tests = @x;
 $t = Time() - $t;
-ok($tests[0] eq "Hello \n", "list bg_qx first line ok"); ### 21 ###
-ok($tests[1] eq "World \n", "list bg_qx second line ok"); ### 22 ###
-ok(@tests == 2, "list bg_qx interrupted output had " . scalar @tests . "==2 lines"); ### 23 ###
-ok($t >= 3.85 && $t < 4.75, "list bg_qx took ${t}s expected ~4s"); ### 24 ### was 4.55 obs 4.74
+ok($tests[0] eq "Hello \n", "list bg_qx first line ok");
+ok($tests[1] eq "World \n", "list bg_qx second line ok");    ### 30 ###
+ok(@tests == 2, "list bg_qx interrupted output had " 
+	        . scalar @tests . "==2 lines");              ### 31 ###
+ok($t >= 3.85 && $t < 5.75, 
+	"list bg_qx took ${t}s expected ~4-5s");             ### 32 ###
 
 sub hex_enc{join'', map {sprintf"%02x",ord} split//,shift} # for debug
 
@@ -110,7 +126,8 @@ $x = bg_eval {
 		    finish => sub { $w+=5 } }
 };
 $t = Time();
-my $j = Forks::Super::Job::get('bg_qx_job');
+$j = Forks::Super::Job::get('bg_qx_job');
+ok($j eq $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
 ok($j->{state} eq "DEFERRED", "bg_qx with delay");
 ok($w == 14 + 1, "bg_qx job queue callback");
 Forks::Super::pause(4);

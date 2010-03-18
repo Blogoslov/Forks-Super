@@ -11,38 +11,47 @@ use warnings;
 # the "REAPED" status.
 #
 
-sub child_signal_hijacker {
-  my %complete;
+my $old_sig_chld = delete $SIG{CHLD};
+$SIG{CHLD} = \&child_signal_hijacker;
+*Forks::Super::handle_CHLD = *child_signal_hijacker;
 
-  $SIGNAL::TIME = Forks::Super::Util::Time();
-  for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
+my $_LOCK = 0;  # use same synchronization technique as F::S::Sigchld
+sub child_signal_hijacker {
+  $_LOCK++;
+  if ($_LOCK>1) {
+    $_LOCK--;
+    return;
+  }
+
+  my %complete;
+  my $signal_time = Forks::Super::Util::Time();
+  for my $cj (grep { $_->is_complete } @Forks::Super::ALL_JOBS) {
     $complete{$cj}++;
   }
   Forks::Super::Sigchld::handle_CHLD(@_);
-  %LAST::COMPLETE = ();
+
   for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
     unless (delete $complete{$cj}) {
       #print "NEW COMPLETE JOB: ", $cj->toString(), "\n";
+      $SIGNAL::TIME = $signal_time;
       $LAST::COMPLETE = $cj;
       $LAST::COMPLETE{$cj}++;
     }
   }
+  $_LOCK--;
+  return;
 }
-
-my $old_sig_chld = delete $SIG{CHLD};
-$SIG{CHLD} = \&child_signal_hijacker;
-
 
 my $pid = fork();
 if (defined $pid && $pid == 0) {
   sleep 3;
   exit 0;
 }
-ok(defined $pid && isValidPid($pid), "valid pid $pid");
+ok(defined $pid && isValidPid($pid), "$$\\valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 my $t = Forks::Super::Util::Time();
-sleep 6;   # ACK! sleep can be interrupted by CHLD signal!
+sleep 6;   # sleep can be interrupted by SIGCHLD
 $t = Forks::Super::Util::Time() - $t;
 SKIP: {
   if ($^O eq "MSWin32") {
@@ -56,9 +65,13 @@ SKIP: {
   skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq "MSWin32";
 
   # XXXXXX - pass test (1) and fail test (2) would be ok
-  ok(defined $LAST::COMPLETE{$j}, "job caught in SIGCHLD handler/$j"); ### 5 ###
-  ok($LAST::COMPLETE eq $j, "job caught in SIGCHLD handler/$LAST::COMPLETE"); ### 6 ###
-  ok(abs($SIGNAL::TIME - $j->{end}) < 2, "short delay in SIGCHLD handler");
+  ok(defined $LAST::COMPLETE{$j}, 
+     "job caught in SIGCHLD handler/$j/" . $j->{pid}); ### 5 ###
+  ok($LAST::COMPLETE eq $j, 
+     "job caught in SIGCHLD handler/$LAST::COMPLETE/"
+    . $LAST::COMPLETE->{pid});                         ### 6 ###
+  my $tt = $SIGNAL::TIME - $j->{end};
+  ok(abs($tt) < 2, "short delay ${tt}s in SIGCHLD HANDLER expected <2s");
 }
 sleep 1;
 my $p = wait;
@@ -66,6 +79,7 @@ ok($pid == $p, "wait reaped correct process");
 ok($j->{state} eq "REAPED", "reaped process has REAPED state");
 ok($j->{reaped} - $j->{end} > 0, "reap occurred after job completed");
 #print $j->toString();
+%LAST::COMPLETE = ();
 
 #######################################################
 
@@ -88,12 +102,17 @@ SKIP: {
   skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq "MSWin32";
 
   # XXXXXX pass test (1) and fail test (2) would be ok
-  ok(defined $LAST::COMPLETE{$j}, "job in SIGCHLD handler/$j"); ### 15 ###
-  ok($LAST::COMPLETE eq $j, "job in SIGCHLD handler/$LAST::COMPLETE"); ### 16 ###
-  ok(abs($SIGNAL::TIME - $j->{end}) < 2, "short delay in SIGCHLD handler");
+  ok(defined $LAST::COMPLETE{$j}, 
+     "job in SIGCHLD handler/$j/" . $j->{pid});    ### 15 ###
+  ok($LAST::COMPLETE eq $j,
+     "job in SIGCHLD handler/$LAST::COMPLETE/"
+     . $LAST::COMPLETE->{pid});                    ### 16 ###
+  my $tt = $SIGNAL::TIME - $j->{end};
+  ok(abs($tt) < 2, "short delay ${tt}s in SIGCHLD handler, expected <2s");
 }
 $p = wait;
 ok($pid == $p, "wait reaped correct job");
 ok($j->{state} eq "REAPED", "job state changed to REAPED in wait");
-ok($j->{reaped} - $j->{end} > 1,
-	"reaped at $j->{reaped}, ended at $j->{end}");
+my $tt = $j->{reaped} - $j->{end};
+ok($tt > 1, 
+   "reaped at $j->{reaped}, ended at $j->{end} ${tt}s expected >1s");

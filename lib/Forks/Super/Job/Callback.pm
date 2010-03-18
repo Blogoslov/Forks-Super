@@ -58,7 +58,7 @@ sub preconfig_callbacks {
   }
   foreach my $callback_type (qw(finish start queue fail)) {
     if (defined $job->{callback}{$callback_type}) {
-      $job->{"_callback_" . $callback_type} 
+      $job->{"_callback_" . $callback_type}
 	= qualify_sub_name($job->{callback}{$callback_type});
       if ($job->{debug}) {
 	debug("Forks::Super::Job: registered callback type $callback_type");

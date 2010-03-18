@@ -1,5 +1,15 @@
 Revision history for Forks-Super
 
+0.26    2010-03-18
+	Built OS::Win32 and OS::Linux for os-specific system functions.
+        OS::Linux includes first "conditional Inline::C code".
+        Broke up some long running unit tests into pieces.
+
+0.25    2010-03-10
+        $Forks::Super::LAST_JOB,$Forks::Super::LAST_JOB_ID capture job state in
+        bg_eval/bg_qx calls. Special handling for bg_eval/bg_qx jobs in waitpid
+        Timeout in MSWin32 will now (maybe) kill the grandchildren too.
+
 0.24    2010-03-05
         Fix cleanup of IPC files.
 

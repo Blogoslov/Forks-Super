@@ -1,3 +1,8 @@
+#
+# Forks::Super::Debug package - manage Forks::Super module-specific
+#         debugging messages
+#
+
 package Forks::Super::Debug;
 use Forks::Super::Util;
 use IO::Handle;
@@ -14,7 +19,7 @@ our ($DEBUG, $DEBUG_fh);
 our $VERSION = $Forks::Super::Util::VERSION;
 
 open($DEBUG_fh, '>&STDERR')
-  or $DEBUG_fh = *STDERR 
+  or $DEBUG_fh = *STDERR
   or carp "Forks::Super: Debugging not available in module!\n";
 $DEBUG_fh->autoflush(1);
 $DEBUG = $ENV{FORKS_SUPER_DEBUG} || "0";

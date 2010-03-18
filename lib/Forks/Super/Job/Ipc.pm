@@ -7,7 +7,7 @@
 #     fork { stdin =>   $input | \$input | \@input }
 #     fork { stdout => \$output }
 #     fork { stderr => \$error }
-#   
+#
 #
 
 package Forks::Super::Job::Ipc;
@@ -21,7 +21,7 @@ use base 'Exporter';
 use strict;
 use warnings;
 
-our @EXPORT = qw(preconfig_fh config_fh_parent 
+our @EXPORT = qw(preconfig_fh config_fh_parent
 		 config_fh_child config_cmd_fh_child
 		 close_fh);
 our $VERSION = $Forks::Super::Debug::VERSION;
@@ -100,24 +100,24 @@ sub preconfig_fh {
   # choose file names -- if sockets are used and successfully set up,
   # the files will not be created.
   if ($config->{in}) {
-    if (defined $config->{stdin} && $job->{style} ne "cmd" 
+    if (defined $config->{stdin} && $job->{style} ne "cmd"
 	&& $job->{style} ne "exec") {
 
       $config->{f_in} = '__scalar__';
     } else {
       $config->{f_in} = _choose_fh_filename(purpose => "STDIN", job => $job);
-      debug("Using $config->{f_in} as shared file for child STDIN") 
+      debug("Using $config->{f_in} as shared file for child STDIN")
 	if $job->{debug};
     }
   }
   if ($config->{out}) {
     $config->{f_out} = _choose_fh_filename(purpose => "STDOUT", job => $job);
-    debug("Using $config->{f_out} as shared file for child STDOUT") 
+    debug("Using $config->{f_out} as shared file for child STDOUT")
       if $job->{debug};
   }
   if ($config->{err}) {
     $config->{f_err} = _choose_fh_filename(purpose => "STDERR", job => $job);
-    debug("Using $config->{f_err} as shared file for child STDERR") 
+    debug("Using $config->{f_err} as shared file for child STDERR")
       if $job->{debug};
   }
 
@@ -152,8 +152,8 @@ sub collect_output {
     } else {
       $$stdout = join'', Forks::Super::read_stdout($pid);
     }
-    if ($job->{debug}) { 
-      debug("Job $pid loaded ", length($$stdout), 
+    if ($job->{debug}) {
+      debug("Job $pid loaded ", length($$stdout),
 	    " bytes from stdout into $stdout");
     }
   }
@@ -167,8 +167,8 @@ sub collect_output {
     } else {
       $$stderr = join'', Forks::Super::read_stderr($pid);
     }
-    if ($job->{debug}) { 
-      debug("Job $pid loaded ", length($$stderr), 
+    if ($job->{debug}) {
+      debug("Job $pid loaded ", length($$stderr),
 	    " bytes from stderr into $stderr");
     }
   }
@@ -192,7 +192,7 @@ sub preconfig_fh_sockets {
       delete $config->{sockets};
       return;
     } elsif ($job->{debug}) {
-      debug("created socket pair/$config->{csock}:", 
+      debug("created socket pair/$config->{csock}:",
 	    CORE::fileno($config->{csock}),
 	    "/$config->{psock}:",CORE::fileno($config->{psock}));
     }
@@ -202,7 +202,7 @@ sub preconfig_fh_sockets {
 	delete $config->{sockets};
 	return;
       } elsif ($job->{debug}) {
-	debug("created socket pair/$config->{csock2}:", 
+	debug("created socket pair/$config->{csock2}:",
 	      CORE::fileno($config->{csock2}),
 	      "/$config->{psock2}:",CORE::fileno($config->{psock2}));
       }
@@ -217,21 +217,21 @@ sub _create_socket_pair {
   my ($s_child, $s_parent);
   local $! = undef;
   if (Forks::Super::Config::CONFIG("IO::Socket")) {
-    ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_UNIX(), 
+    ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_UNIX(),
 			      Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     if (!(defined $s_child && defined $s_parent)) {
       warn "Forks::Super::_create_socket_pair: ",
 	"IO::Socket->socketpair(AF_UNIX) failed. Trying AF_INET\n";
       ($s_child, $s_parent) = IO::Socket->socketpair(Socket::AF_INET(),
 				Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
-    } 
+    }
   } else {
-    my $z = socketpair($s_child, $s_parent, Socket::AF_UNIX(), 
+    my $z = socketpair($s_child, $s_parent, Socket::AF_UNIX(),
 		       Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     if ($z == 0) {
       warn "Forks::Super::_create_socket_pair: ",
 	"socketpair(AF_UNIX) failed. Trying AF_INET\n";
-      $z = socketpair($s_child, $s_parent, Socket::AF_INET(), 
+      $z = socketpair($s_child, $s_parent, Socket::AF_INET(),
 		      Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
       if ($z == 0) {
 	undef $s_child;
@@ -267,7 +267,7 @@ sub _choose_fh_filename {
   }
   if (Forks::Super::Config::CONFIG("filehandles")) {
     $FH_COUNT++;
-    my $file = sprintf ("%s/%s%03d", $Forks::Super::FH_DIR, 
+    my $file = sprintf ("%s/%s%03d", $Forks::Super::FH_DIR,
 			$basename, $FH_COUNT);
 
     if ($^O eq "MSWin32") {
@@ -303,7 +303,7 @@ sub _identify_shared_fh_dir {
   my @search_dirs = ($ENV{"HOME"}, $ENV{"PWD"});
   if ($^O =~ /Win32/) {
     push @search_dirs, "C:/Temp", $ENV{"TEMP"}, "C:/Windows/Temp",
-      "C:/Winnt/Temp", "D:/Windows/Temp", "D:/Winnt/Temp", 
+      "C:/Winnt/Temp", "D:/Windows/Temp", "D:/Winnt/Temp",
       "E:/Windows/Temp", "E:/Winnt/Temp", ".";
   } else {
     unshift @search_dirs, ".";
@@ -366,7 +366,7 @@ sub _set_fh_dir {
 
 END {
   if ($$ == ($Forks::Super::MAIN_PID || $MAIN_PID)) { # FSJ::Ipc END {}
-    if (defined $Forks::Super::FH_DIR 
+    if (defined $Forks::Super::FH_DIR
 	&& 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
       END_cleanup();
     }
@@ -385,7 +385,7 @@ sub _trap_signals {
   }
   foreach my $sig (qw(INT TERM HUP QUIT PIPE ALRM)) {
     $SIG_OLD{$sig} = $SIG{$sig};
-    $SIG{$sig} = sub { 
+    $SIG{$sig} = sub {
       my $SIG=shift;
       if ($DEBUG) {
 	debug("trapping: $SIG");
@@ -393,7 +393,7 @@ sub _trap_signals {
       _untrap_signals();
 
       print STDERR "$$ received $SIG -- cleaning up\n";
-      
+
       exit 1;
     }
   }
@@ -447,23 +447,13 @@ sub END_cleanup {
 	#print STDERR "Delete $ipc_file not ok\n";
 	warn "Forks::Super::END_cleanup: ",
 	  "error disposing of ipc file $ipc_file: $z/$!\n";
-
-	# XXXXXX
-	#my %job_data = @{$FH_FILES{$ipc_file}};
-	#foreach my $key (sort keys %job_data) {
-	#  if ($key eq "job") {
-	#    print STDERR "\t", $job_data{"job"}->toString(), "\n";
-	#  } else {
-	#    print STDERR "\t$key  ==>  $job_data{$key}\n";
-	#  }
-	#}	
       } else {
 	# in MSWin32, delete can fail but "mark for delete", meaning that
 	# the OS will delete the files when the program is done ...
       }
     }
   }
-  
+
   if (0 == scalar keys %FH_FILES && defined $FH_DIR_DEDICATED) {
     sleep 2 if $^O ne "MSWin32";
     exit 0 if CORE::fork();
@@ -476,9 +466,10 @@ sub END_cleanup {
       sleep 5 if $^O ne "MSWin32";
       $z = rmdir $Forks::Super::FH_DIR;
     }
-    if (!$z && -d $Forks::Super::FH_DIR 
+    if (!$z && -d $Forks::Super::FH_DIR
 	    && 0 < scalar glob("$Forks::Super::FH_DIR/.nfs*")) {
 
+      # Observed these files on Linux running from NSF mounted filesystem
       # .nfsXXX files are usually temporary (~30s) but hard to kill
       for (my $i=0; $i<10; $i++) {
 	sleep 5;
@@ -520,7 +511,7 @@ sub config_fh_parent_stdin {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{in} && $fh_config->{sockets} 
+  if ($fh_config->{in} && $fh_config->{sockets}
       && !defined $fh_config->{stdin}) {
     $fh_config->{s_in} = $fh_config->{psock};
     $job->{child_stdin} = $Forks::Super::CHILD_STDIN{$job->{real_pid}}
@@ -546,7 +537,8 @@ sub config_fh_parent_stdin {
 
     } else {
       warn "Forks::Super::Job::config_fh_parent(): ",
-	"could not open filehandle to write child STDIN: $!\n";
+	"could not open filehandle to write child STDIN (to ",
+	  $fh_config->{f_in}, "): $!\n";
     }
   }
   return;
@@ -565,7 +557,7 @@ sub config_fh_parent_stdout {
 	  CORE::fileno($fh_config->{s_out})) if $job->{debug};
 
   } elsif ($fh_config->{out} and defined $fh_config->{f_out}) {
-    # creation of $fh_config->{f_out} may be delayed. 
+    # creation of $fh_config->{f_out} may be delayed.
     # don't panic if we can't open it right away.
     my ($try, $fh);
     my $_msg = "";
@@ -584,7 +576,7 @@ sub config_fh_parent_stdout {
 
 	last;
       } else {
-	$_msg .= sprintf"%d: %s Failed to open f_out=%s: %s\n", 
+	$_msg .= sprintf"%d: %s Failed to open f_out=%s: %s\n",
 	  $$, Forks::Super::Util::Ctime(), $fh_config->{f_out}, $!;
 	Forks::Super::Util::pause();
 	Time::HiRes::sleep(0.1 * $try);
@@ -594,12 +586,13 @@ sub config_fh_parent_stdout {
       if ($DEBUG) {
 	Carp::cluck "Forks::Super::Job::config_fh_parent(): \n    ",
 	    "could not open filehandle to read child STDOUT from ",
-	      $fh_config->{f_out}, "\n     for ", 
+	      $fh_config->{f_out}, "\n     for ",
 		$job->toString(),
 		  ": $!\n$_msg\n";
       } else {
 	warn "Forks::Super::Job::config_fh_parent(): ",
-	  "could not open filehandle to read child STDOUT: $!\n";
+	  "could not open filehandle to read child STDOUT (from ",
+	  $fh_config->{f_out}, "): $!\n";
       }
     }
   }
@@ -619,7 +612,7 @@ sub config_fh_parent_stderr {
 
   if ($fh_config->{err} && $fh_config->{sockets}) {
 
-    $fh_config->{s_err} = $fh_config->{s_out} 
+    $fh_config->{s_err} = $fh_config->{s_out}
       ? $fh_config->{psock2} : $fh_config->{psock};
     $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
       = $Forks::Super::CHILD_STDERR{$job->{pid}} = $fh_config->{s_err};
@@ -638,7 +631,7 @@ sub config_fh_parent_stderr {
     for ($try=1; $try<=11; $try++) {
       if ($try <= 10 && open($fh, '<', $fh_config->{f_err})) {
 	debug("Opened child STDERR in parent on try #$try") if $job->{debug};
-	$job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}} 
+	$job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
 	  = $Forks::Super::CHILD_STDERR{$job->{pid}} = $fh;
 
 	debug("Setting up link to $job->{pid} stderr in $fh_config->{f_err}")
@@ -656,12 +649,13 @@ sub config_fh_parent_stderr {
       if ($DEBUG) {
 	Carp::cluck "Forks::Super::Job::config_fh_parent(): \n    ",
 	    "could not open filehandle to read child STDERR from ",
-	      $fh_config->{f_err}, "\n    for ", 
+	      $fh_config->{f_err}, "\n    for ",
 		$job->toString(),
 		  ": $!\n";
       } else {
 	warn "Forks::Super::Job::config_fh_parent(): ",
-	  "could not open filehandle to read child STDERR: $!\n";
+	  "could not open filehandle to read child STDERR (from ",
+	    $fh_config->{f_err}, "): $!\n";
       }
     }
   }
@@ -706,7 +700,7 @@ sub config_fh_child_stdin {
       warn "Forks::Super::Job::config_fh_child_stdin(): ",
 	"could not attach child STDIN to input sockethandle: $!\n";
     }
-    debug("Opening ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN") 
+    debug("Opening ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
       if $job->{debug};
   } elsif ($fh_config->{in} && defined $fh_config->{stdin}) {
     close STDIN;
@@ -717,7 +711,7 @@ sub config_fh_child_stdin {
       debug("Opening scalar value as child STDIN") if $job->{debug};
     }
   } elsif ($fh_config->{in} && $fh_config->{f_in}) {
-    # creation of $fh_config->{f_in} may be delayed. 
+    # creation of $fh_config->{f_in} may be delayed.
     # don't panic if we can't open it right away.
     my ($try, $fh);
     debug("Opening ", $fh_config->{f_in}, " in child STDIN") if $job->{debug};
@@ -820,7 +814,7 @@ sub config_fh_child_stderr {
     if (open(STDERR, ">&" . CORE::fileno($fh_config->{$fileno_arg}))) {
       *STDERR->autoflush(1);
       debug("Opening ",*STDERR,"/",CORE::fileno(STDERR),
-	    " in child STDERR") if $job->{debug};      
+	    " in child STDERR") if $job->{debug};
     } else {
       warn "Forks::Super::Job::config_fh_child_stderr(): ",
 	"could not attach STDERR to child error sockethandle: $!\n";
@@ -929,7 +923,7 @@ sub config_cmd_fh_child {
       }
     }
 
-    # the external command must not be launched until the 
+    # the external command must not be launched until the
     # input file, if any, has been created.
 
     my $try;
@@ -969,14 +963,14 @@ sub close_fh {
   }
   foreach my $p ($job->{real_pid}, $job->{pid}, $job->{name}) {
     next if !defined $p;
-    if (defined $Forks::Super::CHILD_STDIN{$p}) { 
+    if (defined $Forks::Super::CHILD_STDIN{$p}) {
       delete $Forks::Super::CHILD_STDIN{$p}
     }
-    if (defined $Forks::Super::CHILD_STDOUT{$p}) { 
-      delete $Forks::Super::CHILD_STDOUT{$p} 
+    if (defined $Forks::Super::CHILD_STDOUT{$p}) {
+      delete $Forks::Super::CHILD_STDOUT{$p}
     }
-    if (defined $Forks::Super::CHILD_STDERR{$p}) { 
-      delete $Forks::Super::CHILD_STDERR{$p} 
+    if (defined $Forks::Super::CHILD_STDERR{$p}) {
+      delete $Forks::Super::CHILD_STDERR{$p}
     }
   }
 }

@@ -42,7 +42,7 @@ sub get_default_priority {
 
 sub init {
   $QUEUE_MONITOR_FREQ = 30;
-  tie $Forks::Super::QUEUE_INTERRUPT, 'Forks::Super::Tie::Enum', 
+  tie $Forks::Super::QUEUE_INTERRUPT, 'Forks::Super::Tie::Enum',
     ('', keys %SIG);
   $Forks::Super::QUEUE_INTERRUPT = 'USR1' if grep {/USR1/} keys %SIG;
   $INHIBIT_QUEUE_MONITOR = $^O eq "MSWin32";
@@ -54,7 +54,7 @@ sub init_child {
     $SIG{'USR2'} = 'DEFAULT';
   }
   undef $QUEUE_MONITOR_PID;
-  if ($Forks::Super::QUEUE_INTERRUPT 
+  if ($Forks::Super::QUEUE_INTERRUPT
       && Forks::Super::Config::CONFIG("SIGUSR1")) {
     $SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT';
   }
@@ -78,7 +78,7 @@ sub _launch_queue_monitor {
   return unless Forks::Super::Config::CONFIG("SIGUSR1");
   return if defined $QUEUE_MONITOR_PID;
   return if $QUEUE_MONITOR_LAUNCHED++;
-  
+
   $OLD_SIG = $SIG{$Forks::Super::QUEUE_INTERRUPT};
   $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::Queue::check_queue;
   $QUEUE_MONITOR_PPID = $$;
@@ -97,7 +97,7 @@ sub _launch_queue_monitor {
 	    "FREQ $QUEUE_MONITOR_FREQ ");
     }
 
-    defined &Forks::Super::init_child 
+    defined &Forks::Super::init_child
       ? Forks::Super::init_child() : init_child();
     $SIG{QUIT} = sub { exit 0 }; # 'DEFAULT';
     for (;;) {
@@ -179,7 +179,7 @@ sub _check_for_reap {
 sub run_queue {
   my ($ignore) = @_;
   return if @QUEUE <= 0;
-  # XXX - run_queue from child ok if $Forks::Super::CHILD_FORK_OK 
+  # XXX - run_queue from child ok if $Forks::Super::CHILD_FORK_OK
   return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
   queue_job();
   return if @QUEUE <= 0;
@@ -221,7 +221,7 @@ sub run_queue {
 	}
 	my $pid = $job->launch();
 	if ($pid == 0) {
-	  if (defined $job->{sub} or defined $job->{cmd} 
+	  if (defined $job->{sub} or defined $job->{cmd}
 	      or defined $job->{exec}) {
 	    $_LOCK--;
 	    croak "Forks::Super::run_queue(): ",
@@ -245,8 +245,8 @@ sub run_queue {
 
 #
 # SIGUSR1 handler. A background process will send periodic USR1^H^H^H^H
-# $Forks::Super::QUEUE_INTERRUPT signals back to this process. On 
-# receipt of these signals, this process should examine the queue. 
+# $Forks::Super::QUEUE_INTERRUPT signals back to this process. On
+# receipt of these signals, this process should examine the queue.
 # This will keep us from ignoring the queue for too long.
 #
 # Note this automatic housecleaning is not available on some OS's
@@ -259,50 +259,3 @@ sub check_queue {
 }
 
 1;
-
-__END__
-
-_head1 NAME
-
-Forks::Super::Queue - manage deferred background tasks for L<Forks::Super>
-
-_head1 SYNOPSIS
-
-    use Forks::Super;
-    Forks::Super::Queue::run_queue();
-
-_head1 DESCRIPTION
-
-Occassionally background tasks that are intended to run from the
-L<Forks::Super> module must wait before they can be run (see
-L<"Deferred processes" in Forks::Super|Forks::Super/"Deferred processes">).
-The Forks::Super::Queue module contains functions and package variables
-to manage the collection of deferred processes.
-
-Under normal operation, the Forks::Super module will periodically
-call C<Forks::Super::Queue::run_queue()> and remove jobs from the queue,
-if possible. In situations where it does make sense for the Forks::Super
-user to invoke the C<run_queue> function, it can also be done implicitly
-through the L<Forks::Super::pause|Forks::Super/Forks::Super::pause($delay)>
-method. See the C<pause> function in Forks::Super and the
-L<"Special tips for Windows systems"|Forks::Super/"Special tips for Windows systems">.
-
-_head1 FUNCTIONS
-
-_over 4
-
-_item C<Forks::Super::Queue::run_queue()>
-
-Instructs this module to examine jobs in the queue
-and to dispatch the jobs that are eligible to launch.
-
-Normally, the Forks::Super module user will not need
-to call this method expicitly.
-
-_back
-
-_head1 SEE ALSO
-
-C<< L<Forks::Super> >>, C<< L<Forks::Super::Job> >>
-
-_cut

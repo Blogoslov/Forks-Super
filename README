@@ -1,5 +1,5 @@
 
-Forks::Super version 0.24
+Forks::Super version 0.26
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -69,8 +69,15 @@ The typical installation recipe
 usually works. The unit tests assume they are
 running on a moderately loaded system; intermittent
 failures are more likely on a heavily loaded
-system. Running "make test" will often work
-if you run it again.
+system. If "make test" fails, it will often work
+if you run it a second time.
+
+Instead of "make test", you could also say
+
+   make fasttest
+
+which will test the Forks::Super module, using the
+Forks::Super module to run the tests in parallel.
 
 
 DEPENDENCIES
@@ -81,7 +88,6 @@ all included with the standard distribution:
     Carp
     Exporter
     POSIX
-    File::Path
     IO::Handle
 
 Forks::Super recommends and will make use of the following 
@@ -101,6 +107,8 @@ are not installed:
     Win32          [Windows]
     Win32::API     [Windows]
     BSD::Process::Affinity [BSD]
+    Inline, Inline::C
+
 
 WINDOWS
 

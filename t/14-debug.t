@@ -6,8 +6,8 @@ use warnings;
 # test global and job-specific debugging settings.
 # longer PAUSE means fewer spurious _reap messages
 # and smaller chance of false negative result
-if ($Forks::Super::Util::DEFAULT_PAUSE < 0.333333) {
-    $Forks::Super::Util::DEFAULT_PAUSE = 0.3333333;
+if ($Forks::Super::Util::DEFAULT_PAUSE < 0.5) {
+    $Forks::Super::Util::DEFAULT_PAUSE = 0.5;
 }
 
 my $debug_file = "t/out/debug1-$^O-$].$$";

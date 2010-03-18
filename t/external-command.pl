@@ -23,6 +23,16 @@
 #
 #   $^X t/external-command.pl -o=t/out/test -e=Hello, -e=Whirled -p -x=0
 #
+# This script is used in tests:
+#      t/11-to-command.t
+#      t/13-to-exec.t
+#      t/40-timeout.t
+#      t/42-filehandle.t
+#      t/45-userbusy.t
+#      t/60-os.t
+#      t/63-bg_qx.t
+#
+
 
 use strict;
 
@@ -59,6 +69,8 @@ foreach my $arg (@ARGV) {
   } elsif ($key eq "--pid" or $key eq "-P") {
     my $pid = $^O eq "MSWin32" ? $ENV{_FORK_PID} : $$;
     print $pid, " ";
+  } elsif ($key eq "--winpid" or $key eq "-W") {
+    print $$, " ";
   } elsif ($key eq "--sleep" or $key eq "-s") {
     sleep $val || 1;
   } elsif ($key eq "--exit" or $key eq "-x") {

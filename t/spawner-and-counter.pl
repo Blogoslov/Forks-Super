@@ -33,4 +33,3 @@ while ($counter_count >= 0) {
   # sleep 1 if $counter_count < 7; # give heavily loaded systems a better chance to pass
 }
 close OUT;
-

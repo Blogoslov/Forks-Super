@@ -38,7 +38,7 @@ Possible TODOs:
 		lowest numbered CPU's should be used by this process.
                 </OLD POD>
 
-                _X_ linux [where /bin/taskset is avail]
+                _X_ linux
 		_X_ MSWin32
 		___ BSD
 		_X_ Cygwin
@@ -48,14 +48,12 @@ Possible TODOs:
 		___ OS X
 		___ any others ?
 
-    _x_ Fully support changing process priority in Windows. This can be
-	done with Win32::API and SetThreadPriority method. Takes on values
-	between -2 and 2, or between -7 and 6 "if the thread has the
-	REALTIME_PRIORITY_CLASS base class", whatever that is. (Oh, looks
-	like we can use GetPriorityClass to figure out what it is).
-        (See http://msdn.microsoft.com/en-us/library/ms686277(VS.85).aspx).
+    ___ All the work on creating a portable front-end to setting CPU
+	affinity would make a great Sys::CpuAffinity module
 
-	Support for launching tasks on remote hosts (maybe that's beyond
+	Something to portably count the number of cpu's is good, too.
+
+    ___ Support for launching tasks on remote hosts (maybe that's beyond
         the scope of this module) See Paralell::PVM?
 
     _x_ fork { retries => $ntries }
@@ -64,7 +62,7 @@ Possible TODOs:
 		it's not creating child processes.
 		_X_ implement
 		___ test
-		___ document - failed CORE::fork calls usually indicate
+		_X_ document - failed CORE::fork calls usually indicate
                     some bad system condition (too many processes, out
                     of memory/swap space), so expectations of recovery
                     shouldn't be too high
@@ -83,7 +81,7 @@ Possible TODOs:
 
     ___	Make CONFIG{filehandles} meaningful
 
-    ___	Defect to fix, $Forks::Super::MAX_PROC = "0"
+    _X_	Defect to fix, $Forks::Super::MAX_PROC = "0"
 
     _X_	Decompose source into manageable modules
 
@@ -93,11 +91,30 @@ Possible TODOs:
 		Forks::Super::Uninterruptable
 		Forks::Super::Depend
 
+    ___	Forks::Super::Job::OS::XXX modules to implement
+		set_os_priority
+		    for Unixish sys (incl Cygwin) setpriority() does the job
+		set_cpu_affinity
+		    this is different for every OS
+		get_cpu_load
+		    most Unixes have uptime(1)
+		    the specific C system calls are different
+	for different kinds of systems.
+	Also
+		get_cpu_load
+
+        _x_ OS::Win32
+        _x_ OS::Linux -- first use of "conditional" Inline::C code
+	___ OS::BSD
+	___ OS::Solaris
+	___ OS::Aix
+	___ OS::Irix
+
     ___	kill_all($signal), kill($signal, @jobs)
 
 	Deliver a signal to all jobs or to a list of jobs.
 
-    ___ in bg_eval and bg_qx, set 
+    _X_ in bg_eval and bg_qx, set 
 	$Forks::Super::LAST_JOB_ID, $Forks::Super::LAST_JOB to access
 	job information of a job launched from bg_eval or bg_qx.
 	Bash users will recognize the similarity of capturing the
@@ -106,6 +123,13 @@ Possible TODOs:
 
 	From there you can get state information, exit status,
 	run times, or all kinds of good information about the job.
+
+        !!! Forks::Super::waitpid should NOT return the pid
+	of a job launched by bg_eval/bg_qx.
+
+        _X_ implement
+        _X_ test
+        _X_ doc
 
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. See what
@@ -122,3 +146,9 @@ Possible TODOs:
 	$Forks::Super::Queue::QUEUE_INTERRUPT can be (additionally) tied
 	to restart queue monitor and reinstall signal handler on update
 
+    ___ A JSON-compatible bg_eval function for cases where JSON is
+	available and YAML isn't
+
+    ___ Better EXPORTS documentation in pod.
+
+    ___ Test needed, Win32+cmd, See Job.pm:344

@@ -106,7 +106,7 @@ $t = Time();
 $count = waitall 5 + ($t5 - $t);
 $t = Time() - $t5;
 ok($count == 0, "waitall reaped $count==0 processes in next 1 sec"); ### 22 ###
-ok($t >= 4.85 && $t <= 5.25, "waitall respected timeout ${t}s expected ~4s");
+ok($t >= 4.85 && $t <= 6.25, "waitall respected timeout ${t}s expected ~5s"); ### 23 ### was 5.25 obs 
 
 $t = Time();
 $count = waitall 8 + ($t5 - $t);

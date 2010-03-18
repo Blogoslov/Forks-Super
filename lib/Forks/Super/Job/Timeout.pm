@@ -47,9 +47,14 @@ sub config_timeout_child {
     return;
   }
 
-  # if possible in this OS, establish a new process group for
+  # Un*x systems - try to establish a new process group for
   # this child. If this process times out, we want to have
   # an easy way to kill off all the grandchildren.
+  #
+  # On Windows, if a child (i.e., a psuedo-process) launches
+  # a REAL process (with system, exec, Win32::Process::Create, etc.)
+  # then the only reliable way I've found to take it out is
+  # with the system command TASKKILL.
   #
   # see the END{} block that covers child cleanup below
   #
@@ -92,6 +97,37 @@ sub config_timeout_child {
 	kill -($Forks::Super::Config::signo{"INT"} || 2), getpgrp(0);
 	$DISABLE_INT = 0;
       }
+    } elsif ($^O eq "MSWin32") {
+      my $proc = Forks::Super::Job::get_win32_proc();
+      my $pid = Forks::Super::Job::get_win32_proc_pid();
+
+      if (Forks::Super::Config::CONFIG("Win32::Process") && defined $proc) {
+
+	my $exitCode;
+	my $ec = $proc->GetExitCode($exitCode);
+	if ($exitCode == &Win32::Process::STILL_ACTIVE
+	   || $ec == &Win32::Process::STILL_ACTIVE) {
+
+#	  my $result = $proc->Kill(0x102); # 0x102: "STATUS_TIMEOUT"
+#	  my $result = Win32::Process::KillProcess($pid, 0x102);
+#	  my $result = kill 9, $pid;
+
+	  # TASKKILL is pretty standard on Windows systems, isn't it?
+	  # Maybe not completely standard :-(
+	  my $result = system("TASKKILL /F /T /PID $pid > nul");
+
+	  $proc->GetExitCode($exitCode);
+	  if ($DEBUG) {
+	    debug("Terminating active MSWin32 process result=$result ",
+		  "exitCode=$exitCode");
+	  }
+	}
+      } else {
+	# local $SIG{INT} = 'IGNORE';
+	$DISABLE_INT = 1;
+	kill 'INT', $$;
+	$DISABLE_INT = 0;
+      }
     }
     if ($^O eq "MSWin32" && $DEBUG) {
       debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
@@ -116,23 +152,27 @@ END {
     if (Forks::Super::Config::CONFIG("alarm")) {
       alarm 0;
     }
-    if ($TIMEDOUT && Forks::Super::Config::CONFIG("getpgrp")) {
-      if ($DISABLE_INT) {
-	# our child process received its own SIGINT that got sent out
-	# to its children/process group. We intended the exit status
-	# here to be as if it had die'd.
-	$? = 255 << 8;
-      }
+    if (!$TIMEDOUT) {
+      return;
+    }
+    if ($DISABLE_INT) {
+      # our child process received its own SIGINT that got sent out
+      # to its children/process group. We intended the exit status
+      # here to be as if it had die'd.
 
+      $? = 255 << 8;
+    }
+    if (Forks::Super::Config::CONFIG("getpgrp")) {
       # try to kill off any grandchildren
       if ($ORIG_PGRP == $NEW_PGRP) {
 	carp "Forks::Super::child_exit: original setpgrp call failed, ",
 	  "child-of-child process might not be terminated.\n";
       } else {
-	setpgrp(0, $Forks::Super::MAIN_PID || $MAIN_PID);
+	setpgrp(0, $ORIG_PGRP);
 	$NEWNEW_PGRP = getpgrp(0);
 	if ($NEWNEW_PGRP eq $NEW_PGRP) {
 	  carp "Forks::Super::child_exit: final setpgrp call failed, ",
+	    "[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
 	    "child-of-child processes might not be terminated.\n";
 	} else {
 	  local $SIG{INT} = 'IGNORE';
@@ -149,12 +189,13 @@ END {
 }
 
 sub warm_up {
+
   # force loading of some modules in the parent process
   # so that fast fail (see t/40-timeout.t, tests #8,17)
   # aren't slowed down when they encounter the croak call.
+
   eval { croak "preload.\n" };
   return $@;
 }
 
 1;
-

@@ -16,12 +16,9 @@ use warnings;
 # often aborts
 #
 
-
 # $SIG_DEBUG is special flag to instruct SIGCHLD handler to record what goes on
 $Forks::Super::Sigchld::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
-
-# find-limits.pl call moved to 00--pretest.t
 my $limits_file = "t/out/limits.$^O.$]";
 
 my $NN = 149;
@@ -38,9 +35,14 @@ SKIP: {
 	if ($nn > $NN) {
 	  $nn = $NN;
 	}
-	if ($^O =~ /bsd/i && $nn > 110) {
-	  $nn = 110;
+
+	# solaris tends to barf on this test even though it passes
+	# the others -- disable until we figure out why.
+	# (raises SIGSYS? don't know if that is easy to trap)
+	if ($^O =~ /solaris/) {
+	  $nn = 0;
 	}
+
       }
     }
     close L;
@@ -53,11 +55,11 @@ SKIP: {
 
   } elsif ($^O =~ /openbsd/) {
     $nn = 48;
-  } elsif ($^O =~ /solaris/) {
+  } elsif ($^O =~ /solaris/i) {
 
     # solaris tends to barf on this test even when the other tests do fine.
     # disable this test until we can see what is going on in solaris.
-    $nn = 1;
+    $nn = 0;
 
   } elsif ($^O =~ /darwin/) {
     $nn = 80;

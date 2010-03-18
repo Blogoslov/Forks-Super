@@ -1,3 +1,9 @@
+#
+# Forks::Super::Wait - implementation of Forks::Super:: wait, waitpid,
+#        and waitall methods
+#
+
+
 package Forks::Super::Wait;
 use Forks::Super::Job;
 use Forks::Super::Util qw(is_number isValidPid pause Time);
@@ -11,7 +17,7 @@ use Carp;
 use strict;
 use warnings;
 
-our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT);
+our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our $VERSION = $Forks::Super::Util::VERSION;
 
@@ -26,6 +32,7 @@ sub set_productive_waitpid_code (&) {
 }
 
 use constant TIMEOUT => -1.5;
+use constant WREAP_BG_OK => WNOHANG() << 1;
 
 sub wait {
   my $timeout = shift || 0;
@@ -56,12 +63,13 @@ sub waitpid {
 
   # return -1 if there are no eligible procs to wait for
   my $no_hang = ($flags & WNOHANG) != 0;
+  my $reap_bg_ok = $flags == WREAP_BG_OK;
   if (is_number($target) && $target == -1) {
-    return _waitpid_any($no_hang, $timeout);
+    return _waitpid_any($no_hang, $reap_bg_ok, $timeout);
   } elsif (defined $ALL_JOBS{$target}) {
-    return _waitpid_target($no_hang, $target, $timeout);
+    return _waitpid_target($no_hang, $reap_bg_ok, $target, $timeout);
   } elsif (0 < (my @wantarray = Forks::Super::Job::getByName($target))) {
-    return _waitpid_name($no_hang, $target, $timeout);
+    return _waitpid_name($no_hang, $reap_bg_ok, $target, $timeout);
   } elsif (!is_number($target)) {
     return -1;
   } elsif ($target > 0) {
@@ -73,7 +81,7 @@ sub waitpid {
     } else {
       $target = -$target;
     }
-    return _waitpid_pgrp($no_hang, $target, $timeout);
+    return _waitpid_pgrp($no_hang, $reap_bg_ok, $target, $timeout);
   } else {
     return -1;
   }
@@ -112,7 +120,7 @@ sub waitall {
 # not reaped.
 #
 sub _reap {
-  my ($optional_pgid) = @_; # to reap procs from specific group
+  my ($reap_bg_ok, $optional_pgid) = @_; # to reap procs from specific group
   $productive_waitpid_code->() if $productive_waitpid_code;
 
   _handle_bastards();
@@ -124,6 +132,9 @@ sub _reap {
   # see if any jobs are complete (signaled the SIGCHLD handler)
   # but have not been reaped.
   my @waiting = grep { $_->{state} eq 'COMPLETE' } @j;
+  if (!$reap_bg_ok) {
+    @waiting = grep { $_->{_is_bg} == 0 } @waiting;
+  }
   debug('Forks::Super::_reap(): found ', scalar @waiting,
     ' complete & unreaped processes') if $DEBUG;
 
@@ -133,35 +144,29 @@ sub _reap {
     my $real_pid = $job->{real_pid};
     my $pid = $job->{pid};
 
-    debug("Forks::Super::_reap(): reaping $pid/$real_pid.")
-      if $job->{debug};
+    if ($job->{debug}) {
+      debug("Forks::Super::_reap(): reaping $pid/$real_pid.");
+    }
     return $real_pid if not wantarray;
 
-    my $nactive = grep { $_->{state} eq 'ACTIVE'  or
-			   $_->{state} eq 'DEFERRED'  or
-			   $_->{state} eq 'SUSPENDED'  or    # for future use
-			   $_->{state} eq 'COMPLETE' } @j;
-
+    my $nactive = Forks::Super::Job::count_alive_processes(
+			$reap_bg_ok, $optional_pgid);
     debug("Forks::Super::_reap(): $nactive remain.") if $DEBUG;
     $job->mark_reaped;
     return ($real_pid, $nactive);
   }
 
-  my @active = grep { $_->{state} eq 'ACTIVE' or
-			$_->{state} eq 'DEFERRED' or
-			$_->{state} eq 'SUSPENDED' or         # for future use
-			$_->{state} eq 'COMPLETE' } @j;
-
+  my $nactive = Forks::Super::Job::count_alive_processes(
+		      $reap_bg_ok, $optional_pgid);
 
   # the failure to reap active jobs may occur because the jobs are still
-  # running, or it may occur because the signal handler was overwhelmed
-  if (@active > 0) {
+  # running, or it may occur because the relevant signals arrived at a
+  # time when the signal handler was overwhelmed
+  if ($nactive > 0) {
     ++$REAP_NOTHING_MSGS;
     if ($REAP_NOTHING_MSGS % 10 == 0) {
       if (0 && $productive_waitpid_code) {
 	$productive_waitpid_code->();
-#      } elsif (defined &Forks::Super::Sigchld::handle_CHLD) {
-#	Forks::Super::handle_CHLD(-1);
       } elsif (defined $SIG{CHLD} && ref $SIG{CHLD} eq "CODE") {
 	$SIG{CHLD}->(-1);
       }
@@ -169,30 +174,26 @@ sub _reap {
   }
 
   return -1 if not wantarray;
-
-  my $nactive = @active;
-
   if ($DEBUG) {
     debug('Forks::Super::_reap(): nothing to reap now. ',
 	  "$nactive remain.");
   }
-
   return (-1, $nactive);
 }
 
 
 # wait on any process
 sub _waitpid_any {
-  my ($no_hang,$timeout) = @_;
+  my ($no_hang,$reap_bg_ok,$timeout) = @_;
   my $expire = Time() + ($timeout || 86400);
-  my ($pid, $nactive) = _reap();
+  my ($pid, $nactive) = _reap($reap_bg_ok);
   unless ($no_hang) {
     while (!isValidPid($pid) && $nactive > 0) {
       if (Time() >= $expire) {
 	return TIMEOUT;
       }
       pause();
-      ($pid, $nactive) = _reap();
+      ($pid, $nactive) = _reap($reap_bg_ok);
     }
   }
   if (defined $ALL_JOBS{$pid}) {
@@ -204,7 +205,7 @@ sub _waitpid_any {
 
 # wait on a specific process
 sub _waitpid_target {
-  my ($no_hang, $target, $timeout) = @_;
+  my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
   my $expire = Time() + ($timeout || 86400);
   my $job = $ALL_JOBS{$target};
   if (not defined $job) {
@@ -231,7 +232,7 @@ sub _waitpid_target {
 }
 
 sub _waitpid_name {
-  my ($no_hang, $target, $timeout) = @_;
+  my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
   my $expire = Time() + ($timeout || 86400);
   my @jobs = Forks::Super::Job::getByName($target);
   if (@jobs == 0) {
@@ -251,13 +252,15 @@ sub _waitpid_name {
   }
 
   # otherwise block until a job is complete
-  @jobs = grep { $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED' } @jobs_to_wait_for;
+  @jobs = grep {
+    $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED'
+  } @jobs_to_wait_for;
   while (@jobs == 0) {
     if (Time() >= $expire) {
       return TIMEOUT;
     }
     pause();
-    Forks::Super::Queue::run_queue() 
+    Forks::Super::Queue::run_queue()
 	if grep {$_->{state} eq 'DEFERRED'} @jobs_to_wait_for;
     @jobs = grep { $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED'} @jobs_to_wait_for;
   }
@@ -267,16 +270,16 @@ sub _waitpid_name {
 
 # wait on any process from a specific process group
 sub _waitpid_pgrp {
-  my ($no_hang, $target, $timeout) = @_;
+  my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
   my $expire = Time() + ($timeout || 86400);
-  my ($pid, $nactive) = _reap($target);
+  my ($pid, $nactive) = _reap($reap_bg_ok,$target);
   unless ($no_hang) {
     while (!isValidPid($pid) && $nactive > 0) {
       if (Time() >= $expire) {
 	return TIMEOUT;
       }
       pause();
-      ($pid, $nactive) = _reap($target);
+      ($pid, $nactive) = _reap($reap_bg_ok,$target);
     }
   }
   $? = $ALL_JOBS{$pid}->{status}
@@ -302,5 +305,3 @@ sub _handle_bastards {
 }
 
 1;
-
-
