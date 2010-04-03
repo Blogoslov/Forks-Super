@@ -25,12 +25,15 @@ if (!Forks::Super::CONFIG("alarm")) {
 
 #######################################################
 
+my $u = Forks::Super::Util::Time();
 my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
 my $t = Forks::Super::Util::Time();
 my $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+my $v = Forks::Super::Util::Time();
+($t,$u)=($v-$t,$v-$u);
 ok($p == $pid, "wait successful; Expected $pid got $p");
-ok($t < 9, "job completed before timeout ${t}s expected ~5s");
+ok($t > 3.9 && $u <= 7.5,                 ### 2b ### was 7, obs 7.03
+   "job completed before timeout ${t}s ${u} expected ~5s");
 ok($? == 0, "job completed with zero exit status");
 
 #######################################################

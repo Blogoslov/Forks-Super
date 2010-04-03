@@ -1,5 +1,5 @@
 
-Forks::Super version 0.26
+Forks::Super version 0.27
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -76,8 +76,8 @@ Instead of "make test", you could also say
 
    make fasttest
 
-which will test the Forks::Super module, using the
-Forks::Super module to run the tests in parallel.
+which will run the Forks::Super module tests in
+parallel, using the Forks::Super module.
 
 
 DEPENDENCIES

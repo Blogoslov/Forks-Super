@@ -20,13 +20,15 @@ ok($s == 512, "wait set exit status in \$\?");
 
 ############################################
 
+my $u = Forks::Super::Util::Time();
 $pid = fork { sub => sub { sleep 3; exit 3 } };
 $t = Forks::Super::Util::Time();
 $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+my $v = Forks::Super::Util::Time();
+($u,$t) = ($v-$u,$v-$t);
 $s = $?;
 ok(isValidPid($pid) && $p==$pid, "successful fork+wait");
-ok($t >= 2.9, "child completed in ${t}s, expected ~3s"); ### 6 ###
+ok($u >= 2.9, "child completed in ${t}s ${u}s, expected ~3s"); ### 6 ###
 ok($s == 768, "correct exit status captured");
 
 ############################################

@@ -109,7 +109,7 @@ sub set_os_priority_generic {
 	  if ($job->{debug}) {
 	    debug("updated thread priority to $p for job $job->{pid}");
 	  }
-	  return 1;
+	  return $p || "0E0";
 	} else {
 	  carp "Forks::Super::Job::config_os_child(): ",
 	    "setpriority() call failed $p ==> $q\n";
@@ -129,7 +129,7 @@ sub set_os_priority_generic {
 	"setpriority() call failed $p ==> $q\n";
       return 0;
     }
-    return 1;
+    return $q || "0E0";
   }
 }
 

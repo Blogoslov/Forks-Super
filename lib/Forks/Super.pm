@@ -17,7 +17,7 @@ $| = 1;
 
 $Carp::Internal{ (__PACKAGE__) }++;
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -537,7 +537,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.26
+Version 0.27
 
 =head1 SYNOPSIS
 
@@ -1546,7 +1546,7 @@ in the C<Forks::Super::fork> call.
 =item C<$state = Forks::Super::state($pid)>
 
 Returns the state of the job specified by the given process ID,
-job ID, or job name. See L<Forks::Super::Job::state/"state">.
+job ID, or job name. See L<Forks::Super::Job/"state">.
 
 =item C<$status = Forks::Super::status($pid)>
 
@@ -1958,7 +1958,7 @@ The C<bg_eval> function requires L<YAML>.
 Otherwise, there are no hard dependencies
 on non-core modules. Some features, especially operating-system
 specific functions,
-depend on some modules (C<Win32::API> and C<Win32::Process>
+depend on some modules (L<Win32::API> and L<Win32::Process>
 for Wintel systems, for example), but the module will
 compile without those modules. Attempts to use these features
 without the required modules will be silently ignored.

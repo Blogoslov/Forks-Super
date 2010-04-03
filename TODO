@@ -30,14 +30,6 @@ Possible TODOs:
 
     _x_ fork { cpu_affinity => $bitmask }
 
-                <OLD POD>
-                On supported systems with multiple cores, and after the 
-		successful creating of the child process, attempt to set 
-		the CPU affinity for the child process. $mask is typically 
-		a bitmask with the lowest level bits indicating whether the 
-		lowest numbered CPU's should be used by this process.
-                </OLD POD>
-
                 _X_ linux
 		_X_ MSWin32
 		___ BSD
@@ -61,7 +53,7 @@ Possible TODOs:
 		like Proc::Fork. Call CORE::fork() several times if
 		it's not creating child processes.
 		_X_ implement
-		___ test
+		___ test (mock?)
 		_X_ document - failed CORE::fork calls usually indicate
                     some bad system condition (too many processes, out
                     of memory/swap space), so expectations of recovery
@@ -79,7 +71,8 @@ Possible TODOs:
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
 	Can test with >5.7.3 and Perl::Unsafe::Signals
 
-    ___	Make CONFIG{filehandles} meaningful
+    ___	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
+	then all IPC should be through sockets or pipes.
 
     _X_	Defect to fix, $Forks::Super::MAX_PROC = "0"
 
@@ -114,23 +107,6 @@ Possible TODOs:
 
 	Deliver a signal to all jobs or to a list of jobs.
 
-    _X_ in bg_eval and bg_qx, set 
-	$Forks::Super::LAST_JOB_ID, $Forks::Super::LAST_JOB to access
-	job information of a job launched from bg_eval or bg_qx.
-	Bash users will recognize the similarity of capturing the
-	$! variable in a bash script to capture the PID of the
-	last background process that was launched.
-
-	From there you can get state information, exit status,
-	run times, or all kinds of good information about the job.
-
-        !!! Forks::Super::waitpid should NOT return the pid
-	of a job launched by bg_eval/bg_qx.
-
-        _X_ implement
-        _X_ test
-        _X_ doc
-
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. See what
 	can be done to tighten up performance.
@@ -152,3 +128,22 @@ Possible TODOs:
     ___ Better EXPORTS documentation in pod.
 
     ___ Test needed, Win32+cmd, See Job.pm:344
+
+    ___ Investigate apparent incompatibility with Win32::API, perl 5.12.0
+
+    ___ $Forks::Super::OPEN_FH to track the number of open filehandles
+        (opened by Forks::Super::XXX modules, not the total number)
+
+        Be a little robust when IPC setup fails because of too many open
+	filehandles. Pause and retry; close the "oldest" filehandles.
+
+    ___ 0.27 is an issue fix release with emphasis on testing existing
+    	features under load and on several different OS. The releases
+        after that can focus on some new features that are straightforward
+	to add (or at least to try) like
+		JSON to bg_eval
+		$Forks::Super::OPEN_FH, more robust IPC
+		cpu load
+		hook up Sys-CpuAffinity
+		suspend/resume feature
+		using pipes

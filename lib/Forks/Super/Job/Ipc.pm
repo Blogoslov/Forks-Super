@@ -415,6 +415,7 @@ sub END_cleanup {
     return;
   }
 
+  $Devel::Trace::TRACE = 0; # XXXXXX
   foreach my $fh (values %Forks::Super::CHILD_STDIN,
 		  values %Forks::Super::CHILD_STDOUT,
 		  values %Forks::Super::CHILD_STDERR) {

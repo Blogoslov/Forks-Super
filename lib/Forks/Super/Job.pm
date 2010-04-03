@@ -20,7 +20,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 sub new {
   my ($class, $opts) = @_;
@@ -442,6 +442,22 @@ sub getByName {
   return;
 }
 
+sub suspend {
+  # assert:
+  #    there is a real_pid
+  #    there is a suspend function to tell when to reactivate
+  # send STOP signal to real_pid
+  # change state to SUSPENDED
+}
+
+sub resume {
+  # assert:
+  #     there is a real_pid
+  # send CONT signal to real_pid
+  # change state to ACTIVE
+}
+
+
 #
 # do further initialization of a Forks::Super::Job object,
 # mainly setting derived fields
@@ -699,7 +715,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.26
+0.27
 
 =head1 SYNOPSIS
 
@@ -714,11 +730,11 @@ Forks::Super::Job - object representing a background task
 =head1 DESCRIPTION
 
 Calls to C<Forks::Super::fork> that successfully spawn a child process or
-create a L<deferred job|Forks#Deferred jobs> will cause a C<Forks::Super::Job>
-instance to be created to track the job's state. For many uses of
-C<fork>, it will not be necessary to query the state of a background
-job. But access to these objects is provided for users who want to
-exercise even greater control over their use of background
+create a L<deferred job|Forks::Super/"Deferred processes"> will cause 
+a C<Forks::Super::Job> instance to be created to track the job's state. 
+For many uses of C<fork>, it will not be necessary to query the state of 
+a background job. But access to these objects is provided for users who 
+want to exercise even greater control over their use of background
 processes.
 
 Calls to C<Forks::Super::fork> that fail (return C<undef> or small negative
@@ -758,7 +774,9 @@ the job is launched and the child process is spawned.
 =item pgid
 
 The process group ID of the child process. For deferred processes,
-this value is undefined until the child process is spawned.
+this value is undefined until the child process is spawned. It is
+also undefined for systems that do not implement
+L<getpgrp|perlvar/"getpgrp">.
 
 =item created
 
@@ -814,7 +832,7 @@ Reserved for future use.
 
 =item status
 
-The exit status of a job. See L<CHILD_ERROR|perlvar#CHILD_ERROR> in
+The exit status of a job. See L<CHILD_ERROR|perlvar/"CHILD_ERROR"> in
 C<perlvar>. Will be undefined until the job is complete.
 
 =item style
@@ -888,7 +906,7 @@ CPU's for this process to prefer.
 
 =head1 SEE ALSO
 
-C<< L<Forks::Super> >>.
+L<Forks::Super>.
 
 =head1 AUTHOR
 

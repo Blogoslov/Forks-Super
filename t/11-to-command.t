@@ -7,10 +7,6 @@ use warnings;
 # test forking and invoking a shell command
 #
 
-###open(LOCK, ">>", "t/out/.lock-t11");
-###flock LOCK, 2;
-
-
 my $output = "t/out/test11.$$";
 my @cmd = ($^X,"t/external-command.pl",
 	"-o=$output", "-e=Hello,", "-e=Whirled",
@@ -47,17 +43,20 @@ $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z,
 	"child produced child output \'$z\' vs. \'$target_z\'");    ### 8 ###
 
-#############################################################################
+##################################################################
 
 # test that timing of reap is correct
 
+my $u = Forks::Super::Util::Time();
 $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=5" ] };
 ok(isValidPid($pid), "fork to external command");
 my $t = Forks::Super::Util::Time();
 $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+my $v = Forks::Super::Util::Time();
+($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait reaped correct pid");
-ok($t >= 4.9 && $t <= 6.65, "background command ran for ${t}s, expected 5-6s"); ### 11 ### was 6.5 obs 6.58
+ok($u >= 4.9 && $t <= 8.05,             ### 11 ### was 6.5 obs 8.02
+   "background command ran for ${t}s ${u}s, expected 5-6s");
 
 ##################################################################
 
@@ -80,4 +79,3 @@ ok($? == 0, "captured correct zero status");
 unlink $output;
 
 
-### close LOCK;

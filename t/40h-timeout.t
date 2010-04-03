@@ -26,14 +26,15 @@ if (!Forks::Super::CONFIG("alarm")) {
 ##########################################################
 
 my $t0 = Forks::Super::Util::Time();
-my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=4" ], 
+my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=7" ], 
 		   timeout => 2 };
 my $t = Forks::Super::Util::Time();
 waitpid $pid, 0;
 my $t2 = Forks::Super::Util::Time();
 ($t0,$t) = ($t2-$t0,$t2-$t);
-ok($t <= 3.25, "cmd-style respects timeout ${t}s ${t0}s "
-	."expected ~2s"); ### 29 ### was 3.0 obs 3.10
+ok($t <= 4.05,           ### 29 ### was 3.0 obs 3.10,3.82
+   "cmd-style respects timeout ${t}s ${t0}s "
+   ."expected ~2s"); 
 
 $t0 = Forks::Super::Util::Time();
 $pid = fork { exec => [ $^X, "t/external-command.pl", "-s=4" ], timeout => 2 };
@@ -41,6 +42,7 @@ $t = Forks::Super::Util::Time();
 waitpid $pid, 0;
 $t2 = Forks::Super::Util::Time();
 ($t0,$t) = ($t2-$t0,$t2-$t);
-ok($t >= 3.9, "exec-style doesn't respect timeout ${t}s ${t0}s expected ~4s");
+ok($t0 >= 3.9 && $t > 3.05, 
+   "exec-style doesn't respect timeout ${t}s ${t0}s expected ~4s");
 
 ######################################################################

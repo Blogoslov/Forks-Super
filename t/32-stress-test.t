@@ -19,7 +19,28 @@ use warnings;
 # $SIG_DEBUG is special flag to instruct SIGCHLD handler to record what goes on
 $Forks::Super::Sigchld::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
-my $limits_file = "t/out/limits.$^O.$]";
+
+#my $limits_file = "t/out/limits.$^O.$]";
+my $limits_file = "system-limits";
+
+if (! -r $limits_file) {
+
+  open LOCK, '>>', "$limits_file.lock";
+  flock LOCK, 2;
+
+  if (! -r $limits_file) {
+    print STDERR "System limitations file not found. Trying to create ...\n";
+    system($^X, "system-limits.PL");
+  }
+
+  close LOCK;
+}
+
+if (! -r $limits_file) {
+  print STDERR "System limitations file $limits_file not found. ",
+    "Can't proceed\n";
+  exit 1;
+}
 
 my $NN = 149;
 my $nn = $NN;

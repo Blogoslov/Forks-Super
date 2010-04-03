@@ -30,23 +30,7 @@ if ($^O =~ /bsd/i) {
   push @recommends, ("BSD::Process::Affinity" => '0.01');
 }
 
-my $limits_file = "t/out/limits.$^O.$]";
-
 ######################################################################
-
-sub MY::postamble {
-  return <<"__END_POSTAMBLE__";
-
-# fasttest: use Forks::Super to run Forks::Super tests in parallel
-fasttest :: pm_to_blib $limits_file
-	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES)
-
-# stress test: run all tests in parallel 100 times
-stresstest :: pm_to_blib $limits_file
-	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -r 10 -x 10 -s -q -a
-
-__END_POSTAMBLE__
-}
 
 WriteMakefile(
     ((@recommends > 0 && $ExtUtils::MakeMaker::VERSION+0 >= 6.46)
@@ -59,19 +43,62 @@ WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION+0 >= 6.3002
       ? ('LICENSE'=> 'perl')
       : ()),
-    PL_FILES            => {'t/find-limits.PL' => $limits_file},
+    PL_FILES            => { },   # ignore system-limits.PL
     PREREQ_PM => {
         'Test::More' => 0,
     },
 
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => join (" ",'Forks-Super-*',
-					    't/out/limits*',
+					    'system-limits',
+					    'system-limits.lock',
 					    't/out/spawn*',
 					    't/out/sigchld.debug',
 					    't/out/test*',
 					    't/out/.lock-*',
-					    'lib/_Inline') },
+					    'lib/_Inline', 
+					    'perl.exe.stackdump', # #$@^!cygwin
+					    '_Inline') },
 );
 
 
+package MY;
+
+######################################################################
+# testing targets, including custom fasttest and stresstest targets,
+# depend on ./system-limits file
+######################################################################
+
+sub MY::test {
+  my $test = shift->SUPER::test(@_);
+  $test =~ s!^test(\w+) :: !test$1 :: system-limits !gm;
+  return $test;
+}
+
+sub MY::postamble {
+
+  my $stresstestargs = "-r 10 - x 10 -s -q";
+  if ($^O =~ /solaris/i) {
+    $stresstestargs = "-r 20 -x 5 -s -q";
+  }
+  my $postamble = <<"__END_POSTAMBLE__";
+
+# ------ system-limits file discovers some system limitations
+
+system-limits :: system-limits.PL pm_to_blib
+	\$(PERLRUNINST) system-limits.PL system-limits
+
+# ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
+
+fasttest :: pm_to_blib system-limits
+	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -h
+
+# ------ stress test: run all tests in parallel 100 times
+
+stresstest :: pm_to_blib system-limits
+	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) $stresstestargs
+
+__END_POSTAMBLE__
+
+  return $postamble;
+}

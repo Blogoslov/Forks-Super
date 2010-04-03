@@ -30,9 +30,10 @@ my $pid = fork {
 	my $a = reverse $_;
 	print $a, "\n";
       }
+      sleep 2;
     } };
-ok($output eq "" && $error =~ /overwrite/, 
-   "output($output)/error($error) not updated until child is complete"); ### 23 ###
+ok($output eq "" && $error =~ /overwrite/,          ### 1d ###
+   "output($output)/error($error) not updated until child is complete");
 waitpid $pid, 0;
 ok($output eq "dlrow olleH\n", "updated output from stdout");
 ok($error !~ /overwrite/, "error ref was overwritten");
@@ -54,6 +55,8 @@ waitpid $pid, 0;
 ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
 
 
-use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
+use Carp;$SIG{SEGV} = sub { 
+    Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" 
+};
 
 

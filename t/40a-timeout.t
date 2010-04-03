@@ -23,10 +23,10 @@ if (!Forks::Super::CONFIG("alarm")) {
   exit 0;
 }
 
-my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 3 };
+my $pid = fork { sub => sub { sleep 10; exit 0 }, timeout => 3 };
 my $t = Forks::Super::Util::Time();
 my $p = wait;
 $t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "$$\\wait successful");
-ok($t < 5, "Timed out in ${t}s, expected ~3s");
 ok($? != 0, "job expired with non-zero exit status");
+ok($t < 5.10, "Timed out in ${t}s, expected ~3s");

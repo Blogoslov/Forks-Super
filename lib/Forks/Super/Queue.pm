@@ -239,6 +239,26 @@ sub run_queue {
       }
     }
   } while ($job_was_launched);
+
+  if (0) {   # suspend/resume under development
+    my @suspended_jobs = grep { $_->{state} eq 'SUSPENDED'
+			      } @Forks::Super::ALL_JOBS;
+    my @active_and_suspendable_jobs 
+      = grep { $_->{state} eq 'ACTIVE' 
+		 && defined $_->{suspend} } @Forks::Super::ALL_JOBS;
+
+    foreach my $j (@active_and_suspendable_jobs) {
+      if ($j->{suspend}->() < 0) {
+	$j->suspend;
+      }
+    }
+    foreach my $j (@suspended_jobs) {
+      if ($j->{suspend}->() > 0) {
+	$j->resume;
+      }
+    }
+  }
+
   $_LOCK--;
   return;
 }

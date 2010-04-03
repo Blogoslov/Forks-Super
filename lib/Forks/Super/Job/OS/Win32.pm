@@ -204,7 +204,7 @@ sub _set_os_priority_with_w32api {
       if ($job->{debug}) {
 	debug("updated thread priority to $priority for job $$");
       }
-      return 1;
+      return $result + $priority / 100;
     } else {
       carp "Forks::Super::Job: set os_priority failed: $! / $^E\n";
     }
@@ -221,7 +221,7 @@ sub set_cpu_affinity {
   if ($bitmask == 0) {
     carp "Forks::Super::Job::config_os_child(): ",
       "desired cpu affinity set to zero. Is that what you really want?\n";
-    return 1;
+    return -1;
   }
 
   return _set_cpu_affinity_with_w32api($job)
@@ -256,12 +256,12 @@ sub _set_cpu_affinity_with_win32_process {
   }
   if (Win32::Process::Open($processHandle, $winpid, 0)) {
     $Forks::Super::OS::SET_PROCESS_AFFINITY = 1;
-    $processHandle->SetProcessAffinityMask($n);
+    my $y = $processHandle->SetProcessAffinityMask($n);
     if ($Forks::Super::OS::SET_PROCESS_AFFINITY == -1) {
       return 0;
     }
     $Forks::Super::OS::SET_PROCESS_AFFINITY = 0;
-    return 1;
+    return $y;
   }
   carp "Forks::Super::Job::config_os_child(): ",
     "Win32::Process::Open call failed for Windows PID $winpid, ",
@@ -331,8 +331,8 @@ sub set_cpu_affinity_for_win32_process {
       "ignoring cpu affinity mask of zero (Is that what you want?)\n";
     return 0;
   }
-  if ($process->SetProcessAffinityMask($bitmask)) {
-    return 1;
+  if (my $result = $process->SetProcessAffinityMask($bitmask)) {
+    return $result;
   }
 
 
@@ -352,7 +352,7 @@ sub set_cpu_affinity_for_win32_process {
       "failed to set cpu affinity for $$ [2]: $result\n";
     return 0;
   }
-  return 1;
+  return $result;
 }
 
 ######################################################################

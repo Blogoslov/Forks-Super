@@ -21,10 +21,10 @@
 #  --callbacks=[s][f][q]:print debug information when a test starts/finishes
 #          |-c [s][f][q] /is queued
 #  --verbose|-v:         with -h, use verbose test harness
-#  --include|-I lib:     include additional perl lib directories
+#  --include|-I lib:     use Perl lib dirs [default: blib/lib, blib/arch]
 #  --popts|-p option:    pass option to perl interpreter during test
 #                        [e.g.: -p -d:Trace, -p -MCarp::Always]
-#  --shuffle|-s:         run tests in a random order
+#  --shuffle|-s:         run tests in random order
 #  --timeout|-t n:       abort a test after <n> seconds [default: 120]
 #  --repeat|-r n:        do up to <n> iterations of testing. Pause after each
 #                        iteration, and abort if iteration had error(s)
@@ -33,7 +33,7 @@
 #  --quiet|-q:           produce less output (-q is *not* the opposite of -v!)
 #  --debug|-d:           produce output about what forked_harness.pl is doing
 #  --abort-on-fail|-a:   stop after the first test failure
-#  --grep pattern:       capture test output matching <pattern>, print all at end
+#  --grep pattern:       grab test output matching <pattern>, print all at end
 
 use lib qw(blib/lib);
 use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
@@ -47,14 +47,14 @@ $^T = Time::HiRes::gettimeofday();
 my $timeout = 120;
 my $use_harness = '';
 my $use_callbacks = '';
-my $test_verbose = 0;
+my $test_verbose = $ENV{TEST_VERBOSE} || 0;
 my @use_libs = qw(blib/lib blib/arch);
 my @perl_opts = ();
 my $shuffle = '';
 my $repeat = 1;
 my $xrepeat = 1;
 my $quiet = 0;
-my $maxproc = 0;
+my $maxproc = 9;
 my $check_endgame = 0;
 my $abort_on_first_error = '';
 my $debug = '';
@@ -81,6 +81,7 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "grep=s" => \@output_patterns,
 	   "abort-on-fail" => \$abort_on_first_error);
 my @captured = ();
+my %fail = ();
 
 $test_verbose ||= 0;
 $repeat = 1 if $repeat < 1;
@@ -118,6 +119,11 @@ my @result = ();
 my $total_status = 0;
 my $iteration;
 my $ntests = scalar @test_files;
+if ($debug) {
+  # running too many tests simultaneously will use up all your filehandles ...
+  print STDERR "There are $ntests tests to run (", 
+    scalar @ARGV, " x $xrepeat)\n";
+}
 my (%j,$count);
 
 $SIG{SEGV} = \&handle_SIGSEGV;
@@ -130,6 +136,37 @@ if (@captured > 0) {
   print "============================================\n\n";
   @captured = ();
 }
+if (@result > 0) {
+  print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
+  print "----------------------------------\n";
+  print @result;
+
+  open(LOG, ">>", "/tmp/forked_harness.log");
+  print LOG scalar localtime, "\n";
+  print LOG @result;
+  print LOG "=====================================\n";
+  close LOG;
+
+  print "\n\n\n\n\n\n\n\n\n\n";
+  print scalar localtime, "\n";
+  print @result;
+  print "=====================================\n";
+}
+if (scalar keys %fail > 0) {
+  print "\nTest failures:\n";
+  print "==============\n";
+  foreach my $test_file (sort keys %fail) {
+    foreach my $test_no (sort {$a<=>$b} keys %{$fail{$test_file}}) {
+      print "\t$test_file#$test_no ";
+      if ($fail{$test_file}{$test_no} == 1) {
+	print "1 time\n";
+      } else {
+	print "$fail{$test_file}{$test_no} times\n";
+      }
+    }
+  }
+  print "================\n";
+}
 
 sub handle_SIGSEGV {
   use Carp;
@@ -138,7 +175,6 @@ sub handle_SIGSEGV {
 }
 
 sub main {
-
   if ($debug) {
     print "Test files: @test_files\n";
   }
@@ -166,10 +202,12 @@ sub main {
 	print "Queue size: ", scalar @Forks::Super::Queue::QUEUE, "\n";
       }
 
-      if (@Forks::Super::Queue::QUEUE > 0) {
+      if (rand() > 0.95 || @Forks::Super::Queue::QUEUE > 0) {
 	my $reap = waitpid -1, WNOHANG;
-	if (Forks::Super::isValidPid($reap)) {
+	while (Forks::Super::isValidPid($reap)) {
 	  return if &process($reap) eq "ABORT";
+	  $reap = -1;
+	  $reap = waitpid -1, WNOHANG;
 	}
       }
     }
@@ -183,7 +221,11 @@ sub main {
       return if &process($pid) eq "ABORT";
 
     }
+    if ($total_status > 0) {
+      last;
+    }
   }  # next iteration
+  return;
 }
 
 if ($total_status == 0) {
@@ -246,8 +288,6 @@ sub launch_test_file {
 sub process {
   my ($pid) = @_;
 
-  my (@stdout, @stderr);
-
   # keep track of what else is running right now
   my @jj = grep { $_->{state} eq "ACTIVE" } @Forks::Super::ALL_JOBS;
 
@@ -255,12 +295,56 @@ sub process {
   my $status = $j->{status};
   my $test_file = $j{$j->{pid}};
   my $test_time = sprintf '%.3fs', $j->{end} - $j->{start};
+  my @stdout = Forks::Super::read_stdout($pid);
+  my @stderr = Forks::Super::read_stderr($pid);
+  $j->close_fh;
+
   if ($debug) {
     print "Processing results of test $test_file\n";
   }
 
-  if ( ($^O eq "linux" && $status == 35584) ||
-       (1 && $^O ne "linux" && $status == 35584) ) {
+  my $redo = 0;
+
+  if ($^O eq "linux" && $status == 35584) {
+    $redo++;
+  }
+
+  my $pp = $j->{pid};
+  my $count = $j{"$pp:count"};
+  my $iter = $j{"$test_file:iteration"};
+  my $dashes = "-" x (40 + length($test_file));
+    
+  # print "\n$dashes\n";
+  print "------------------- $test_file -------------------\n";
+  print "|= TEST=$iter.$count/$repeat.$ntests; ",
+    "STATUS[$test_file]: $status \[ $total_status + $::fail35584 \] ",
+    "TIME=$test_time\n";
+
+  if ($status > 0 || $quiet == 0) {
+    print map{"|- $_"}@stdout;
+    print "$dashes\n";
+    print map{"|- $_"}@stderr;
+  }
+
+  my @s = @stdout;
+  foreach my $s (@s) {
+    if ($s =~ /^not ok (\d+)/) {
+      $fail{$test_file}{$1}++;
+    }
+    foreach my $pattern (@output_patterns) {
+      if ($s =~ qr/$pattern/) {
+	push @captured, "$test_file: $s";
+	last;
+      }
+    }
+  }
+  # XXX elsif ($quiet && $use_harness) { should summarize test results }
+
+  if (grep { /^Failed/ && /100.00% okay/ } @stderr) {
+    $redo++;
+  }
+
+  if ($redo) {
 
     # in Forks::Super module testing, we observe an
     # intermittent segmentation fault that occurs after
@@ -272,45 +356,25 @@ sub process {
 
     print "Received status == $status for a test of $test_file, ",
       "possibly an intermittent segmentation fault. Rerunning ...\n";
-    $j->close_fh;
     launch_test_file($test_file);
     $::fail35584++;
     return $::fail35584 > 10 * $j{"$test_file:iteration"} 
       ? "ABORT" : "CONTINUE";
   }
 
-  my $pp = $j->{pid};
-  my $count = $j{"$pp:count"};
-  my $iter = $j{"$test_file:iteration"};
-    
-  print "\n",my $dashes="-" x (40+length($test_file)),"\n";
-  print "------------------- $test_file -------------------\n";
-  print "|= TEST=$iter.$count/$repeat.$ntests; ",
-    "STATUS[$test_file]: $status \[ $total_status + $::fail35584 \] ",
-    "TIME=$test_time\n";
-  if ($status > 0 || $quiet == 0) {
 
-    print map{"|- $_"}@stdout = Forks::Super::read_stdout($pid);
-    print "$dashes\n";
-    print map{"|- $_"}@stderr = Forks::Super::read_stderr($pid);
 
-    my @s = @stdout;
-    foreach my $s (@s) {
-      foreach my $pattern (@output_patterns) {
-	if ($s =~ qr/$pattern/) {
-	  push @captured, "$test_file: $s";
-	  last;
-	}
-      }
-    }
-  }
-  # XXX elsif ($quiet && $use_harness) { should summarize test results }
 
-  Forks::Super::close_fh($j);
-  print "$dashes\n";
 
+
+
+  # print "$dashes\n";
+
+  $total_status = $status if $total_status < $status;
   if ($status != 0) {
-    if (!$use_harness || (grep /Result: FAIL/, @stdout)) {
+    if (!$use_harness 
+	|| (grep /Result: FAIL/, @stdout)
+        || (grep /Failed Test/, @stdout)) {
       push @result, "Error in $test_file: $status / $total_status\n";
       push @result, "--------------------------------------\n";
       push @result, 
@@ -320,7 +384,6 @@ sub process {
       $status = 0;
     }
   }
-  $total_status = $status if $total_status < $status;
   my $num_dequeued = 0;
   my $num_terminated = 0;
   if ($total_status > 0 && $abort_on_first_error) {
@@ -343,33 +406,9 @@ sub process {
     $abort_on_first_error = 2;
     return "ABORT";
   }
-
-  if (@result > 0) {
-    if (@captured > 0) {
-      print "============================================\n";
-      print "|= captured output from all test\n";
-      print "|===========================================\n";
-      print map {"|- $_"} @captured;
-      print "============================================\n\n";
-      @captured = ();
-    }
-    print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
-    print "----------------------------------\n";
-    print @result;
-
-    open(LOG, ">>", "/tmp/forked_harness.log");
-    print LOG scalar localtime, "\n";
-    print LOG @result;
-    print LOG "=====================================\n";
-    close LOG;
-
-    print "\n\n\n\n\n\n\n\n\n\n";
-    print scalar localtime, "\n";
-    print @result;
-    print "=====================================\n";
-  }
-  return $total_status > 0 ? "ABORT" : "CONTINUE";
+  return $total_status > 0 && $abort_on_first_error ? "ABORT" : "CONTINUE";
 }
+
 
 
 

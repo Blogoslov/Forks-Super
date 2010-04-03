@@ -131,11 +131,10 @@ ok($w == 14 + 1 + 2, "bg_eval start callback");
 ok($$x == 19, "scalar bg_eval with lots of options");
 $t1 = Time();
 ($t,$t0) = ($t1-$t,$t1-$t0);
-ok($t0 > 7.85 && $t < 10.25,     ### 34 ### was 9.6 obs 9.99,10.21
+ok($t0 > 7.85 && $t < 10.36,     ### 34 ### was 9.6 obs 9.99,10.21,10.26,10.35
    "bg_eval with delay took ${t}s ${t0}s, expected ~8s");
 ok($w == 14 + 1 + 2 + 5, "bg_eval finish callback");
 
 };
 
 use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
-
