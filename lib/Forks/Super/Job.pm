@@ -20,7 +20,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 
 sub new {
   my ($class, $opts) = @_;
@@ -715,7 +715,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.27
+0.28
 
 =head1 SYNOPSIS
 

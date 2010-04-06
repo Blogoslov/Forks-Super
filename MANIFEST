@@ -9,6 +9,7 @@ lib/Forks/Super/Job/OS.pm
 lib/Forks/Super/Job/OS/Linux.pm
 lib/Forks/Super/Job/OS/Win32.pm
 lib/Forks/Super/Job/Timeout.pm
+lib/Forks/Super/LazyEval.pm
 lib/Forks/Super/Tie/BackgroundArray.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
@@ -20,6 +21,7 @@ Makefile.PL
 MANIFEST
 README
 README.windows
+system-limits.PL
 t/00-use.t
 t/01a-import.t
 t/01b-import.t
@@ -68,7 +70,9 @@ t/52-dependencies.t
 t/53-name.t
 t/60-os.t
 t/61-callbacks.t
-t/62-bg_eval.t
+t/62-bg_eval.tt
+t/62j-bg_eval.t
+t/62y-bg_eval.t
 t/63-bg_qx.t
 t/tie-enum.tt
 t/external-command.pl

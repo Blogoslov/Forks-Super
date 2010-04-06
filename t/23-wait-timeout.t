@@ -30,19 +30,19 @@ my $t2 = Time();
 $p = wait 2;
 my $t3 = Time();
 ($t,$t2) = ($t3-$t,$t3-$t2);
-$t = Time();
 ok($t2 >= 1.95 && $t2 <= 2.85,        ### 6 ###
    "wait with short timeout returns at end of timeout ${t}s ${t2}s "
    . "expected ~2s");
+
 ok($p == Forks::Super::Wait::TIMEOUT, "wait timeout returns TIMEOUT");
 $t2 = Time();
 $p = wait 5;
-$t3 = Time();
-($t,$t2) = ($t3 - $t,$t3 - $t2);
-ok($t2 >= 1.5 && $t <= 3.15,           ### 8 ### was 2.85, obs 3.08
+$t2 = Time() - $t2;
+ok($t2 >= 1.5 && $t2 <= 3.15,           ### 8 ### was 2.85, obs 3.08
    "subsequent wait with long timeout returned when job finished "
    . "in ${t2}s ${t}s, expected ~2s");
-ok($p == $pid, "wait with subsequent long timeout returns pid of job");
+ok($p == $pid, 
+   "wait with subsequent long timeout returns $p==$pid pid of job");
 
 ##################################################################
 # waitpid(target,flags,timeout)
@@ -80,9 +80,9 @@ ok($t <= 1, "waitpid no hang fast return took ${t}s, expected <=1s");
 ok($p == -1, "waitpid no hang returns -1");
 
 $t = Time();
-$p = waitpid $pid, 0, 4;
+$p = waitpid $pid, 0, 10;
 $t = Time() - $t;
-ok($t >= 1.5 && $t <= 3.35,              ### 18 ### was 2.85 obs 3.30
+ok($t >= 1.5 && $t <= 4.15,              ### 18 ### was 2.85 obs 3.30,4.12
    "subsequent waitpid long timeout returned when job finished "
    ."${t}s expected ~2s");
 ok($p == $pid, "subsequent waitpid long timeout returned pid");

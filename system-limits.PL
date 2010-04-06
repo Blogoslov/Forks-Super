@@ -4,8 +4,11 @@ use warnings;
 
 ###############################################################
 #
-# in preparation for the tests in t/32-stress-test.t, discover
-# the maximum number of forks that are allowed on this system
+# probe the limitations of this system including the maximum
+# number of simultaneous child processes and the maximum number
+# of open filehandles.
+#
+# this information is used in t/32-stress-test.t
 #
 ###############################################################
 #
@@ -16,8 +19,8 @@ use warnings;
 # fail to signal the child process to wake up. The child will
 # wake up by itself in five minutes, but without valid data it
 # will trigger the above WFSO error. I don't think this 
-# affects the testing of the module except to make it take
-# a few extra minutes to run.
+# affects the testing of the module except to create a few
+# zombie processes for a few minutes.
 #
 ###############################################################
 
@@ -32,9 +35,19 @@ if ($^O eq 'cygwin') {
 
 }
 
+my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
+
 if (fork()) {
   wait;
+  for (my $i = 0; $i < 5; $i++) {
+    if (! -r $limits_file) {
+      sleep 1;
+    }
+  }
   print STDERR "\n\n";
+  if (! -r $limits_file) {
+    warn "System limitations file $limits_file still not found.\n ";
+  }
   print STDERR <<'';
 "make" complete.
 You may now run "make test" to run the unit tests in series
@@ -43,17 +56,18 @@ or "make fasttest" to run them in parallel.
   exit;
 }
 
-my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
-
-
 # for best results, only one process should be testing limits at a time
 open(LOCK, ">>", "t/out/.lock-flim");
 flock LOCK, 2;
 
 my %LIMITS = ();
 $LIMITS{file} = $ARGV[0] || "t/out/limits.$^O.$]";
+$LIMITS{system} = $^O;
+$LIMITS{version} = $];
 
+&count_number_of_cpus;
 &find_max_open_filehandles;
+&find_max_open_sockets;
 &find_max_fork;  # run last because it might crash the system
 print "Created system limitations file in: $limits_file\n";
 
@@ -62,6 +76,9 @@ close LOCK;
 #############################################################################
 
 sub write_limits {
+  my (%new_data) = @_;
+  $LIMITS{$_}=$new_data{$_} for keys %new_data;
+
   open(my $lhf, '>', $LIMITS{file});
   foreach my $key (keys %LIMITS) {
     print $lhf "$key:$LIMITS{$key}\n";
@@ -83,10 +100,13 @@ sub find_max_fork {
   print STDERR "";
   undef $@;
   my $r = eval {
+    unlink "$limits_file.pid";
     for (my $i=0; $i<$N; $i++) {
       undef $@;
       my $pid;
-      eval { $pid = fork() }; # CORE::fork, not Forks::Super::fork
+      eval { 
+	$pid = fork();    # CORE::fork, not Forks::Super::fork
+      }; 
       if ($@ || !defined $pid) {
 	print STDERR "$^O-$] cannot fork more than $i child processes.\n";
 	1 while wait > -1;
@@ -97,8 +117,7 @@ sub find_max_fork {
 	exit 0;
       }
       if ($i > 1) {
-	$LIMITS{maxfork} = $i;
-	&write_limits;
+	&write_limits('maxfork' => $i);
       }
     }
     print STDERR "$^O-$] successfully forked $N processes.\n";
@@ -114,6 +133,21 @@ sub find_max_fork {
 # do anything with this information.
 #
 sub find_max_open_filehandles {
+
+    # in BSD, this information can be obtained from
+    # sysctl kern.maxfiles[=new_value]
+    # sysctl kern.maxfilesperproc[=new_value]
+
+    # in Linux, check out the files. They can be written to.
+    # /proc/sys/kernel|fs/file-max  [max open filehandles]
+    # /proc/sys/kernel/inode-max
+    # /proc/sys/kernel/file-nr   [filehandles in use]
+    # Per process limits from:  ulimit -n ; sudo ulimit -n <n>
+
+    # Solaris: add to /etc/system:
+    #     set rlim_fd_max = xxxx
+    #     set rlim_fd_cur = xxxx
+
   my $i = 0;
   undef $!;
   my $j = $$;
@@ -125,8 +159,7 @@ sub find_max_open_filehandles {
   my $err = $!;
   close $_ for @fh;
   print STDERR "Msg for $i open files: $err\n";
-  $LIMITS{maxfilehandle} = $i;
-  &write_limits;
+  &write_limits('maxfilehandle' => $i);
   unlink "xxx.$j";
 
   return $i;

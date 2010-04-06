@@ -77,7 +77,7 @@ sub MY::test {
 
 sub MY::postamble {
 
-  my $stresstestargs = "-r 10 - x 10 -s -q";
+  my $stresstestargs = "-r 10 -x 10 -s -q";
   if ($^O =~ /solaris/i) {
     $stresstestargs = "-r 20 -x 5 -s -q";
   }

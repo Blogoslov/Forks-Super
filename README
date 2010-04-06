@@ -1,5 +1,5 @@
 
-Forks::Super version 0.27
+Forks::Super version 0.28
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -72,12 +72,15 @@ failures are more likely on a heavily loaded
 system. If "make test" fails, it will often work
 if you run it a second time.
 
-Instead of "make test", you could also say
+It will take about 10 minutes to run the test suite
+of the Forks::Super module with "make test". An
+alternative is to run
 
    make fasttest
 
 which will run the Forks::Super module tests in
-parallel, using the Forks::Super module.
+parallel, using the Forks::Super module. Running
+"make fasttest" will take about 1-2 minutes.
 
 
 DEPENDENCIES
@@ -97,7 +100,7 @@ to perform all of its functions without using them:
     Time::HiRes
 
 The bg_eval function, to evaluate Perl code in the background,
-requires YAML. 
+requires either YAML or JSON.
 
 Certain operating system dependent features may not work
 (usually failing silently) if these OS-specific modules

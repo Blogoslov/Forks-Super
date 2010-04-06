@@ -8,6 +8,7 @@ use Forks::Super::Queue qw(:all);
 use Forks::Super::Wait qw(:all);
 use Forks::Super::Tie::Enum;
 use Forks::Super::Sigchld;
+use Forks::Super::LazyEval;
 use base 'Exporter';
 use POSIX ':sys_wait_h';
 use Carp;
@@ -17,7 +18,7 @@ $| = 1;
 
 $Carp::Internal{ (__PACKAGE__) }++;
 
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -459,69 +460,6 @@ sub close_fh {
 
 ##################################################
 
-# use Forks::Super::LazyEval;
-######################################################################
-# ================================================================== #
-# future Forks::Super::LazyEval package
-
-# package Forks::Super::LazyEval
-# use Exporter; use base 'Exporter';
-# use Carp; use strict; use warnings;
-# our @EXPORT = qw(bg_eval bg_qx);
-
-sub bg_eval (&;@) {
-  require YAML;
-  my ($code, @other_options) = @_;
-  if (@other_options > 0 && ref $other_options[0] eq "HASH") {
-    @other_options = %{$other_options[0]};
-  }
-  my $p = $$;
-  my ($result, @result);
-  if (wantarray) {
-    require Forks::Super::Tie::BackgroundArray;
-    tie @result, 'Forks::Super::Tie::BackgroundArray',
-      'eval', $code, @other_options;
-    return @result;
-  } else {
-    require Forks::Super::Tie::BackgroundScalar;
-    tie $result, 'Forks::Super::Tie::BackgroundScalar',
-      'eval', $code, @other_options;
-    if ($$ != $p) {
-      # a WTF observed on MSWin32
-      croak "Forks::Super::bg_eval: ",
-	"Inconsistency in process IDs: $p changed to $$!\n";
-    }
-    return \$result;
-  }
-}
-
-sub bg_qx {
-  my ($command, @other_options) = @_;
-  if (@other_options > 0 && ref $other_options[0] eq "HASH") {
-    @other_options = %{$other_options[0]};
-  }
-  my $p = $$;
-  my (@result, $result);
-  if (wantarray) {
-    require Forks::Super::Tie::BackgroundArray;
-    tie @result, 'Forks::Super::Tie::BackgroundArray',
-      'qx', $command, @other_options;
-    return @result;
-  } else {
-    require Forks::Super::Tie::BackgroundScalar;
-    tie $result, 'Forks::Super::Tie::BackgroundScalar',
-      'qx', $command, @other_options;
-    if ($$ != $p) {
-      # a WTF observed on MSWin32
-      croak "Forks::Super::bg_eval: ",
-	"Inconsistency in process IDs: $p changed to $$!\n";
-    }
-    return \$result;
-  }
-}
-
-1;
-# ================================================================== #
 ######################################################################
 
 
@@ -537,7 +475,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.27
+Version 0.28
 
 =head1 SYNOPSIS
 
@@ -1953,7 +1891,9 @@ something else.
 
 =head1 DEPENDENCIES
 
-The C<bg_eval> function requires L<YAML>.
+The C<bg_eval> function requires either L<YAML> or L<JSON>. If neither
+module is available, then using C<bg_eval> will result in the script
+C<croak>'ing.
 
 Otherwise, there are no hard dependencies
 on non-core modules. Some features, especially operating-system

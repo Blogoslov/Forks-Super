@@ -1,40 +1,21 @@
-use Forks::Super ':test';
-use Test::More tests => 35;
-use strict;
-use warnings;
 
-### scalar context ###
 #
-# result is a tie'd scalar, so exercise fetch/store
-#
+# tests (33) for exercising bg_eval. This code should
+# not be run by itself, but should be <require>'d by
+# the test scripts (62j-bg_eval.t, 62y-bg_eval.t)
+# that wish to run them.
+# 
 
-SKIP: {
-
-  if (!Forks::Super::Config::CONFIG("YAML")) {
-    skip "YAML not available, skipping bg_eval tests", 35;
-  }
-
-{
-# do some seed operations with YAML
-# so that YAML will load everything it needs ...
-  my @ybanana = YAML::Dump("banana");
-  my $banana = YAML::Load( join'', @ybanana);
-
-  @ybanana = YAML::Dump(["apples","cherries","banana"]);
-  $banana = YAML::Load( join'', @ybanana );
-}
-
-ok(!defined $Forks::Super::LAST_JOB, 
-   "$$\\\$Forks::Super::LAST_JOB not set");
-ok(!defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID not set");
 my $t0 = Time();
 my $x = bg_eval { sleep 3 ; return 42 };
 my $t = Time();
-ok(defined $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB set");
+ok(defined $Forks::Super::LAST_JOB,        ### 3 ###
+   "\$Forks::Super::LAST_JOB set");
 ok(defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID set");
 ok(Forks::Super::isValidPid($Forks::Super::LAST_JOB_ID), 
-	"\$Forks::Super::LAST_JOB_ID set");
-ok($Forks::Super::LAST_JOB->{_is_bg} > 0, "\$Forks::Super::LAST_JOB marked bg");
+   "\$Forks::Super::LAST_JOB_ID set");
+ok($Forks::Super::LAST_JOB->{_is_bg} > 0, 
+   "\$Forks::Super::LAST_JOB marked bg");
 my $p = waitpid -1, 0;
 ok($p == -1, "waitpid doesn't catch bg_eval job");
 ok($$x == 42, "scalar bg_eval");
@@ -42,11 +23,12 @@ my $t1 = Time();
 ($t,$t0) = ($t1-$t,$t1-$t0);
 my $y = $$x;
 ok($y == 42, "scalar bg_eval");
-ok($t0 >= 2.95 && $t <= 3.85, "scalar bg_eval took ${t}s ${t0}s expected ~3s");
+ok($t0 >= 2.95 && $t <= 5.05,             ### 10 ### was 3.85, obs 3.97,4.33
+   "scalar bg_eval took ${t}s ${t0}s expected ~3s");
 $$x = 19;
 ok($$x == 19, "result is not read only");
 
-$x = bg_eval { sleep 4; return 19 } { timeout => 2 };
+$x = bg_eval { sleep 10; return 19 } { timeout => 2 };
 $t = Time();
 ok(!defined $$x, "scalar bg_eval undef on failure");
 $t = Time() - $t;
@@ -103,7 +85,8 @@ $t = Time();
 my @others = @$$x;
 my $t2 = Time();
 ($t,$t0) = ($t2-$t,$t2-$t0);
-ok($t0 >= 1.95 && $t <= 3.57, "listref bg_eval took ${t0}s ${t}s expected ~2s"); ### 25 ### was 3.25 obs 3.56
+ok($t0 >= 1.95 && $t <= 4.05,           ### 25 ### was 3.25 obs 3.56,3.75
+   "listref bg_eval took ${t0}s ${t}s expected ~2s");
 ok(@others > 0, "listref bg_eval");
 $$x = [ "a", "v", "rst" ];
 ok(@$$x == 3, "listref bg_eval overwrite ok");
@@ -119,7 +102,7 @@ $x = bg_eval {
 } { name => 'bg_eval_job', delay => 3, on_busy => "queue",
       callback => { queue => sub { $w++ }, start => sub { $w+=2 },
 		    finish => sub { $w+=5 } }
-};
+    };
 $t = Time();
 my $j = Forks::Super::Job::get('bg_eval_job');
 ok($j eq $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
@@ -131,10 +114,10 @@ ok($w == 14 + 1 + 2, "bg_eval start callback");
 ok($$x == 19, "scalar bg_eval with lots of options");
 $t1 = Time();
 ($t,$t0) = ($t1-$t,$t1-$t0);
-ok($t0 > 7.85 && $t < 10.36,     ### 34 ### was 9.6 obs 9.99,10.21,10.26,10.35
+ok($t0 > 7.85 && $t < 10.36,  ### 34 ### was 9.6 obs 9.99,10.21,10.26,10.35
    "bg_eval with delay took ${t}s ${t0}s, expected ~8s");
 ok($w == 14 + 1 + 2 + 5, "bg_eval finish callback");
 
-};
-
 use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
+
+1;

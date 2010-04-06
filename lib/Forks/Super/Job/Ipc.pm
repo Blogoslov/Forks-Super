@@ -281,9 +281,7 @@ sub _choose_fh_filename {
       carp "Forks::Super::Job::_choose_fh_filename: ",
 	"IPC file $file already exists!\n";
       debug("$file already exists ...") if $DEBUG;
-#      unlink $file;
     }
-
     return $file;
   }
 }
@@ -308,6 +306,9 @@ sub _identify_shared_fh_dir {
   } else {
     unshift @search_dirs, ".";
     push @search_dirs, "/tmp", "/var/tmp";
+  }
+  if ($ENV{FH_DIR}) {
+    unshift @search_dirs, $ENV{FH_DIR};
   }
 
   foreach my $dir (@search_dirs) {
@@ -368,7 +369,11 @@ END {
   if ($$ == ($Forks::Super::MAIN_PID || $MAIN_PID)) { # FSJ::Ipc END {}
     if (defined $Forks::Super::FH_DIR
 	&& 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
-      END_cleanup();
+      if ($^O eq "MSWin32") {
+	END_cleanup_MSWin32();
+      } else {
+	END_cleanup();
+      }
     }
   }
 }
@@ -379,24 +384,29 @@ END {
 #
 sub _trap_signals {
   return if $SIGNALS_TRAPPED++;
-  return if $^O eq "MSWin32";
-  if ($DEBUG) {
-    debug("trapping INT/TERM/HUP/QUIT signals");
-  }
+  # return if $^O eq "MSWin32";
   foreach my $sig (qw(INT TERM HUP QUIT PIPE ALRM)) {
+
+    # don't trap if it looks like a signal handler is already installed.
+    next if defined $SIG{$sig};
+    next if !exists $SIG{$sig};
+
     $SIG_OLD{$sig} = $SIG{$sig};
-    $SIG{$sig} = sub {
-      my $SIG=shift;
-      if ($DEBUG) {
-	debug("trapping: $SIG");
-      }
-      _untrap_signals();
-
-      print STDERR "$$ received $SIG -- cleaning up\n";
-
-      exit 1;
-    }
+    $SIG{$sig} = \&Forks::Super::Job::Ipc::__cleanup__;
   }
+}
+
+sub __cleanup__ {
+  my $SIG = shift;
+  if ($DEBUG) {
+    debug("trapping: $SIG");
+  }
+  _untrap_signals();
+  print STDERR "$$ received $SIG -- cleaning up\n";
+  if ($^O eq "MSWin32") {
+    END_cleanup_MSWin32();
+  }
+  exit 1;
 }
 
 sub _untrap_signals {
@@ -409,25 +419,28 @@ sub _untrap_signals {
 # clean them up even if the children are still alive -- these files
 # are exclusively for IPC, and IPC isn't needed after the parent
 # process is done.
+our $_CLEANUP = 0;
 sub END_cleanup {
 
   if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) {
     return;
   }
+  return if $_CLEANUP++;
 
   $Devel::Trace::TRACE = 0; # XXXXXX
+  foreach my $job (@Forks::Super::ALL_JOBS) {
+    $job->close_fh();
+  }
   foreach my $fh (values %Forks::Super::CHILD_STDIN,
 		  values %Forks::Super::CHILD_STDOUT,
 		  values %Forks::Super::CHILD_STDERR) {
-
     close $fh;
   }
 
   # daemonize
   return if CORE::fork();
   exit 0 if CORE::fork();
-
-  sleep 3 if $^O ne "MSWin32";
+  sleep 3;
 
   # removing all the files we created during IPC
   # doesn't always go smoothly. We'll give a
@@ -440,31 +453,31 @@ sub END_cleanup {
       $G{$ipc_file} = delete $FH_FILES{$ipc_file};
     } else {
       local $! = undef;
+      if ($DEBUG) {
+	print STDERR "Deleting $ipc_file ... ";
+      }
       my $z = unlink $ipc_file;
       if ($z && ! -e $ipc_file) {
-	#print STDERR "Delete $ipc_file ok\n";
+	print STDERR "Delete $ipc_file ok\n" if $DEBUG;
 	$G{$ipc_file} = delete $FH_FILES{$ipc_file};
-      } elsif ($^O ne "MSWin32") {
-	#print STDERR "Delete $ipc_file not ok\n";
+      } else {
+	print STDERR "Delete $ipc_file not ok: $!\n" if $DEBUG;
 	warn "Forks::Super::END_cleanup: ",
 	  "error disposing of ipc file $ipc_file: $z/$!\n";
-      } else {
-	# in MSWin32, delete can fail but "mark for delete", meaning that
-	# the OS will delete the files when the program is done ...
       }
     }
   }
 
   if (0 == scalar keys %FH_FILES && defined $FH_DIR_DEDICATED) {
-    sleep 2 if $^O ne "MSWin32";
+    sleep 2;
     exit 0 if CORE::fork();
 
     # long sleep here for maximum portability.
-    sleep 10 if $^O ne "MSWin32";
+    sleep 10;
     my $z = rmdir $Forks::Super::FH_DIR;
     if (!$z) {
       unlink glob("$Forks::Super::FH_DIR/*");
-      sleep 5 if $^O ne "MSWin32";
+      sleep 5;
       $z = rmdir $Forks::Super::FH_DIR;
     }
     if (!$z && -d $Forks::Super::FH_DIR
@@ -506,6 +519,49 @@ sub END_cleanup {
     }
   }
   exit 0;
+}
+
+sub END_cleanup_MSWin32 {
+  $Devel::Trace::TRACE = 0;
+  return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
+  return if $_CLEANUP++;  
+
+  $_->close_fh foreach @Forks::Super::ALL_JOBS;
+  close $_ for (values %Forks::Super::CHILD_STDIN, 
+		values %Forks::Super::CHILD_STDOUT,
+		values %Forks::Super::CHILD_STDERR);
+
+  my @G = grep { -e $_ } keys %FH_FILES;
+  FILE_TRY: for my $try (1 .. 3) {
+      if (@G == 0) {
+	last FILE_TRY;
+      }
+      foreach my $G (@G) {
+	local $! = undef;
+	if (!unlink $G) {
+	  undef $!;
+	  sleep 1;
+	  $G =~ s!/!\\!;
+	  my $c1 = system("CMD /C DEL /Q \"$G\" 2> NUL");
+	}
+      }
+    } continue {
+      sleep 1;
+      @G = grep { -e $_ } keys %FH_FILES;
+    }
+
+  if (@G != 0) {
+    print STDERR "XXX Looks like we failed to cleanup ", scalar @G, " temp files\n";
+    return;
+  }
+
+  if (defined $FH_DIR_DEDICATED) {
+    local $! = undef;
+    my $z = rmdir $Forks::Super::FH_DIR;
+    if (!$z) {
+      print STDERR "XXX Failed to remove dedicated temp file directory $Forks::Super::FH_DIR: $!\n";
+    }
+  }
 }
 
 sub config_fh_parent_stdin {

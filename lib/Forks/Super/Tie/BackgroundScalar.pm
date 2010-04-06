@@ -16,13 +16,29 @@ sub TIESCALAR {
   my ($class, $style, $command_or_code, %other_options) = @_;
   my $self = { value_set => 0, style => $style };
   if ($style eq "eval") {
-    require YAML;
     $self->{code} = $command_or_code;
-    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+    if ($other_options{"use_YAML"}) {
+      require YAML;
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
 			  sub => sub {
 			    my $Result = $command_or_code->();
 			    print STDOUT YAML::Dump($Result);
-			  }, _is_bg => 1 };
+			  }, _is_bg => 1, _useYAML => 1 };
+    } elsif ($other_options{"use_JSON"}) {
+      require JSON;
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+			  sub => sub {
+			    my $Result = $command_or_code->();
+			    if (ref $Result eq "") {
+			      print STDOUT JSON::encode_json(["$Result"]);
+			    } else {
+			      print STDOUT JSON::encode_json([$Result]);
+			    }
+			  }, _is_bg => 1, _useJSON => 1 };
+    } else {
+      croak "Forks::Super::Tie::BackgroundScalar: expected YAML or JSON ",
+	"to be available\n";
+    }
   } elsif ($style eq "qx") {
     $self->{command} = $command_or_code;
     $self->{stdout} = "";
@@ -49,10 +65,27 @@ sub _retrieve_value {
     }
   }
   if ($self->{style} eq "eval") {
-    require YAML;
-    my ($result) = YAML::Load( join'', Forks::Super::read_stdout($self->{job_id}) );
-    $self->{value_set} = 1;
-    $self->{value} = $result;
+    my $stdout = join'', Forks::Super::read_stdout($self->{job_id});
+    if ($self->{job}->{_useYAML}) {
+      require YAML;
+      my ($result) = YAML::Load( $stdout );
+      $self->{value_set} = 1;
+      $self->{value} = $result;
+    } elsif ($self->{job}->{_useJSON}) {
+
+      require JSON;
+      if (!defined $stdout || $stdout eq "") {
+	$self->{value_set} = 1;
+	$self->{value} = undef;
+      } else {
+	my $result = JSON::decode_json( $stdout );
+	$self->{value_set} = 1;
+	$self->{value} = $result->[0];
+      }
+    } else {
+      croak "Forks::Super::Tie::BackgroundScalar: ",
+	"YAML or JSON required to use bg_eval\n";
+    }
   } elsif ($self->{style} eq "qx") {
     $self->{value_set} = 1;
     $self->{value} = $self->{stdout};

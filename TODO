@@ -122,7 +122,7 @@ Possible TODOs:
 	$Forks::Super::Queue::QUEUE_INTERRUPT can be (additionally) tied
 	to restart queue monitor and reinstall signal handler on update
 
-    ___ A JSON-compatible bg_eval function for cases where JSON is
+    _X_ A JSON-compatible bg_eval function for cases where JSON is
 	available and YAML isn't
 
     ___ Better EXPORTS documentation in pod.
@@ -141,7 +141,7 @@ Possible TODOs:
     	features under load and on several different OS. The releases
         after that can focus on some new features that are straightforward
 	to add (or at least to try) like
-		JSON to bg_eval
+	    _X_	JSON to bg_eval
 		$Forks::Super::OPEN_FH, more robust IPC
 		cpu load
 		hook up Sys-CpuAffinity
