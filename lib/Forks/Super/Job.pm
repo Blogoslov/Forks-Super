@@ -8,9 +8,9 @@ package Forks::Super::Job;
 use Forks::Super::Debug qw(debug);
 use Forks::Super::Util qw(is_number qualify_sub_name);
 use Forks::Super::Config qw(:all);
+use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
 use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::Timeout;
-use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
 use Exporter;
@@ -20,7 +20,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 sub new {
   my ($class, $opts) = @_;
@@ -339,7 +339,7 @@ sub launch {
       local $ENV{_FORK_PPID} = $$;
       local $ENV{_FORK_PID} = $$;
 
-      if (1 && Forks::Super::Config::CONFIG("Win32::Process")) {
+      if (Forks::Super::Config::CONFIG("Win32::Process")) {
 
 	# XXX - is this ok for commands with redirected STDIN?
 	my $pid = open my $proch, "-|", join(' ',@{$job->{cmd}});
@@ -366,6 +366,7 @@ sub launch {
       $c1 = system( @{$job->{cmd}} );
       debug("Exit code of $$ was $c1") if $job->{debug};
     }
+    deinit_child();
     exit $c1 >> 8;
   } elsif ($job->{style} eq 'exec') {
     local $ENV{_FORK_PPID} = $$ if $^O eq "MSWin32";
@@ -376,6 +377,7 @@ sub launch {
     no strict 'refs';
     $job->{sub}->(@{$job->{args}});
     debug("Job $$ subroutine call has completed") if $job->{debug};
+    deinit_child();
     exit 0;
   }
   return 0;
@@ -705,6 +707,12 @@ sub init_child {
   return;
 }
 
+sub deinit_child {
+  close STDOUT if -p STDOUT;
+  close STDERR if -p STDERR;
+  close STDIN if -p STDIN;
+}
+
 1;
 
 __END__
@@ -715,7 +723,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.28
+0.29
 
 =head1 SYNOPSIS
 

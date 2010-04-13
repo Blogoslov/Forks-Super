@@ -1,6 +1,6 @@
 #
-# Forks::Super::Job::Ipc -- manage temporary files, sockets
-#   (and someday pipes) that facilitate communication between
+# Forks::Super::Job::Ipc -- manage temporary files, sockets, pipes
+#   that facilitate communication between
 #   parent and child processes
 # implementation of
 #     fork { child_fh => ... }
@@ -60,9 +60,16 @@ sub preconfig_fh {
 	$config->{out} = 1;
 	$config->{err} = 1;
       }
-      if ($fh_spec =~ /sock/i) {
-	$config->{sockets} = 1;
-      }
+    }
+
+    if ($^O eq "MSWin32" && !$ENV{WIN32_PIPE_OK}) {
+      $fh_spec =~ s/pipe/socket/i;
+    }
+
+    if ($fh_spec =~ /sock/i) {
+      $config->{sockets} = 1;
+    } elsif ($fh_spec =~ /pipe/i) {
+      $config->{pipes} = 1;
     }
   }
   if (defined $job->{stdin}) {
@@ -97,8 +104,8 @@ sub preconfig_fh {
     }
   }
 
-  # choose file names -- if sockets are used and successfully set up,
-  # the files will not be created.
+  # choose file names -- if sockets or pipes are used and successfully set up,
+  # the files will never actually be created.
   if ($config->{in}) {
     if (defined $config->{stdin} && $job->{style} ne "cmd"
 	&& $job->{style} ne "exec") {
@@ -124,6 +131,9 @@ sub preconfig_fh {
   if ($config->{sockets}) {
     preconfig_fh_sockets($job,$config);
   }
+  if ($config->{pipes}) {
+    preconfig_fh_pipes($job,$config);
+  }
 
   if (0 < scalar keys %$config) {
     if (!Forks::Super::Config::CONFIG("filehandles")) {
@@ -144,7 +154,9 @@ sub collect_output {
   }
   my $stdout = $fh_config->{stdout};
   if (defined $stdout) {
-    if ($fh_config->{f_out} && $fh_config->{f_out} ne "__socket__") {
+    if ($fh_config->{f_out} 
+	&& $fh_config->{f_out} ne "__socket__"
+        && $fh_config->{f_out} ne "__pipe__") {
       local $/ = undef;
       open(my $fh, "<", $fh_config->{f_out});
       ($$stdout) = <$fh>;
@@ -159,7 +171,9 @@ sub collect_output {
   }
   my $stderr = $fh_config->{stderr};
   if (defined $stderr) {
-    if ($fh_config->{f_err} && $fh_config->{f_err} ne "__socket__") {
+    if ($fh_config->{f_err} 
+	&& $fh_config->{f_err} ne "__socket__"
+        && $fh_config->{f_err} ne "__pipe__") {
       local $/ = undef;
       open(my $fh, "<", $fh_config->{f_err});
       ($$stderr) = <$fh>;
@@ -207,6 +221,31 @@ sub preconfig_fh_sockets {
 	      "/$config->{psock2}:",CORE::fileno($config->{psock2}));
       }
     }
+  }
+}
+
+sub preconfig_fh_pipes {
+  my ($job,$config) = @_;
+  if (!Forks::Super::Config::CONFIG("pipe")) {
+    carp "Forks::Super::Job::preconfig_fh_pipes(): ",
+      "Pipes unavailable. ",
+	"Will try to use regular filehandles for child ipc.\n";
+    delete $config->{pipes};
+    return;
+  }
+
+  if ($config->{in}) {
+    ($config->{p_in}, $config->{p_to_in}) = _create_pipe_pair();
+  }
+  if ($config->{out}) {
+    ($config->{p_out},$config->{p_to_out}) = _create_pipe_pair();
+  }
+  if ($config->{err} && !$config->{join}) {
+    ($config->{p_err},$config->{p_to_err}) = _create_pipe_pair();
+  }
+
+  if ($job->{debug}) {
+    debug("created pipe pairs for $job");
   }
 }
 
@@ -258,6 +297,21 @@ sub fileno {
   return $FILENO{$fh};
 }
 
+sub _create_pipe_pair {
+  if (!Forks::Super::Config::CONFIG("pipe")) {
+    croak "Forks::Super::Job::_create_pipe_pair(): no pipe\n";
+  }
+
+  my ($p_read, $p_write);
+  local $! = undef;
+
+  pipe $p_read, $p_write;
+  $p_write->autoflush(1);
+
+  $FILENO{$p_read} = CORE::fileno($p_read);
+  $FILENO{$p_write} = CORE::fileno($p_write);
+  return ($p_read, $p_write);
+}
 
 sub _choose_fh_filename {
   my @debug_info = @_;
@@ -469,19 +523,27 @@ sub END_cleanup {
   }
 
   if (0 == scalar keys %FH_FILES && defined $FH_DIR_DEDICATED) {
+
+    my $zz = rmdir($Forks::Super::FH_DIR) || 0;
+    if ($zz) {
+      return;
+    }
+
+
     sleep 2;
     exit 0 if CORE::fork();
 
     # long sleep here for maximum portability.
     sleep 10;
-    my $z = rmdir $Forks::Super::FH_DIR;
+    my $z = rmdir($Forks::Super::FH_DIR) || 0;
     if (!$z) {
       unlink glob("$Forks::Super::FH_DIR/*");
       sleep 5;
-      $z = rmdir $Forks::Super::FH_DIR;
+      $z = rmdir($Forks::Super::FH_DIR) || 0;
     }
-    if (!$z && -d $Forks::Super::FH_DIR
-	    && 0 < scalar glob("$Forks::Super::FH_DIR/.nfs*")) {
+    if (!$z
+	&& -d $Forks::Super::FH_DIR
+	&& 0 < scalar glob("$Forks::Super::FH_DIR/.nfs*")) {
 
       # Observed these files on Linux running from NSF mounted filesystem
       # .nfsXXX files are usually temporary (~30s) but hard to kill
@@ -489,7 +551,7 @@ sub END_cleanup {
 	sleep 5;
 	last if glob("$Forks::Super::FH_DIR/.nfs*") <= 0;
       }
-      $z = rmdir $Forks::Super::FH_DIR;
+      $z = rmdir($Forks::Super::FH_DIR) || 0;
     }
 
     if (!$z && -d $Forks::Super::FH_DIR) {
@@ -518,11 +580,11 @@ sub END_cleanup {
       }
     }
   }
-  exit 0;
+  return;
 }
 
 sub END_cleanup_MSWin32 {
-  $Devel::Trace::TRACE = 0;
+# $Devel::Trace::TRACE = 0;
   return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
   return if $_CLEANUP++;  
 
@@ -562,20 +624,38 @@ sub END_cleanup_MSWin32 {
       print STDERR "XXX Failed to remove dedicated temp file directory $Forks::Super::FH_DIR: $!\n";
     }
   }
+  return;
 }
 
 sub config_fh_parent_stdin {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  if ($fh_config->{in} && $fh_config->{sockets}
+  if ($fh_config->{in} 
+      && $fh_config->{sockets} 
       && !defined $fh_config->{stdin}) {
+
     $fh_config->{s_in} = $fh_config->{psock};
-    $job->{child_stdin} = $Forks::Super::CHILD_STDIN{$job->{real_pid}}
-      = $Forks::Super::CHILD_STDIN{$job->{pid}} = $fh_config->{s_in};
+    $job->{child_stdin} 
+      = $Forks::Super::CHILD_STDIN{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDIN{$job->{pid}} 
+      = $fh_config->{s_in};
     $fh_config->{f_in} = "__socket__";
     debug("Setting up socket to $job->{pid} stdin $fh_config->{s_in} ",
 	  CORE::fileno($fh_config->{s_in})) if $job->{debug};
+
+  } elsif ($fh_config->{in}
+	   && $fh_config->{pipes}
+	   && !defined $fh_config->{stdin}) {
+
+    $job->{child_stdin} 
+      = $Forks::Super::CHILD_STDIN{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDIN{$job->{pid}} 
+      = $fh_config->{p_to_in};
+    $fh_config->{f_in} = "__pipe__";
+    debug("Setting up pipe to $job->{pid} stdin $fh_config->{p_to_in} ",
+	  CORE::fileno($fh_config->{p_to_in})) if $job->{debug};
+
   } elsif ($fh_config->{in} and defined $fh_config->{stdin}) {
     debug("Passing STDIN from parent to child in scalar variable")
       if $job->{debug};
@@ -606,12 +686,23 @@ sub config_fh_parent_stdout {
   my $fh_config = $job->{fh_config};
 
   if ($fh_config->{out} && $fh_config->{sockets}) {
+
     $fh_config->{s_out} = $fh_config->{psock};
     $job->{child_stdout} = $Forks::Super::CHILD_STDOUT{$job->{real_pid}}
       = $Forks::Super::CHILD_STDOUT{$job->{pid}} = $fh_config->{s_out};
     $fh_config->{f_out} = "__socket__";
     debug("Setting up socket to $job->{pid} stdout $fh_config->{s_out} ",
 	  CORE::fileno($fh_config->{s_out})) if $job->{debug};
+
+  } elsif ($fh_config->{out} && $fh_config->{pipes}) {
+
+    $job->{child_stdout}
+      = $Forks::Super::CHILD_STDOUT{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDOUT{$job->{pid}}
+      = $fh_config->{p_out};
+    $fh_config->{f_out} = "__pipe__";
+    debug("Setting up pipe to $job->{pid} stdout $fh_config->{p_out} ",
+	  CORE::fileno($fh_config->{p_out})) if $job->{debug};
 
   } elsif ($fh_config->{out} and defined $fh_config->{f_out}) {
     # creation of $fh_config->{f_out} may be delayed.
@@ -655,8 +746,10 @@ sub config_fh_parent_stdout {
   }
   if ($fh_config->{join}) {
     delete $fh_config->{err};
-    $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
-      = $Forks::Super::CHILD_STDERR{$job->{pid}} = $job->{child_stdout};
+    $job->{child_stderr} 
+      = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDERR{$job->{pid}} 
+      = $job->{child_stdout};
     $fh_config->{f_err} = $fh_config->{f_out};
     debug("Joining stderr to stdout for $job->{pid}") if $job->{debug};
   }
@@ -669,13 +762,27 @@ sub config_fh_parent_stderr {
 
   if ($fh_config->{err} && $fh_config->{sockets}) {
 
-    $fh_config->{s_err} = $fh_config->{s_out}
+#   $fh_config->{s_err} = $fh_config->{s_out}
+    $fh_config->{s_err} = defined $fh_config->{psock2}
       ? $fh_config->{psock2} : $fh_config->{psock};
-    $job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
-      = $Forks::Super::CHILD_STDERR{$job->{pid}} = $fh_config->{s_err};
+
+    $job->{child_stderr}
+      = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDERR{$job->{pid}}
+      = $fh_config->{s_err};
     $fh_config->{f_err} = "__socket__";
     debug("Setting up socket to $job->{pid} stderr $fh_config->{s_err} ",
 	  CORE::fileno($fh_config->{s_err})) if $job->{debug};
+
+  } elsif ($fh_config->{err} && $fh_config->{pipes}) {
+
+    $job->{child_stderr}
+      = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDERR{$job->{pid}}
+      = $fh_config->{p_err};
+    $fh_config->{f_err} = "__pipe__";
+    debug("Setting up pipe to $job->{pid} stderr ",
+	  CORE::fileno($fh_config->{p_err})) if $job->{debug};
 
   } elsif ($fh_config->{err} and defined $fh_config->{f_err}) {
 
@@ -688,8 +795,10 @@ sub config_fh_parent_stderr {
     for ($try=1; $try<=11; $try++) {
       if ($try <= 10 && open($fh, '<', $fh_config->{f_err})) {
 	debug("Opened child STDERR in parent on try #$try") if $job->{debug};
-	$job->{child_stderr} = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
-	  = $Forks::Super::CHILD_STDERR{$job->{pid}} = $fh;
+	$job->{child_stderr} 
+	  = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+	  = $Forks::Super::CHILD_STDERR{$job->{pid}} 
+	  = $fh;
 
 	debug("Setting up link to $job->{pid} stderr in $fh_config->{f_err}")
 	  if $job->{debug};
@@ -739,6 +848,14 @@ sub config_fh_parent {
     close $job->{fh_config}->{csock};
     close $job->{fh_config}->{csock2} if defined $job->{fh_config}->{csock2};
   }
+  if ($job->{fh_config}->{pipes}) {
+    foreach my $pipeattr (qw(p_in p_to_out p_to_err)) {
+      if (defined $job->{fh_config}->{$pipeattr}) {
+	close $job->{fh_config}->{$pipeattr};
+	delete $job->{fh_config}->{$pipeattr};
+      }
+    }
+  }
 
   return;
 }
@@ -756,6 +873,17 @@ sub config_fh_child_stdin {
     } else {
       warn "Forks::Super::Job::config_fh_child_stdin(): ",
 	"could not attach child STDIN to input sockethandle: $!\n";
+    }
+    debug("Opening ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
+      if $job->{debug};
+  } elsif ($fh_config->{in} && $fh_config->{pipes}) {
+    close STDIN;
+    if (open(STDIN, '<&' . CORE::fileno($fh_config->{p_in}))) {
+      *STDIN->autoflush(1);
+      $FILENO{*STDIN} = CORE::fileno(STDIN);
+    } else {
+      warn "Forks::Super::Job::config_fh_child_stdin(): ",
+	"could not attach child STDIN to input pipe: $!\n";
     }
     debug("Opening ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
       if $job->{debug};
@@ -829,6 +957,31 @@ sub config_fh_child_stdout {
       }
     }
 
+  } elsif ($fh_config->{out} && $fh_config->{pipes}) {
+    close STDOUT;
+    if (open(STDOUT, '>&' . CORE::fileno($fh_config->{p_to_out}))) {
+      *STDOUT->autoflush(1);
+      select STDOUT;
+    } else {
+      warn "Forks::Super::Job::config_fh_child_stdout(): ",
+	"could not attach child STDOUT to output pipe: $!\n";
+    }
+    debug("Opening ",*STDOUT,"/",CORE::fileno(STDOUT)," in child STDOUT")
+      if $job->{debug};
+
+    if ($fh_config->{join}) {
+      delete $fh_config->{err};
+      close STDERR;
+      if (open(STDERR, '>&' . CORE::fileno($fh_config->{p_to_out}))) {
+	*STDERR->autoflush(1);
+	debug("Joining ",*STDERR,"/",CORE::fileno(STDERR),
+	      " STDERR to child STDOUT") if $job->{debug};
+      } else {
+	warn "Forks::Super::Job::config_fh_child_stdout(): ",
+	  "could not join child STDERR to STDOUT sockethandle: $!\n";
+      }
+    }
+
   } elsif ($fh_config->{out} && $fh_config->{f_out}) {
     my $fh;
     debug("Opening up $fh_config->{f_out} for output in the child   $$")
@@ -868,6 +1021,7 @@ sub config_fh_child_stderr {
   if ($fh_config->{err} && $fh_config->{sockets}) {
     close STDERR;
     my $fileno_arg = $fh_config->{out} ? "csock2" : "csock";
+#   my $fileno_arg = defined $fh_config->{csock2} ? "csock2" : "csock";
     if (open(STDERR, ">&" . CORE::fileno($fh_config->{$fileno_arg}))) {
       *STDERR->autoflush(1);
       debug("Opening ",*STDERR,"/",CORE::fileno(STDERR),
@@ -875,6 +1029,16 @@ sub config_fh_child_stderr {
     } else {
       warn "Forks::Super::Job::config_fh_child_stderr(): ",
 	"could not attach STDERR to child error sockethandle: $!\n";
+    }
+  } elsif ($fh_config->{err} && $fh_config->{pipes}) {
+    close STDERR;
+    if (open(STDERR, '>&' . CORE::fileno($fh_config->{p_to_err}))) {
+      *STDERR->autoflush(1);
+      debug("Opening ",*STDERR,"/",CORE::fileno(STDERR),
+	    " in child STDERR") if $job->{debug};
+    } else {
+      warn "Forks::Super::Job::config_fh_child_stderr(): ",
+	"could not attach STDERR to child error pipe: $!\n";
     }
   } elsif ($fh_config->{err} && $fh_config->{f_err}) {
     my $fh;
@@ -916,6 +1080,13 @@ sub config_fh_child {
   if ($job->{fh_config} && $job->{fh_config}->{sockets}) {
     close $job->{fh_config}->{psock};
     close $job->{fh_config}->{psock2} if defined $job->{fh_config}->{psock2};
+  }
+  if ($job->{fh_config} && $job->{fh_config}->{pipes}) {
+    foreach my $pipeattr (qw(p_to_in p_out p_err)) {
+      if (defined $job->{fh_config}->{$pipeattr}) {
+	close $job->{fh_config}->{$pipeattr};
+      }
+    }
   }
   return;
 }
@@ -1004,19 +1175,29 @@ sub config_cmd_fh_child {
   return;
 }
 
+sub _close {
+  my $handle = shift;
+  no warnings;
+  if (defined getsockname($handle)) {
+    return shutdown($handle,2) + close $handle;
+  } else {
+    return close $handle;
+  }
+}
+
 sub close_fh {
   my $job = shift;
   if (defined $job->{child_stdin} && !defined $job->{child_stdin_closed}) {
-    $job->{child_stdin_closed} = close $job->{child_stdin};
+    $job->{child_stdin_closed} = _close $job->{child_stdin};
   }
   if (defined $job->{child_stdout} && !defined $job->{child_stdout_closed}) {
-    $job->{child_stdout_closed} = close $job->{child_stdout};
+    $job->{child_stdout_closed} = _close $job->{child_stdout};
     if ($job->{fh_config}->{join}) {
       $job->{child_stderr_closed} = $job->{child_stdout_closed};
     }
   }
   if (defined $job->{child_stderr} && !defined $job->{child_stderr_closed}) {
-    $job->{child_stderr_closed} = close $job->{child_stderr};
+    $job->{child_stderr_closed} = _close $job->{child_stderr};
   }
   foreach my $p ($job->{real_pid}, $job->{pid}, $job->{name}) {
     next if !defined $p;

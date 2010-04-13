@@ -4,11 +4,6 @@ use Carp;
 use strict;
 use warnings;
 
-# force loading of more modules in parent proc
-# so fast fail (see test#17, test#8) isn't slowed
-# down so much
-Forks::Super::Job::Timeout::warm_up();
-
 #
 # test that jobs respect deadlines for jobs to
 # complete when the jobs specify "timeout" or
@@ -31,7 +26,10 @@ SKIP: {
       skip "Skipping tests about timing out grandchildren "
 	. "because setpgrp() and TASKKILL are unavailable", 6;
     }
-  } 
+  }
+
+  # a child process that times out should clean up after
+  # itself (i.e., kill off its grandchildren). 
 
   unlink "t/out/spawn.pids.$$";
   my $t = Forks::Super::Util::Time();

@@ -54,7 +54,7 @@ ok($t <= 4.15,                       ### 14 ### was 4 obs 4.12
 ### interrupted bg_qx, capture existing output ###
 
 $z = sprintf "C%05d", 100000 * rand();
-$x = bg_qx "$^X t/external-command.pl -e=$z -s=10", timeout => 2;
+$x = bg_qx "$^X t/external-command.pl -e=$z -s=10", timeout => 4;
 $t = Time();
 ok($$x eq "$z \n" || $$x eq "$z ",   ### 15 ###
    "scalar bg_qx failed but retrieved output"); 
@@ -64,8 +64,8 @@ if (!defined $$x) {
   print STDERR "(output was: $$x; target was \"$z \")\n";
 }
 $t = Time() - $t;
-ok($t <= 6.0,                            ### 16 ### was 3 obs 3.62,5.88
-   "scalar bg_qx respected timeout, took ${t}s expected ~2s");
+ok($t <= 7.0,                            ### 16 ### was 3 obs 3.62,5.88
+   "scalar bg_qx respected timeout, took ${t}s expected ~4s");
 
 ### list context ###
 
@@ -109,7 +109,7 @@ ok($tests[0] eq "Hello \n", "list bg_qx first line ok");
 ok($tests[1] eq "World \n", "list bg_qx second line ok");    ### 30 ###
 ok(@tests == 2, "list bg_qx interrupted output had " 
 	        . scalar @tests . "==2 lines");              ### 31 ###
-ok($t >= 5.5 && $t < 7.75,
+ok($t >= 5.5 && $t < 8.15,
 	"list bg_qx took ${t}s expected ~6-7s");             ### 32 ###
 
 sub hex_enc{join'', map {sprintf"%02x",ord} split//,shift} # for debug

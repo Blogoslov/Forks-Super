@@ -120,6 +120,27 @@ to check whether there is input to be read on a
 Windows socket handle.
 
 
+6. Pipes
+
+Using pipes for IPC is disabled in Windows because
+of their severe limitations:
+
+  * tiny input buffer capacity (~512 bytes)
+  * are always blocking, so your program can hang
+    if you read from an empty pipe
+  * it is difficult to recover from a pipe deadlock --
+    the operation does not time out and it is quite
+    difficult to interrupt
+  * the 4-arg select function doesn't work with pipes,
+    so it's hard to tell when there is input to be
+    read on a pipe
+
+If you invoke  fork { child_fh => [ "pipe" ] }  from
+a Windows system, this module will attempt to configure
+your IPC with sockets instead.
+
+
+
 
 The  perlfork  pod discusses many pitfalls of 
 attempting to use  fork  under Windows systems.

@@ -1,10 +1,16 @@
 use Forks::Super ':test';
-use Test::More tests => 11;
+use Test::More;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 150;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+$| = 1;
+
+{
+  plan tests => 12;
 }
+
+#if (Forks::Super::CONFIG("alarm")) {
+#  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+#}
 
 #
 # test whether a parent process can have access to the
@@ -20,11 +26,16 @@ sub repeater {
   my ($n, $e) = @_;
   my $end_at = time + 6;
   my ($input_found, $input) = 1;
+  my $curpos;
   local $!;
 
+  binmode STDOUT;  # for MSWin32 compatibility
+  binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    while (defined ($_ = <STDIN>)) {
+    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
+    while ($_ = defined getsockname(STDIN) ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
+    #while (<STDIN>) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
@@ -51,57 +62,51 @@ sub repeater {
       Forks::Super::debug("repeater: no input");
     }
     Forks::Super::pause();
-    seek STDIN, 0, 1;
   }
-  if ($Forks::Super::DEBUG) {
-    my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
-    Forks::Super::debug("repeater: time expired. ",
-			"Not processing any more input");
-    Forks::Super::debug("input was from file: $f_in");
-    open(F_IN, "<", $f_in);
-    while (<F_IN>) {
-      s/\s+$//;
-      Forks::Super::debug("    input $.: $_");
-    }
-    close F_IN;
-  }
-  close STDOUT;
-  close STDERR;
 }
 
 #######################################################
 
 my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
-		   child_fh => "all" };
+		 child_fh => "in,out,err,pipe" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $Forks::Super::CHILD_STDIN{$pid},"found stdin fh");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid},"found stdout fh");
-ok(defined $Forks::Super::CHILD_STDERR{$pid},"found stderr fh");
+ok(defined $Forks::Super::CHILD_STDIN{$pid} 
+   && defined fileno($Forks::Super::CHILD_STDIN{$pid}),
+   "found stdin fh");
+ok(defined $Forks::Super::CHILD_STDOUT{$pid} 
+   && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),
+   "found stdout fh");
+ok(defined $Forks::Super::CHILD_STDERR{$pid} 
+   && defined fileno($Forks::Super::CHILD_STDERR{$pid}),
+   "found stderr fh");
+ok(-p $Forks::Super::CHILD_STDIN{$pid} &&
+   -p $Forks::Super::CHILD_STDOUT{$pid} &&
+   -p $Forks::Super::CHILD_STDERR{$pid},
+   "STDxxx handles are pipes");
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
-close $fh_in;
 ok($z > 0, "print to child stdin successful");
 my $t = time;
 my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
 my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
-while (time < $t+10) {
+while (time < $t+8) {
   push @out, Forks::Super::read_stdout($pid);
   push @err, Forks::Super::read_stderr($pid);
   sleep 1;
-# print "\@out:\n------\n@out\n\@err:\n-------\n@err\n";
 }
+Forks::Super::close_fh($pid);
 
-ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
+ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [\n @out ]");
 
-@err = grep { !/alarm\(\) not available/ } @err; # exclude warning to child STDERR
+@err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
 ok($out[0] eq "0:$msg\n", "got Expected first line from child output");
 ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
 ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
 ok($err[-1] eq "$msg\n", "got Expected line from child error");
-waitall;
 
+my $r = waitall 10;

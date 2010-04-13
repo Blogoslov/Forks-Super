@@ -18,7 +18,7 @@ $| = 1;
 
 $Carp::Internal{ (__PACKAGE__) }++;
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -98,7 +98,7 @@ sub _init {
   # XXX - default value of MAX_PROC should be tied to
   #       (1) number of processors on machine?
   #       (2) maximum number of simultaneous procs supported by system
-  #           (see t/find-limits.PL)?
+  #           (see ./system-limits.PL)?
   # ultimately we should discover this
   $MAX_PROC = 9999;
   $MAX_LOAD = 9999; # not supported yet
@@ -186,7 +186,6 @@ sub fork {
   }
   return $job->launch;
 }
-
 
 #
 # called from a child process immediately after it
@@ -286,6 +285,73 @@ sub _read_socket {
   return readline($sh);
 }
 
+sub _read_pipe {
+  my ($job, $sh, $wantarray) = @_;
+
+  if (!defined $sh) {
+    carp "Forks::Super::_read_pipe: ",
+      "read on undefined filehandle for ",$job->toString(),"\n";
+  }
+
+  my $fileno = fileno($sh);
+  if (not defined $fileno) {
+    $fileno = Forks::Super::Job::Ipc::fileno($sh);
+    Carp::cluck "Cannot determine FILENO for pipe $sh!";
+  }
+
+  my ($rin,$rout,$ein,$eout);
+  my $timeout = $SOCKET_READ_TIMEOUT || 1.0;
+  $rin = '';
+  vec($rin, $fileno, 1) = 1;
+  local $! = undef;
+  my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+
+  if ($nfound == 0) {
+    if ($DEBUG) {
+      debug("no input found on $sh/$fileno");
+    }
+    return () if $wantarray;
+    return;
+  }
+  if ($nfound < 0) {
+    # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
+    return () if $wantarray;
+    return;
+  }
+
+  # perldoc select: warns against mixing select4
+  # (unbuffered input) with readline (buffered input).
+  # Do I have to do my own buffering? Eek. Don't look.
+
+  if ($wantarray) {
+    my $input = '';
+
+    while ($nfound) {
+      my $buffer = '';
+      last if 0 == sysread $sh, $buffer, 4096;
+      $input .= $buffer;
+      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+    }
+
+    my @return = ();
+    while ($input =~ m!$/!) {
+      push @return, substr $input, 0, $+[0];
+      substr($input, 0, $+[0]) = "";
+    }
+    return @return;
+  } else {
+    my $input = '';
+    while ($nfound) {
+      my $buffer = '';
+      last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
+      $input .= $buffer;
+      last if length($/) > 0 && substr($input,-length($/)) eq $/;
+      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+    }
+    return $input;
+  }
+}
+
 #
 # called from the parent process,
 # attempts to read a line from standard output filehandle
@@ -311,6 +377,7 @@ sub read_stdout {
       debug("Forks::Super::read_stdout(): ",
 	    "fh closed for $job->{pid}");
     }
+    return () if wantarray; # XXXXXXXX 
     return;
   }
   my $fh = $job->{child_stdout};
@@ -320,10 +387,13 @@ sub read_stdout {
 	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stdout_closed}++;
+    return () if wantarray; # XXXXXXXX
     return;
   }
   if (defined getsockname($fh)) {
     return _read_socket($job, $fh, wantarray);
+  } elsif (-p $fh) {
+    return _read_pipe($job, $fh, wantarray);
   }
 
   local $! = undef;
@@ -339,14 +409,15 @@ sub read_stdout {
 	}
 	$job->{child_stdout_closed}++;
 	close $fh;
-	return;
+	return (); # XXXXXXXX
+	#return;   # XXXXXXXX
 
       } else {
 
-	@lines = ('');
+	@lines = ();
+	# XXXXXXXX @lines = ('');
 	seek $fh, 0, 1;
 	Forks::Super::pause();
-
       }
     }
     return @lines;
@@ -389,6 +460,7 @@ sub read_stderr {
       debug("Forks::Super::read_stderr(): ",
 	    "fh closed for $job->{pid}");
     }
+    return () if wantarray; # XXXXXXXX
     return;
   }
   my $fh = $job->{child_stderr};
@@ -398,10 +470,13 @@ sub read_stderr {
 	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stderr_closed}++;
+    return () if wantarray; # XXXXXXXX
     return;
   }
   if (defined getsockname($fh)) {
     return _read_socket($job, $fh, wantarray);
+  } elsif (-p $fh) {
+    return _read_pipe($job, $fh, wantarray);
   }
 
   local $! = undef;
@@ -417,10 +492,10 @@ sub read_stderr {
 	}
 	$job->{child_stderr_closed}++;
 	close $fh;
-	return;
+	return (); # XXXXXXXX return;
 
       } else {
-	@lines = ('');
+	@lines = (); # XXXXXXXX @lines = ('');
 	seek $fh, 0, 1;
 	Forks::Super::pause();
       }
@@ -475,7 +550,7 @@ Forks::Super - extensions and convenience methods for managing background proces
 
 =head1 VERSION
 
-Version 0.28
+Version 0.29
 
 =head1 SYNOPSIS
 
@@ -838,26 +913,45 @@ pass between parent and child instead of temporary files.
 
 =back
 
-=head3 Socket handles vs. file handles
+=head3 Socket handles vs. file handles vs. pipes
 
 Here are some things to keep in mind when deciding whether to
-use sockets or regular files for parent-child IPC:
+use sockets, pipes, or regular files for parent-child IPC:
 
 =over 4
 
 =item *
 
-Sockets have a performance advantage, especially at
+Using regular files is implemented everywhere and is the
+most portable and robust scheme for IPC. Sockets and pipes
+are best suited for Unix-like systems, and may have
+limitations on non-Unix systems.
+
+=item *
+
+Sockets and pipes have a performance advantage, especially at
 child process start-up.
 
 =item *
 
-Socket input buffers have limited capacity. Write operations
-can block if the socket reader is not vigilant
+Temporary files use disk space; sockets and pipes use memory. 
+One of these might be a relatively scarce resource on your
+system.
 
 =item *
 
-On Windows, sockets are blocking, and care must be taken
+Socket input buffers have limited capacity. Write operations
+can block if the socket reader is not vigilant. Pipe input
+buffers are often even smaller (as small as 512 bytes on
+some modern systems).
+
+I<The> C<system-limits> I<file that was created in your
+build directory will have information about the socket and
+pipe capacity of your system, if you are interested.>
+
+=item *
+
+On Windows, sockets and pipes are blocking, and care must be taken
 to prevent your script from reading on an empty socket
 
 =back
@@ -882,10 +976,12 @@ socket operations.
 
 The test C<defined getsockname($handle)> can determine
 whether C<$handle> is a socket handle or a regular filehandle.
+The test C<-p $handle> can determine whether C<$handle> is
+reading from or writing to a pipe.
 
 =item *
 
-The following idiom is safe to use on both socket handles
+The following idiom is safe to use on both socket handles, pipes,
 and regular filehandles:
 
     shutdown($handle,2) || close $handle;
@@ -1033,8 +1129,6 @@ for that change to have a large impact on the 1-minute
 utilization.
 
 ############################################################
-
-
 
 =item C<$Forks::Super::ON_BUSY = "block" | "fail" | "queue">
 
@@ -1962,7 +2056,6 @@ There are reams of other modules on CPAN for managing background
 processes. See Parallel::*, L<Proc::Parallel>, L<Proc::Fork>, 
 L<Proc::Launcher>. Also L<Win32::Job>.
 
-
 Inspiration for C<bg_eval> function from L<Acme::Fork::Lazy>.
 
 =head1 AUTHOR
@@ -1978,8 +2071,6 @@ it under the same terms as Perl itself, either Perl version 5.8.8 or,
 at your option, any later version of Perl 5 you may have available.
 
 =cut
-
-
 
 TODO in future releases: See TODO file.
 

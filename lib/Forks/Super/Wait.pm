@@ -101,7 +101,8 @@ sub waitall {
       debug("Forks::Super::waitall: caught pid $pid");
     }
   } while isValidPid($pid) && ++$waited_for && Time() < $expire;
-  return $waited_for;   # future enhancement: return 0 or -1 on timeout
+  # $waited_for = -1 * ($waited_for + 0.5) if Time() < $expire;
+  return $waited_for;
 }
 
 #

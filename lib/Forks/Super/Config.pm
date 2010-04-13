@@ -64,7 +64,7 @@ sub CONFIG {
   # check for OS-dependent Perl functionality
   if ($module eq "getpgrp" or $module eq "alarm"
       or $module eq "SIGUSR1" or $module eq "getpriority"
-      or $module eq "select4") {
+      or $module eq "select4" or $module eq "pipe") {
 
     return $CONFIG{$module} = _CONFIG_Perl_component($module);
   } elsif (substr($module,0,1) eq "/") {
@@ -127,6 +127,15 @@ sub _CONFIG_Perl_component {
     undef $@;
     my $z = eval { select undef,undef,undef,0.5 };
     $CONFIG{"select4"} = $@ ? 0 : 1;
+  } elsif ($component eq "pipe") {
+    undef $@;
+    eval {
+      my ($read,$write);
+      pipe $read, $write;
+      close $read;
+      close $write;
+    };
+    $CONFIG{"pipe"} = $@ ? 0 : 1;
   }
 
   # getppid  is another OS-dependent Perl system call

@@ -68,7 +68,6 @@ sub _retrieve_value {
       $self->{value} = [ @result ];
       $self->{value_set} = 1;
     } elsif ($self->{job}->{_useJSON}) {
-print STDERR "JSON decoding:\n------\n$stdout\n--------\n";
       if (!defined $stdout or $stdout eq "") {
 	$self->{value_set} = 1;
 	$self->{value} = [];

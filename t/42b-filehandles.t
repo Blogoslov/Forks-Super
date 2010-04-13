@@ -16,7 +16,7 @@ $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
 
 
 #######################################################
-my (@cmd,$pid,$fh_in,$z,$t,$fh_out,$fh_err,@out,@err,$msg);
+my (@cmd,$pid,$fh_in,$z,$t,@out,@err,$msg);
 @cmd = ($^X, "t/external-command.pl", "-s=2", "-y=2");
 
 

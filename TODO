@@ -18,7 +18,10 @@ Possible TODOs:
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
 		"non functional")
 
-    ___	implement child handles through IO::Pipe objects
+    _X_ implement child handles through pipe objects
+	___ use IO::Pipe
+	_X_ document, extend file vs. socket discussion
+	    On MSWin32, for example, pipe capacity is 512 bytes?
 
     ___ facilities to suspend jobs when the system gets to busy
         and to resume them when the system gets less busy.
@@ -146,4 +149,10 @@ Possible TODOs:
 		cpu load
 		hook up Sys-CpuAffinity
 		suspend/resume feature
-		using pipes
+	    _X_ using pipes
+
+    ___ On Unix test 60-os, skip priority tests is priority is already 20
+        (meaning the test is already being conducted in super nice mode
+        and the priority can't be changed ...)
+
+

@@ -21,10 +21,10 @@ $Forks::Super::ON_BUSY = "block";
 
 #### failure point 0.06, MSWin32 5.00. Was the system overloaded? ####
 
-my $t = Forks::Super::Util::Time();
-my $t0 = $t;
 my $pid1 = fork { sub => $sleepy };
 my $pid2 = fork { sub => $sleepy };
+my $t = Forks::Super::Util::Time();
+my $t0 = $t;
 my $pid3 = fork { sub => $sleepy };
 $t = Forks::Super::Util::Time() - $t;
 ok($t <= 1.97, "$$\\three forks fast return ${t}s expected <1s"); ### 1 ###

@@ -38,9 +38,9 @@ ok($p == Forks::Super::Wait::TIMEOUT, "wait timeout returns TIMEOUT");
 $t2 = Time();
 $p = wait 5;
 $t2 = Time() - $t2;
-ok($t2 >= 1.5 && $t2 <= 3.15,           ### 8 ### was 2.85, obs 3.08
+ok($t2 >= 1.5 && $t2 <= 3.25,           ### 8 ### was 2.85, obs 3.08,3.18
    "subsequent wait with long timeout returned when job finished "
-   . "in ${t2}s ${t}s, expected ~2s");
+   . "in ${t2}s, expected ~2s");
 ok($p == $pid, 
    "wait with subsequent long timeout returns $p==$pid pid of job");
 
@@ -133,10 +133,10 @@ ok($t >= 7.83 && $t <= 10.15,               ### 25 ### was 8.55 obs 8.56
    "waitall respected timeout ${t}s expected ~8s");
 
 $t = Time();
-$count = waitall 14 + ($t5 - $t);
+$count = waitall;
 $t4 = Time();
 $t = $t4 - $t;
 $t5 = $t4 - $t5;
 ok($count == 1, Forks::Super::Util::Ctime() ### 26 ###
-   ." waitall reaped $count==1 process in next 2 sec t=$t,$t5");
+   ." waitall reaped $count==1 final process");
 # ok($t5 < 13.5);

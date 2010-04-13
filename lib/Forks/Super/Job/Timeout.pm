@@ -88,6 +88,7 @@ sub config_timeout_child {
   }
 
   $SIG{ALRM} = sub {
+    local *__ANON__ = 'the Forks::Super::Job::Timeout::SIGALRM handler';
     warn "Forks::Super: child process timeout\n";
     $TIMEDOUT = 1;
     if (Forks::Super::Config::CONFIG("getpgrp")) {

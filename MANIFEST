@@ -61,8 +61,12 @@ t/43a-sockethandles.t
 t/43b-sockethandles.t
 t/43c-sockethandles.t
 t/43d-sockethandles.t
-t/44-busy.t
-t/45-userbusy.t
+t/44a-pipes.t
+t/44b-pipes.t
+t/44c-pipes.t
+t/44d-pipes.t
+t/45-busy.t
+t/46-userbusy.t
 t/50-queue.t
 t/51a-delayed.t
 t/51b-delayed.t

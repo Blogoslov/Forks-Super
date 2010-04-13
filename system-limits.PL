@@ -68,6 +68,8 @@ $LIMITS{version} = $];
 &count_number_of_cpus;
 &find_max_open_filehandles;
 &find_max_open_sockets;
+&find_pipe_capacity;
+&find_socket_capacity;
 &find_max_fork;  # run last because it might crash the system
 print "Created system limitations file in: $limits_file\n";
 
@@ -158,7 +160,7 @@ sub find_max_open_filehandles {
   }
   my $err = $!;
   close $_ for @fh;
-  print STDERR "Msg for $i open files: $err\n";
+  # print STDERR "Msg for $i open files: $err\n";
   &write_limits('maxfilehandle' => $i);
   unlink "xxx.$j";
 
@@ -178,5 +180,101 @@ sub find_max_open_sockets {
 sub count_number_of_cpus {
   # XXX - TODO
   # XXX - Maybe wait for Sys::CpuAffinity
+}
+
+sub find_socket_capacity {
+  my $socket_capacity = 
+    _get_capacity(16384, 5,
+		  qq[use Socket;
+		     socketpair DUMMY,WRITER,AF_UNIX,SOCK_STREAM,PF_UNSPEC]);
+  &write_limits('socket_capacity' => $socket_capacity);
+}
+
+sub find_pipe_capacity {
+  my $pipe_capacity =
+    _get_capacity(16384, 5, qq[pipe DUMMY,WRITER]);
+  &write_limits('pipe_capacity' => $pipe_capacity);
+}
+
+sub _get_capacity {
+  my ($packetsize, $timeout, $create_WRITER) = @_;
+  my $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
+  while ($capacity < 0) {
+    if ($capacity == -1) {
+      return 0 if $packetsize <= 1;
+      $packetsize = int($packetsize / 64);
+    } elsif ($capacity == -2) {
+      return 0 if $timeout > 300;
+      $timeout *= 2;
+    }
+    $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
+  }
+  return $capacity;
+}
+
+#####################################################################
+# to find the capacity of a pipe or socket on this system,
+# the idea is to keep writing bytes to the handle until it blocks.
+# Windows is pretty cantankerous and it is hard to recover from the
+# deadlock when a write operation blocks: the 4-arg select won't
+# work with pipes (and it doesn't work all that well with sockets,
+# anyway), and alarm() won't interrupt an I/O operation.
+# The portable solution is overkill on non-Windows systems but
+# gets the job done -- test the socket in a separate process
+# (NOT a psuedo-process/thread) and let the process kill itself
+# when it times out.
+#####################################################################
+sub __get_capacity {
+  my ($packetsize, $timeout, $create_WRITER, $output_file) = @_;
+  $output_file ||= "./test-capacity.out";
+  if ($packetsize < 1) {
+    $packetsize = 1;
+  }
+
+  # capacity == -1  means the packetsize was too large: decrease packetsize
+  # capacity == -2  means the pipe did not block: increase timeout
+  my $capacity = -1;
+  my $code = <<"__END_SLAVE_CODE__";
+use IO::Handle;
+use strict;
+$create_WRITER;
+*WRITER->autoflush(1);
+binmode WRITER;
+my \$pid = \$\$;
+if (fork() == 0) {
+  sleep $timeout + 1;
+  kill('INT',\$pid) || kill('BREAK',\$pid)
+    || system "TASKKILL /f /pid \$pid > NUL 2> NUL";
+  exit 0;
+}
+my \$output = " " x $packetsize;
+my \$written = 0;
+for (;;) {
+  print WRITER \$output;
+  \$written += length \$output;
+  open F, ">", \"$output_file\";
+  if (time - \$^T >= $timeout) {
+    print F "-2";
+  } else {
+    print F \$written;
+  }
+  close F;
+}
+__END_SLAVE_CODE__
+;
+
+  unlink $output_file;
+  my $pid = open(SLAVE, "| $^X");
+  print SLAVE $code;
+  close SLAVE;
+  sleep 1;
+  open(CAP, '<', $output_file);
+  while (<CAP>) {
+#    print $_;
+    $capacity = $_ + 0;
+  }
+  close CAP;
+  unlink $output_file;
+  return $capacity;
 }
 

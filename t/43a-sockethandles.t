@@ -32,12 +32,14 @@ sub repeater {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
-	Forks::Super::debug("repeater: read \"$input\" on STDIN/",fileno(STDIN));
+	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
+			    fileno(STDIN));
       }
       if ($e) {
         print STDERR $_;
 	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",fileno(STDERR));
+	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
+			      fileno(STDERR));
 	}
       }
       for (my $i = 0; $i < $n; $i++) {
@@ -56,7 +58,8 @@ sub repeater {
   }
   if (0 && $Forks::Super::DEBUG) { # f_in can't be read in socket context
     my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
-    Forks::Super::debug("repeater: time expired. Not processing any more input");
+    Forks::Super::debug("repeater: time expired. ",
+			"Not processing any more input");
     Forks::Super::debug("input was from file: $f_in");
     open(F_IN, "<", $f_in);
     while (<F_IN>) {
@@ -73,12 +76,16 @@ my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ],
 		 child_fh => "in,out,err,socket" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $Forks::Super::CHILD_STDIN{$pid} && defined fileno($Forks::Super::CHILD_STDIN{$pid}),"found stdin fh");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid} && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),"found stdout fh");
-ok(defined $Forks::Super::CHILD_STDERR{$pid} && defined fileno($Forks::Super::CHILD_STDERR{$pid}),"found stderr fh");
+ok(defined $Forks::Super::CHILD_STDIN{$pid} 
+   && defined fileno($Forks::Super::CHILD_STDIN{$pid}),"found stdin fh");
+ok(defined $Forks::Super::CHILD_STDOUT{$pid}
+   && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),"found stdout fh");
+ok(defined $Forks::Super::CHILD_STDERR{$pid}
+   && defined fileno($Forks::Super::CHILD_STDERR{$pid}),"found stderr fh");
 ok(defined getsockname($Forks::Super::CHILD_STDIN{$pid}) &&
    defined getsockname($Forks::Super::CHILD_STDOUT{$pid}) &&
-   defined getsockname($Forks::Super::CHILD_STDERR{$pid}), "STDxxx handles are socket handles");
+   defined getsockname($Forks::Super::CHILD_STDERR{$pid}), 
+   "STDxxx handles are socket handles");
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
@@ -91,6 +98,9 @@ my (@out,@err);
 while (time < $t+10) {
   push @out, Forks::Super::read_stdout($pid);
   push @err, Forks::Super::read_stderr($pid);
+  if ($Forks::Super::DEBUG) { Forks::Super::debug("read data for $pid ",
+						 scalar @out,"/",
+						 scalar @err) }
   sleep 1;
 }
 shutdown($fh_out, 2) || close $fh_out;
@@ -98,7 +108,7 @@ shutdown($fh_err, 2) || close $fh_err;
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 
-@err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
+@err = grep { !/alarm\(\) not available/ } @err; # exclude warn to child STDERR
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
 ok($out[0] eq "0:$msg\n", "got Expected first line from child output");

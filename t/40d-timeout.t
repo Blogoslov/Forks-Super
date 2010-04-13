@@ -27,12 +27,12 @@ if (!Forks::Super::CONFIG("alarm")) {
 
 my $now = Forks::Super::Util::Time();
 my $future = Forks::Super::Util::Time() + 3;
-my $pid = fork { sub => sub { sleep 5; exit 0 }, expiration => $future };
+my $pid = fork { sub => sub { sleep 10; exit 0 }, expiration => $future };
 my $t = Forks::Super::Util::Time();
 my $p = wait;
 $t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t < 5, "wait took ${t}s, expected ~3s"); ### 11 ###
+ok($t < 5.95, "wait took ${t}s, expected ~3s");  ### 11 ###
 ok($? != 0, "job expired with non-zero status"); ### 12 ###
 
 # script dies intermittently here?

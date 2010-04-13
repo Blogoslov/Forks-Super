@@ -36,11 +36,9 @@ $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
 $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 (@out, @err) = ();
 while (time < $t+6) {
-  push @out, <$fh_out>;
-  push @err, <$fh_err>;
+  push @out, Forks::Super::read_stdout($pid);
+  push @err, Forks::Super::read_stderr($pid);
   sleep 1;
-  seek $fh_out,0,1;
-  seek $fh_err,0,1;
 }
 
 # this is a failure point on many systems

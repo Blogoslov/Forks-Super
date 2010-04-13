@@ -2,6 +2,7 @@ use Forks::Super ':test';
 use Test::More tests => 9;
 use strict;
 use warnings;
+
 if (Forks::Super::CONFIG("alarm")) {
   alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
 }
@@ -28,7 +29,8 @@ sub repeater {
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while (defined ($_ = Forks::Super::_read_socket(undef, *STDIN, 0))) {
+    while ($_ = defined getsockname(STDIN) ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
+    # while (<STDIN>) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
@@ -56,18 +58,6 @@ sub repeater {
     }
     Forks::Super::pause();
   }
-  if (0 && $Forks::Super::DEBUG) { # f_in can't be read in socket context
-    my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
-    Forks::Super::debug("repeater: time expired. ",
-			"Not processing any more input");
-    Forks::Super::debug("input was from file: $f_in");
-    open(F_IN, "<", $f_in);
-    while (<F_IN>) {
-      s/\s+$//;
-      Forks::Super::debug("    input $.: $_");
-    }
-    close F_IN;
-  }
 }
 
 #######################################################
@@ -79,7 +69,7 @@ sub repeater {
 sub read_stderr_test {
 
   my $pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
-		  child_fh => "in,err,socket" };
+		  child_fh => "in,err,pipe" };
 
   my $z = 0;
   if (isValidPid($pid)) {
@@ -97,8 +87,6 @@ sub read_stderr_test {
       Forks::Super::debug("Printed \"That was a test\\n\" ",
 			  "to child stdin ($pid). Result:$z");
     }
-    shutdown($Forks::Super::CHILD_STDIN{$pid}, 1)
-      || close $Forks::Super::CHILD_STDIN{$pid};
     if ($Forks::Super::DEBUG) {
       Forks::Super::debug("Closed filehandle to $pid STDIN");
     }
@@ -109,9 +97,15 @@ sub read_stderr_test {
 my ($z,$pid) = &read_stderr_test;
 ok(isValidPid($pid), "started job with join");
 ok($z > 0, "successful print to child STDIN");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
-ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined pid $pid");
-ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
+ok((defined $Forks::Super::CHILD_STDIN{$pid}
+   and -p $Forks::Super::CHILD_STDIN{$pid}), "CHILD_STDIN is a pipe");
+shutdown($Forks::Super::CHILD_STDIN{$pid},1) 
+	|| close $Forks::Super::CHILD_STDIN{$pid};
+ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
+   "CHILD_STDOUT not defined pid $pid");
+
+ok((defined $Forks::Super::CHILD_STDERR{$pid})
+   && -p $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR is a pipe");
 my $t = time;
 my @out = ();
 my @err = ();

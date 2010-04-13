@@ -2,6 +2,8 @@ use Forks::Super ':test';
 use Test::More tests => 11;
 use strict;
 use warnings;
+
+
 if (Forks::Super::CONFIG("alarm")) {
   alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
 }
@@ -25,10 +27,14 @@ sub repeater {
 
   binmode STDOUT;  # for MSWin32 compatibility
   binmode STDERR;  # has no bad effect on other OS
+
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while (defined ($_ = Forks::Super::_read_socket(undef, *STDIN, 0))) {
+
+    # not using pipes on MSWin32 -- using sockets instead
+    while (defined ($_ = defined getsockname(STDIN) 
+	   ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>)) {
+
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
@@ -44,6 +50,9 @@ sub repeater {
       }
       for (my $i = 0; $i < $n; $i++) {
         print STDOUT "$i:$_";
+
+	# how does MSWin32 hang right here ???
+
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
 			      fileno(STDOUT));
@@ -63,21 +72,24 @@ sub repeater {
 # test join, read_stdout
 
 my $pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 10,
-		child_fh => [ "in", "out", "join", "socket" ] };
+		child_fh => [ "in", "out", "join", "pipe" ] };
 ok(isValidPid($pid), "started job with join");
 
 my $msg = sprintf "the message is %x", rand() * 99999999;
 my $z = print {$Forks::Super::CHILD_STDIN{$pid}} "$msg\n";
 ok($z > 0, "successful print to child STDIN");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value defined");
-ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
+ok(defined($Forks::Super::CHILD_STDIN{$pid})
+   && (-p $Forks::Super::CHILD_STDIN{$pid}), "CHILD_STDIN is a pipe");
+ok(defined($Forks::Super::CHILD_STDOUT{$pid})
+   && (-p $Forks::Super::CHILD_STDOUT{$pid}), "CHILD_STDOUT is a pipe");
+ok(defined($Forks::Super::CHILD_STDERR{$pid})
+   && (-p $Forks::Super::CHILD_STDERR{$pid}), "CHILD_STDERR is a pipe");
 ok($Forks::Super::CHILD_STDOUT{$pid} eq $Forks::Super::CHILD_STDERR{$pid}, 
    "child stdout and stderr go to same fh");
 my $t = time;
 my @out = ();
-while (time < $t+12) {
-  while ((my $line = Forks::Super::read_stdout($pid))) {
+while (time < $t+9) {
+  while (my $line = Forks::Super::read_stdout($pid)) {
     push @out, $line;
   }
 }
