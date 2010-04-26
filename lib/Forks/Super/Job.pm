@@ -20,7 +20,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 
 sub new {
   my ($class, $opts) = @_;
@@ -53,9 +53,23 @@ sub is_complete {
 
 sub is_started {
   my $job = shift;
-  return $job->is_complete ||
-    $job->{state} eq 'ACTIVE' ||
-      $job->{state} eq 'SUSPENDED';
+  return $job->is_complete || $job->is_active || 
+    (defined $job->{state} && $job->{state} eq 'SUSPENDED');
+}
+
+sub is_active {
+  my $job = shift;
+  return defined $job->{state} && $job->{state} eq 'ACTIVE';
+}
+
+sub is_suspended {
+  my $job = shift;
+  return defined $job->{state} && $job->{state} =~ /SUSPENDED/;
+}
+
+sub is_deferred {
+  my $job = shift;
+  return defined $job->{state} && $job->{state} =~ /DEFERRED/;
 }
 
 sub mark_complete {
@@ -63,8 +77,8 @@ sub mark_complete {
   $job->{state} = 'COMPLETE';
   $job->{end} = Forks::Super::Util::Time();
 
-  $job->run_callback("collect");
-  $job->run_callback("finish");
+  $job->run_callback('collect');
+  $job->run_callback('finish');
 }
 
 sub mark_reaped {
@@ -172,7 +186,8 @@ sub count_alive_processes {
 		     $_->{state} eq 'COMPLETE' ||
 		     $_->{state} eq 'DEFERRED' ||
 		     $_->{state} eq 'LAUNCHING' || # rare
-		     $_->{state} eq 'SUSPENDED' # reserved for future use
+		     $_->{state} eq 'SUSPENDED' ||
+		     $_->{state} eq 'SUSPENDED-DEFERRED' 
 		   } @ALL_JOBS;
   if (!$count_bg) {
     @alive = grep { $_->{_is_bg} == 0 } @alive;
@@ -184,12 +199,47 @@ sub count_alive_processes {
 }
 
 #
+# _reap should distinguish:
+#
+#    all alive jobs (ACTIVE + COMPLETE + SUSPENDED + DEFERRED + SUSPENDED-DEFERRED)
+#    all active jobs (ACTIVE + COMPLETE + DEFERRED)
+#    filtered alive jobs (by optional pgid)
+#    filtered ACTIVE + COMPLETE + DEFERRED jobs
+#
+#    if  all_active==0  and  all_alive>0,  
+#    then see Wait::WAIT_ACTION_ON_SUSPENDED_JOBS
+#
+sub count_processes {
+  my ($count_bg, $optional_pgid) = @_;
+  my @alive = grep { $_->{state} ne 'REAPED' && $_->{state} ne 'NEW' } @ALL_JOBS;
+  if (!$count_bg) {
+    @alive = grep { $_->{_is_bg} == 0 } @alive;
+  }
+  my @active = grep { $_->{state} !~ /SUSPENDED/ } @alive;
+  my @filtered_active = @active;
+  if (defined $optional_pgid) {
+    @filtered_active = grep { $_->{pgid} == $optional_pgid } @filtered_active;
+  }
+
+  my @n = (scalar(@filtered_active), scalar(@alive), scalar(@active));
+
+  if ($Forks::Super::Debug::DEBUG) {
+    debug("count_processes(): @n");
+    debug("count_processes(): Filtered active: ",
+	  $filtered_active[0]->toString()) if $n[0];
+    debug("count_processes(): Alive: ", $alive[0]->toShortString()) if $n[1];
+    debug("count_processes(): Active: @active") if $n[2];
+  }
+
+  return @n;
+}
+
+#
 # get the current CPU load. May not be possible
 # to do on all operating systems.
 #
 sub get_cpu_load {
   return Forks::Super::Job::OS::get_cpu_load();
-  # return 0.0;
 }
 
 
@@ -227,7 +277,7 @@ sub _can_launch {
     }
   }
 
-  if (0 && $max_load > 0) {  # feature disabled
+  if ($max_load > 0) {
     my $load = get_cpu_load();
     if ($load > $max_load) {
       debug('Forks::Super::Job::_can_launch(): ',
@@ -268,7 +318,6 @@ sub launch {
 
 
   my $retries = $job->{retries} || 1;
-
 
   my $pid = CORE::fork();
   while (!defined $pid && --$retries > 0) {
@@ -321,7 +370,8 @@ sub launch {
     $job->{start} = Forks::Super::Util::Time();
 
     $job->config_parent;
-    $job->run_callback("start");
+    $job->run_callback('start');
+    Forks::Super::Sigchld::handle_CHLD(-1);
     return $pid;
   } elsif ($pid != 0) {
     Carp::confess "Forks::Super::launch(): ",
@@ -335,11 +385,11 @@ sub launch {
 
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
     my $c1;
-    if ($^O eq "MSWin32") {
+    if ($^O eq 'MSWin32') {
       local $ENV{_FORK_PPID} = $$;
       local $ENV{_FORK_PID} = $$;
 
-      if (Forks::Super::Config::CONFIG("Win32::Process")) {
+      if (Forks::Super::Config::CONFIG('Win32::Process')) {
 
 	# XXX - is this ok for commands with redirected STDIN?
 	my $pid = open my $proch, "-|", join(' ',@{$job->{cmd}});
@@ -349,9 +399,7 @@ sub launch {
 	# if desired, this is the place to set OS priority,
 	# process CPU affinity, other OS features.
 	if (defined $job->{cpu_affinity}) {
-	  $WIN32_PROC->SetProcessAffinityMask($job->{cpu_affinity})
-	    || Forks::Super::Job::OS::Win32::set_cpu_affinity_for_win32_process(
-			   $WIN32_PROC, $job->{cpu_affinity});
+	  $WIN32_PROC->SetProcessAffinityMask($job->{cpu_affinity});
 	}
 
 	CORE::waitpid $pid, 0;
@@ -369,8 +417,8 @@ sub launch {
     deinit_child();
     exit $c1 >> 8;
   } elsif ($job->{style} eq 'exec') {
-    local $ENV{_FORK_PPID} = $$ if $^O eq "MSWin32";
-    local $ENV{_FORK_PID} = $$ if $^O eq "MSWin32";
+    local $ENV{_FORK_PPID} = $$ if $^O eq 'MSWin32';
+    local $ENV{_FORK_PID} = $$ if $^O eq 'MSWin32';
     debug("Exec'ing [ @{$job->{exec}} ]") if $job->{debug};
     exec( @{$job->{exec}} );
   } elsif ($job->{style} eq 'sub') {
@@ -445,18 +493,63 @@ sub getByName {
 }
 
 sub suspend {
-  # assert:
-  #    there is a real_pid
-  #    there is a suspend function to tell when to reactivate
-  # send STOP signal to real_pid
-  # change state to SUSPENDED
+  my $j = shift;
+  $j = Forks::Super::Job::get($j) if ref $j ne 'Forks::Super::Job';
+  my $pid = $j->{real_pid};
+  if ($j->{state} eq 'ACTIVE') {
+    local $! = 0;
+    my $kill_result = Forks::Super::kill('STOP', $j);
+    if ($kill_result > 0) {
+      $j->{state} = 'SUSPENDED';
+      return 1;
+    }
+    carp "'STOP' signal not received by $pid, job ", $j->toString(), "\n";
+    return;
+  }
+  if ($j->{state} eq 'DEFERRED') {
+    $j->{state} = 'SUSPENDED-DEFERRED';
+    return -1;
+  }
+  if ($j->is_complete) {
+    carp "Forks::Super::Job::suspend(): called on completed job ", 
+      $j->{pid}, "\n";
+    return;
+  }
+  if ($j->{state} eq 'SUSPENDED') {
+    carp "Forks::Super::Job::suspend(): called on suspended job ", 
+      $j->{pid}, "\n";
+    return;
+  }
+  carp "Forks::Super::Job::suspend(): called on job ", $j->toString(), "\n";
+  return;
 }
 
 sub resume {
-  # assert:
-  #     there is a real_pid
-  # send CONT signal to real_pid
-  # change state to ACTIVE
+  my $j = shift;
+  $j = Forks::Super::Job::get($j) if ref $j ne 'Forks::Super::Job';
+  my $pid = $j->{real_pid};
+  if ($j->{state} eq 'SUSPENDED') {
+    local $! = 0;
+    my $kill_result = Forks::Super::kill('CONT', $j);
+    if ($kill_result > 0) {
+      $j->{state} = 'ACTIVE';
+      return 1;
+    }
+    carp "'CONT' signal not received by $pid, job ", $j->toString(), "\n";
+    return;
+  }
+  if ($j->{state} eq 'SUSPENDED-DEFERRED') {
+    $j->{state} = 'DEFERRED';
+    return -1;
+  }
+  if ($j->is_complete) {
+    carp "Forks::Super::Job::resume(): called on a completed job ", 
+      $j->{pid}, "\n";
+    return;
+  }
+  carp "Forks::Super::Job::resume(): called on job in state ", 
+    $j->{state}, "\n";
+  return;
 }
 
 
@@ -472,6 +565,7 @@ sub preconfig {
   $job->preconfig_start_time;
   $job->preconfig_dependencies;
   Forks::Super::Job::Callback::preconfig_callbacks($job);
+  Forks::Super::Job::OS::preconfig_os($job);
   return;
 }
 
@@ -493,14 +587,14 @@ sub preconfig_style {
     if (ref $job->{cmd} eq '') {
       $job->{cmd} = [ $job->{cmd} ];
     }
-    $job->{style} = "cmd";
+    $job->{style} = 'cmd';
   } elsif (defined $job->{exec}) {
     if (ref $job->{exec} eq '') {
       $job->{exec} = [ $job->{exec} ];
     }
-    $job->{style} = "exec";
+    $job->{style} = 'exec';
   } elsif (defined $job->{sub}) {
-    $job->{style} = "sub";
+    $job->{style} = 'sub';
     $job->{sub} = qualify_sub_name $job->{sub};
     if (defined $job->{args}) {
       if (ref $job->{args} eq '') {
@@ -510,7 +604,7 @@ sub preconfig_style {
       $job->{args} = [];
     }
   } else {
-    $job->{style} = "natural";
+    $job->{style} = 'natural';
   }
   return;
 }
@@ -545,7 +639,8 @@ sub preconfig_start_time {
   if (defined $job->{delay}) {
     my $start_time = Forks::Super::Util::Time() + $job->{delay};
 
-    if ((not defined $job->{start_after}) || $job->{start_after} > $start_time) {
+    if ((not defined $job->{start_after}) 
+	|| $job->{start_after} > $start_time) {
       $job->{start_after} = $start_time;
     }
     delete $job->{delay};
@@ -608,7 +703,7 @@ sub _resolve_names {
 sub config_parent {
   my $job = shift;
   $job->config_fh_parent;
-  if (Forks::Super::Config::CONFIG("getpgrp")) {
+  if (Forks::Super::Config::CONFIG('getpgrp')) {
     $job->{pgid} = getpgrp($job->{real_pid});
 
     # when  timeout =>   or   expiration =>  is used,
@@ -723,7 +818,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.29
+0.30
 
 =head1 SYNOPSIS
 
@@ -804,8 +899,9 @@ This value will be undefined until the child process is complete.
 =item reaped
 
 The time at which a job was reaped via a call to
-C<Forks::Super::wait>, C<Forks::Super::waitpid>, or C<Forks::Super::waitall>. Will be
-undefined until the job is reaped.
+C<Forks::Super::wait>, C<Forks::Super::waitpid>, 
+or C<Forks::Super::waitall>. Will be undefined until 
+the job is reaped.
 
 =item state
 
@@ -834,7 +930,15 @@ C<Forks::Super::waitpid>, or C<Forks::Super::waitall>.
 
 =item C<SUSPENDED>
 
-Reserved for future use.
+The job has started but it has been suspended (with a C<SIGSTOP>
+or other appropriate mechanism for your operating system) and
+is not currently running. A suspended job will not consume CPU
+resources but my tie up memory, I/O, and network resources.
+
+=item C<SUSPENDED-DEFERRED>
+
+Job is in the job queue and has not started yet, and also
+the job has been suspended.
 
 =back
 
@@ -911,6 +1015,42 @@ Value supplied to the C<fork> call about desired
 CPU's for this process to prefer.
 
 =back
+
+=cut
+
++head1 FUNCTIONS
+
++over 4
+
++item C< $job = Forks::Super::Job::get($pidOrName) >
+
++item C< $n = Forks::Super::Job::count_active_processes() >
+
++back
+
++head1 METHODS
+
+The following methods may be called on a C<Forks::Super::Job> object.
+
++over 4
+
++item C<< $job->suspend >>
+
+When called on an active job, suspends the background process with 
+C<SIGSTOP> or other mechanism appropriate for the operating system.
+
++item C<< $job->resume >>
+
++item C<< $job->is_complete >>
+
+Indicates whether the job is in the C<COMPLETE> or C<REAPED> state.
+
++item C<< $job->is_started >>
+
++item C<< $job->toString() >>
++item C<< $job->toShortString() >>
+
++back
 
 =head1 SEE ALSO
 

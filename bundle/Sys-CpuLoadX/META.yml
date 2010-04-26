@@ -1,0 +1,26 @@
+---
+name: Sys-CpuLoadX
+version: 0.02
+author:
+  - "Marty O'Brien <mob@cpan.org>"
+abstract: a module to retrieve system load averages.
+license: perl
+resources:
+  bugtracker: http://rt.cpan.org/NoAuth/Bugs.html?Dist=Sys-CpuLoadX
+  license: http://dev.perl.org/licenses/
+build_requires:
+  Module::Build: 0.25
+  Test::More: 0
+recommends:
+  ExtUtils::CBuilder: 0.15
+provides:
+  Sys::CpuLoadX:
+    file: lib/Sys/CpuLoadX.pm
+    version: 0.02
+generated_by: Module::Build version 0.280802
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.2.html
+  version: 1.2
+keywords:
+  - cpu
+  - load

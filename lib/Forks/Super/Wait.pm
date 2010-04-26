@@ -24,6 +24,8 @@ our $VERSION = $Forks::Super::Util::VERSION;
 our ($productive_pause_code, $productive_waitpid_code);
 our $REAP_NOTHING_MSGS = 0;
 
+our $WAIT_ACTION_ON_SUSPENDED_JOBS = 'wait'; # wait | fail | resume
+
 sub set_productive_pause_code (&) {
   $productive_pause_code = shift;
 }
@@ -32,6 +34,7 @@ sub set_productive_waitpid_code (&) {
 }
 
 use constant TIMEOUT => -1.5;
+use constant ONLY_SUSPENDED_JOBS_LEFT => -1.75;
 use constant WREAP_BG_OK => WNOHANG() << 1;
 
 sub wait {
@@ -75,7 +78,7 @@ sub waitpid {
   } elsif ($target > 0) {
     # invalid pid
     return -1;
-  } elsif (Forks::Super::Config::CONFIG("getpgrp")) {
+  } elsif (Forks::Super::Config::CONFIG('getpgrp')) {
     if ($target == 0) {
       $target = getpgrp(0);
     } else {
@@ -88,7 +91,7 @@ sub waitpid {
 }
 
 sub waitall {
-  my $timeout = shift || 86400;
+  my $timeout = shift || 864000;       # XXX - 10 days arbitrary limit is not the Perl way.
   $timeout = 1E-6 if $timeout < 0;
   my $waited_for = 0;
   my $expire = Time() + $timeout ;
@@ -123,12 +126,12 @@ sub waitall {
 sub _reap {
   my ($reap_bg_ok, $optional_pgid) = @_; # to reap procs from specific group
   $productive_waitpid_code->() if $productive_waitpid_code;
-
   _handle_bastards();
 
   my @j = @ALL_JOBS;
-  @j = grep { $_->{pgid} == $optional_pgid } @ALL_JOBS
-    if defined $optional_pgid;
+  if (defined $optional_pgid) {
+    @j = grep { $_->{pgid} == $optional_pgid } @ALL_JOBS;
+  }
 
   # see if any jobs are complete (signaled the SIGCHLD handler)
   # but have not been reaped.
@@ -150,26 +153,25 @@ sub _reap {
     }
     return $real_pid if not wantarray;
 
-    my $nactive = Forks::Super::Job::count_alive_processes(
-			$reap_bg_ok, $optional_pgid);
-    debug("Forks::Super::_reap(): $nactive remain.") if $DEBUG;
+    my ($nactive1, $nalive, $nactive2)
+      = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
+    debug("Forks::Super::_reap():  $nalive remain.") if $DEBUG;
     $job->mark_reaped;
-    return ($real_pid, $nactive);
+    return ($real_pid, $nactive1, $nalive, $nactive2);
   }
 
-  my $nactive = Forks::Super::Job::count_alive_processes(
-		      $reap_bg_ok, $optional_pgid);
 
   # the failure to reap active jobs may occur because the jobs are still
   # running, or it may occur because the relevant signals arrived at a
   # time when the signal handler was overwhelmed
-  if ($nactive > 0) {
+  my ($nactive1, $nalive, $nactive2)
+      = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
+
+  if ($nactive1 > 0) {
     ++$REAP_NOTHING_MSGS;
     if ($REAP_NOTHING_MSGS % 10 == 0) {
-      if (0 && $productive_waitpid_code) {
-	$productive_waitpid_code->();
-      } elsif (defined $SIG{CHLD} && ref $SIG{CHLD} eq "CODE") {
-	$SIG{CHLD}->(-1);
+      if (defined $SIG{CHLD} && ref $SIG{CHLD} eq 'CODE') {
+	#$SIG{CHLD}->(-1);
       }
     }
   }
@@ -177,24 +179,32 @@ sub _reap {
   return -1 if not wantarray;
   if ($DEBUG) {
     debug('Forks::Super::_reap(): nothing to reap now. ',
-	  "$nactive remain.");
+	  "$nactive1 remain.");
   }
-  return (-1, $nactive);
+  return (-1, $nactive1, $nalive, $nactive2);
 }
 
 
 # wait on any process
 sub _waitpid_any {
   my ($no_hang,$reap_bg_ok,$timeout) = @_;
-  my $expire = Time() + ($timeout || 86400);
-  my ($pid, $nactive) = _reap($reap_bg_ok);
+  my $expire = Time() + ($timeout || 864000);
+  my ($pid, $nactive2, $nalive, $nactive) = _reap($reap_bg_ok);
   unless ($no_hang) {
-    while (!isValidPid($pid) && $nactive > 0) {
+    while (!isValidPid($pid) && $nalive > 0) {
       if (Time() >= $expire) {
 	return TIMEOUT;
       }
+      if ($nactive == 0) {
+
+	if ($WAIT_ACTION_ON_SUSPENDED_JOBS eq 'fail') {
+	  return ONLY_SUSPENDED_JOBS_LEFT;
+	} elsif ($WAIT_ACTION_ON_SUSPENDED_JOBS eq 'resume') {
+	  _active_one_suspended_job($reap_bg_ok);
+	}
+      }
       pause();
-      ($pid, $nactive) = _reap($reap_bg_ok);
+      ($pid, $nactive2, $nalive, $nactive) = _reap($reap_bg_ok);
     }
   }
   if (defined $ALL_JOBS{$pid}) {
@@ -204,10 +214,29 @@ sub _waitpid_any {
   return $pid;
 }
 
+sub _active_one_suspended_job {
+  my @suspended = grep { $_->{state} eq 'SUSPENDED' } @Forks::Super::ALL_JOBS;
+  if (@suspended == 0) {
+    @suspended = grep { $_->{state} =~ /SUSPENDED/ } @Forks::Super::ALL_JOBS;
+  }
+  @suspended = sort { 
+    $a->{queue_priority} <=> $b->{queue_priority} } @suspended;
+  if (@suspended == 0) {
+    warn "Forks::Super::_activate_one_suspended_job(): ",
+      " can't find an appropriate suspended job to resume\n";
+    return;
+  }
+
+  my $j1 = $suspended[0];
+  $j1->{queue_priority} -= 1E-4;
+  $j1->resume;
+  return;
+}
+
 # wait on a specific process
 sub _waitpid_target {
   my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
-  my $expire = Time() + ($timeout || 86400);
+  my $expire = Time() + ($timeout || 864000);
   my $job = $ALL_JOBS{$target};
   if (not defined $job) {
     return -1;
@@ -234,7 +263,7 @@ sub _waitpid_target {
 
 sub _waitpid_name {
   my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
-  my $expire = Time() + ($timeout || 86400);
+  my $expire = Time() + ($timeout || 864000);
   my @jobs = Forks::Super::Job::getByName($target);
   if (@jobs == 0) {
     return -1;
@@ -272,7 +301,7 @@ sub _waitpid_name {
 # wait on any process from a specific process group
 sub _waitpid_pgrp {
   my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
-  my $expire = Time() + ($timeout || 86400);
+  my $expire = Time() + ($timeout || 864000);
   my ($pid, $nactive) = _reap($reap_bg_ok,$target);
   unless ($no_hang) {
     while (!isValidPid($pid) && $nactive > 0) {

@@ -45,17 +45,17 @@ sub init {
   tie $Forks::Super::QUEUE_INTERRUPT, 'Forks::Super::Tie::Enum',
     ('', keys %SIG);
   $Forks::Super::QUEUE_INTERRUPT = 'USR1' if grep {/USR1/} keys %SIG;
-  $INHIBIT_QUEUE_MONITOR = $^O eq "MSWin32";
+  $INHIBIT_QUEUE_MONITOR = $^O eq 'MSWin32';
 }
 
 sub init_child {
   @QUEUE = ();
-  if (defined $SIG{"USR2"}) {
+  if (defined $SIG{'USR2'}) {
     $SIG{'USR2'} = 'DEFAULT';
   }
   undef $QUEUE_MONITOR_PID;
   if ($Forks::Super::QUEUE_INTERRUPT
-      && Forks::Super::Config::CONFIG("SIGUSR1")) {
+      && Forks::Super::Config::CONFIG('SIGUSR1')) {
     $SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT';
   }
 }
@@ -75,7 +75,7 @@ sub init_child {
 # $Forks::Super::QUEUE_INTERRUPT signals to this
 #
 sub _launch_queue_monitor {
-  return unless Forks::Super::Config::CONFIG("SIGUSR1");
+  return unless Forks::Super::Config::CONFIG('SIGUSR1');
   return if defined $QUEUE_MONITOR_PID;
   return if $QUEUE_MONITOR_LAUNCHED++;
 
@@ -90,6 +90,7 @@ sub _launch_queue_monitor {
     return;
   }
   if ($QUEUE_MONITOR_PID == 0) {
+    $0 = "$QUEUE_MONITOR_PPID:QMon";
     if ($DEBUG) {
       debug("Launching queue monitor process $$ ",
 	    "SIG $Forks::Super::QUEUE_INTERRUPT ",
@@ -97,12 +98,17 @@ sub _launch_queue_monitor {
 	    "FREQ $QUEUE_MONITOR_FREQ ");
     }
 
-    defined &Forks::Super::init_child
-      ? Forks::Super::init_child() : init_child();
-    $SIG{QUIT} = sub { exit 0 }; # 'DEFAULT';
+    if (defined &Forks::Super::init_child) {
+      Forks::Super::init_child();
+    } else {
+      init_child();
+    }
     for (;;) {
       sleep $QUEUE_MONITOR_FREQ;
-      kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID;
+      if ($DEBUG) {
+	debug("queue monitor $$ passing signal to $QUEUE_MONITOR_PPID");
+      }
+      CORE::kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID;
     }
     exit 0;
   }
@@ -112,16 +118,20 @@ sub _launch_queue_monitor {
 sub _kill_queue_monitor {
   if (defined $QUEUE_MONITOR_PPID && $$ == $QUEUE_MONITOR_PPID) {
     if (defined $QUEUE_MONITOR_PID && $QUEUE_MONITOR_PID > 0) {
-      my $nk = kill 'QUIT', $QUEUE_MONITOR_PID;
+
       if ($DEBUG) {
-	debug("killing queue monitor process: $nk");
+	debug("killing queue monitor $QUEUE_MONITOR_PID");
       }
-      if ($nk) {
-	undef $QUEUE_MONITOR_PID;
-	undef $QUEUE_MONITOR_PPID;
-	if (defined $OLD_SIG) {
-	  $SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_SIG;
-	}
+      CORE::kill 'INT', $QUEUE_MONITOR_PID;
+      my $z = CORE::waitpid $QUEUE_MONITOR_PID, 0;
+      if ($DEBUG) {
+	debug("kill queue monitor result: $z");
+      }
+
+      undef $QUEUE_MONITOR_PID;
+      undef $QUEUE_MONITOR_PPID;
+      if (defined $OLD_SIG) {
+	$SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_SIG;
       }
     }
   }
@@ -156,6 +166,8 @@ sub queue_job {
   @QUEUE = @q;
   if (@QUEUE > 0 && !$QUEUE_MONITOR_PID && !$INHIBIT_QUEUE_MONITOR) {
     _launch_queue_monitor();
+  } elsif (@QUEUE == 0 && defined $QUEUE_MONITOR_PID) {
+    _kill_queue_monitor();
   }
   return;
 }
@@ -198,24 +210,30 @@ sub run_queue {
   do {
     $job_was_launched = 0;
     $_REAP = 0;
-    my @deferred_jobs = sort { $b->{queue_priority} <=> $a->{queue_priority} }
-      grep { defined $_->{state} &&
-	       $_->{state} eq 'DEFERRED' } @Forks::Super::ALL_JOBS;
+    my @deferred_jobs = grep {
+      defined $_->{state} && $_->{state} eq 'DEFERRED'
+    } @Forks::Super::ALL_JOBS;
+    @deferred_jobs = sort {
+      $b->{queue_priority} || 0 <=> $a->{queue_priority} || 0
+    } @deferred_jobs;
+
     foreach my $job (@deferred_jobs) {
       if ($job->can_launch) {
 	if ($job->{debug}) {
 	  debug("Launching deferred job $job->{pid}")
 	}
-	$job->{state} = "LAUNCHING";
+	$job->{state} = 'LAUNCHING';
 
 	# if this loop gets interrupted to handle a child,
 	# we might be launching jobs in the wrong order.
 	# If we detect that an interruption has happened,
 	# abort and restart the loop.
-	# To disable this check, set $Forks::Super::Queue::CHECK_FOR_REAP := 0
+	#
+	# To disable this check, set 
+	# $Forks::Super::Queue::CHECK_FOR_REAP := 0
 
 	if (_check_for_reap()) {
-	  $job->{state} = "DEFERRED";
+	  $job->{state} = 'DEFERRED';
 	  $job_was_launched = 1;
 	  last;
 	}

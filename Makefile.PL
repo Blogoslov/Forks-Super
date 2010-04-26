@@ -2,39 +2,54 @@ use strict;
 use warnings;
 use ExtUtils::MakeMaker;
 
-######################################################################
-# recommended modules. This module and most of
-# its features will work even if these modules
-# are not available. Many of them are specific
-# to an operating system.
+# run installer for the additional modules
+# that were included with this distribution.
+#
+# run  perl Makefile.PL BUNDLE=1
+# to allow re-installation of bundled modules
+sub install_bundled_modules {
+  if (-d 'bundle') {
+    chdir 'bundle';
+    opendir my $sub_dh, '.';
+    while (my $submod = readdir $sub_dh) {
+      next if $submod eq '.';
+      next if $submod eq '..';
+      next if ! -d $submod;
 
-my @recommends = ("Time::HiRes" => '1.30', 
-		  "YAML" => '0.62',
-#		  "Sys::CpuAffinity" => '0.9'
-		 );
-
-if ($^O =~ /darwin/i || $^O =~ /macos/) {
-  push @recommends, ("Inline" => '0.44',
-		     "Inline::C" => '0.44');
-} else {
-  push @recommends, ("Inline" => '0.42',
-		     "Inline::C" => '0.42');
+      if (-f "$submod/bundle.pl") {
+	print "--------------------------------------------------\n";
+	print "Running builder for submodules/$submod\n";
+	chdir $submod;
+	system($^X,'bundle.pl',@ARGV);
+	chdir '..';
+      }
+    }
+    print "--------------------------------------------------\n";
+    closedir $sub_dh;
+    chdir '..';
+  }
 }
 
-if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
-  push @recommends, ("Win32::Process" => '0.11',
-		     "Win32::API" => '0.43');
-}
+sub recommend_modules {
+  my @recommends = ("Time::HiRes" => '1.30', 
+		    "YAML" => '0.62',
+		    "JSON" => '2.0',
+		    "Sys::CpuAffinity" => '0.9',
+		    "Sys::CpuLoadX" => '0.02',
+		   );
 
-if ($^O =~ /bsd/i) {
-  push @recommends, ("BSD::Process::Affinity" => '0.01');
+  if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
+    push @recommends, ("Win32::Process" => '0.11',
+		       "Win32::API" => '0.43');
+  }
+  return [ @recommends ];
 }
 
 ######################################################################
 
 WriteMakefile(
-    ((@recommends > 0 && $ExtUtils::MakeMaker::VERSION+0 >= 6.46)
-         ? ('META_MERGE' => { 'recommends' => [ @recommends ] })
+    ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
+         ? ('META_MERGE' => { 'recommends' => &recommend_modules })
 	 : ()),
     NAME                => 'Forks::Super',
     AUTHOR              => q[Marty O'Brien <mob@cpan.org>],
@@ -60,6 +75,9 @@ WriteMakefile(
 					    'perl.exe.stackdump', # #$@^!cygwin
 					    '_Inline') },
 );
+&install_bundled_modules;
+
+
 
 
 package MY;

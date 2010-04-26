@@ -1,0 +1,60 @@
+
+XS files for Sys::CpuAffinity module.
+
+During build, these *.xs files are copied
+to the ./lib directory structure, where
+ExtUtils::CBuilder will attempt to compile them.
+
+Any units that fail to compile will be
+removed from the ./lib directory tree.
+
+The remaining units that successfully compiled
+will be removed and combined into a single
+lib/Sys/CpuAffinity.xs file.
+
+
+
+
+bsd-getaffinity_processor_bind.xs:
+
+	Function to get affinity on BSD systems.
+
+cpuset_getaffinity.xs
+
+	BSD(?) function to get affinity.
+
+linux-sched_get_affinity.xs
+
+	Linux function to get affinity. Requires the
+	<sched.h> and <linux/unistd.h> headers.
+
+linux-sched_set_affinity.xs
+
+	Linux function to set affinity. Requires the
+	<sched.h> and <linux/unistd.h> headers
+
+win32_system_info.xs
+
+	Functions to retrieve system info (including
+	the number of processors) on Windows systems
+	(including Cygwin). Uses the <w32api/windows.h>
+	and <w32api/winbase.h> headers.
+
+win32_system_info_alt.xs
+
+	Identical functionality to  win32_system_info.xs  
+	but looks for the <windows.h> and <winbase.h> 
+	headers. Uses alternate function names in case
+	both win32_system_info files successfully compile.
+
+
+fortytwo.xs
+hello.xs
+
+	Sample XS files that should compile on
+	any system (or at least any system with
+	a compiler). Even if nothing else compiles,
+	this will give you a CpuAffinity.xs file and
+	demonstrate that XS is available on your
+	system.
+

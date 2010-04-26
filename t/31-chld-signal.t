@@ -55,7 +55,7 @@ my $t = Forks::Super::Util::Time();
 sleep 6;   # sleep can be interrupted by SIGCHLD
 $t = Forks::Super::Util::Time() - $t;
 SKIP: {
-  if ($^O eq "MSWin32") {
+  if ($^O eq 'MSWin32') {
     Forks::Super::pause();
     skip "No interruption to sleep on Win32", 1;
   }
@@ -67,7 +67,7 @@ SKIP: {
 }
 ok($j->{state} eq "COMPLETE", "job state is COMPLETE");
 SKIP: {
-  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq "MSWin32";
+  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
   # XXXXXX - pass test (1) and fail test (2) would be ok
   ok(defined $LAST::COMPLETE{$j}, 
@@ -103,9 +103,9 @@ Forks::Super::pause(6);   # ACK! sleep can be interrupted by CHLD signal!
 $t = Forks::Super::Util::Time() - $t;
 ok($t > 5.7 && $t < 7.75,                           ### 13 ### was 7.1 obs 7.10
    "Forks::Super::pause(6) took ${t}s expected 6");
-ok($j->{state} eq "COMPLETE", "complete state");
+ok($j->{state} eq 'COMPLETE', "complete state " . $j->{state});
 SKIP: {
-  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq "MSWin32";
+  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
   # XXXXXX pass test (1) and fail test (2) would be ok
   ok(defined $LAST::COMPLETE{$j}, 

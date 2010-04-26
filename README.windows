@@ -89,7 +89,24 @@ management functions but without any additional
 delay.
 
 
-4. Alarm
+4. More signal handling
+
+Although Windows lacks the signal framework of more
+Unix-like systems, there are still ways for Windows to
+DWIM with respect to many common uses of signals.
+For example, there are Windows API calls to suspend
+and resume execution of pseudo-processes, they just
+don't have anything to do with Unix's SIGSTOP/SIGCONT
+framework. 
+
+It is highly recommended that you install the  Win32::API
+module. Then  Forks::Super  will have access to these
+API calls and be able to do things like suspend, resume,
+and terminate pseudo-processes through the same methods
+that you would perform these tasks on a Unix system.
+
+
+5. Alarm
 
 The Perl  alarm  system call is not fully supported 
 on all systems, including all Windows ports of Perl
@@ -105,7 +122,7 @@ SIGALRM signal might still not interrupt certain
 system calls like  sysread().
 
 
-5. Sockets are blocking
+6. Sockets are blocking
 
 Sockets in Windows systems are always blocking.
 If you invoke  fork { child_fh => [ "socket" ] }
@@ -120,7 +137,7 @@ to check whether there is input to be read on a
 Windows socket handle.
 
 
-6. Pipes
+7. Pipes
 
 Using pipes for IPC is disabled in Windows because
 of their severe limitations:

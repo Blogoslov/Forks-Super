@@ -21,7 +21,8 @@ ok(isValidPid($pid), "fork to \@command successful");
 my $p = Forks::Super::wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-my $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
+my $z = do { my $fh; open($fh, "<", $output); 
+	     my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z, 
@@ -37,7 +38,8 @@ ok(isValidPid($pid), "fork to \$command successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child status \$? == 0");
-$z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
+$z = do { my $fh; open($fh, "<", $output); 
+	  my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z,
@@ -53,7 +55,7 @@ my $t = Forks::Super::Util::Time();
 $p = wait;
 $t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "wait reaped correct pid");
-ok($t > 4.5 && $t < 7.05, 
+ok($t > 4.4 && $t < 7.05, 
    "background command ran for ${t}s, expected 5-6s"); ### 11 ###
 
 ##################################################################

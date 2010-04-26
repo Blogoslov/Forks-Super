@@ -30,7 +30,7 @@ sub run_callback {
     debug("Forks::Super: Job ",$job->{pid}," running $callback callback");
   }
   my $ref = ref $job->{$key};
-  if ($ref ne "CODE" && ref ne "") {
+  if ($ref ne 'CODE' && ref ne '') {
     carp "Forks::Super::Job::run_callback: invalid callback $callback. ",
       "Got $ref, expected CODE or subroutine name\n";
     return;
@@ -40,7 +40,7 @@ sub run_callback {
   $callback = delete $job->{$key};
 
   no strict 'refs';
-  if (ref $callback eq "HASH") {
+  if (ref $callback eq 'HASH') {
     Carp::confess("bad callback: $callback ",
 		  "(did you forget to specify \"sub\" { }?)");
   } else {
@@ -53,7 +53,7 @@ sub preconfig_callbacks {
   if (!defined $job->{callback}) {
     return;
   }
-  if (ref $job->{callback} eq "" || ref $job->{callback} eq "CODE") {
+  if (ref $job->{callback} eq "" || ref $job->{callback} eq 'CODE') {
     $job->{callback} = { finish => $job->{callback} };
   }
   foreach my $callback_type (qw(finish start queue fail)) {

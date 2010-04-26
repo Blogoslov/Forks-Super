@@ -18,7 +18,7 @@ $| = 1;
 
 $Carp::Internal{ (__PACKAGE__) }++;
 
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -29,6 +29,7 @@ our %EXPORT_TAGS =
   ( 'test' =>  [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
     'test_config' =>  [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
     'filehandles' => [ @export_ok_vars, @EXPORT ],
+    'vars' => [ @export_ok_vars, @EXPORT ],
     'all' => [ @EXPORT_OK, @EXPORT ] );
 
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC);
@@ -41,21 +42,21 @@ sub import {
   my @tags;
   _init();
   for (my $i=0; $i<@args; $i++) {
-    if ($args[$i] eq "MAX_PROC") {
+    if ($args[$i] eq 'MAX_PROC') {
       $MAX_PROC = $args[++$i];
-    } elsif ($args[$i] eq "MAX_LOAD") {
+    } elsif ($args[$i] eq 'MAX_LOAD') {
       $MAX_LOAD = $args[++$i];
-    } elsif ($args[$i] eq "DEBUG") {
+    } elsif ($args[$i] eq 'DEBUG') {
       $DEBUG = $args[++$i];
-    } elsif ($args[$i] eq "ON_BUSY") {
+    } elsif ($args[$i] eq 'ON_BUSY') {
       $ON_BUSY = $args[++$i];
-    } elsif ($args[$i] eq "CHILD_FORK_OK") {
+    } elsif ($args[$i] eq 'CHILD_FORK_OK') {
       $CHILD_FORK_OK = $args[++$i];
-    } elsif ($args[$i] eq "QUEUE_MONITOR_FREQ") {
+    } elsif ($args[$i] eq 'QUEUE_MONITOR_FREQ') {
       $Forks::Super::Queue::QUEUE_MONITOR_FREQ = $args[++$i];
-    } elsif ($args[$i] eq "QUEUE_INTERRUPT") {
+    } elsif ($args[$i] eq 'QUEUE_INTERRUPT') {
       $QUEUE_INTERRUPT = $args[++$i];
-    } elsif ($args[$i] eq "FH_DIR") {
+    } elsif ($args[$i] eq 'FH_DIR') {
       my $dir = $args[++$i];
       if ($dir =~ /\S/ && -d $dir && -r $dir && -w $dir && -x $dir) {
 	Forks::Super::Job::Ipc::_set_fh_dir($dir);
@@ -101,7 +102,7 @@ sub _init {
   #           (see ./system-limits.PL)?
   # ultimately we should discover this
   $MAX_PROC = 9999;
-  $MAX_LOAD = 9999; # not supported yet
+  $MAX_LOAD = -1;
 
   # OK for child process to call Forks::Super::fork()? That could be a bad idea
   $CHILD_FORK_OK = 0;
@@ -119,22 +120,22 @@ sub _init {
 
   *handle_CHLD = *Forks::Super::Sigchld::handle_CHLD;
 
-  if ($^O eq "MSWin32") {
+  if ($^O eq 'MSWin32') {
     Forks::Super::Util::set_productive_pause_code {
       Forks::Super::Queue::run_queue() if !$Forks::Super::Queue::_LOCK;
-#      Forks::Super::Sigchld::handle_CHLD(-1);
+
       handle_CHLD(-1);
     };
   } else {
     Forks::Super::Util::set_productive_pause_code {
       Forks::Super::Queue::run_queue() if !$Forks::Super::Queue::_LOCK;
-#      Forks::Super::Sigchld::handle_CHLD(-1);
+
       handle_CHLD(-1);
     };
   }
 
   Forks::Super::Wait::set_productive_waitpid_code {
-    if ($^O eq "MSWin32") {
+    if ($^O eq 'MSWin32') {
 #      Forks::Super::Sigchld::handle_CHLD(-1);
       handle_CHLD(-1);
     }
@@ -169,11 +170,17 @@ sub fork {
     debug("fork(): job can not launch. Behavior=$job->{_on_busy}")
       if $job->{debug};
 
-    if ($job->{_on_busy} eq "FAIL") {
-      $job->run_callback("fail");
+    if ($job->{_on_busy} eq 'FAIL') {
+      $job->run_callback('fail');
+
+      #$job->mark_complete;
+      $job->{end} = Forks::Super::Util::Time();
+
+      $job->{status} = -1;
+      $job->mark_reaped;
       return -1;
-    } elsif ($job->{_on_busy} eq "QUEUE") {
-      $job->run_callback("queue");
+    } elsif ($job->{_on_busy} eq 'QUEUE') {
+      $job->run_callback('queue');
       $job->queue_job;
       return $job->{pid};
     } else {
@@ -252,7 +259,7 @@ sub _read_socket {
       "read on undefined filehandle for ",$job->toString(),"\n";
   }
 
-  if ($sh->blocking() || $^O eq "MSWin32") {
+  if ($sh->blocking() || $^O eq 'MSWin32') {
     my $fileno = fileno($sh);
     if (not defined $fileno) {
       $fileno = Forks::Super::Job::Ipc::fileno($sh);
@@ -377,7 +384,7 @@ sub read_stdout {
       debug("Forks::Super::read_stdout(): ",
 	    "fh closed for $job->{pid}");
     }
-    return () if wantarray; # XXXXXXXX 
+    return () if wantarray; 
     return;
   }
   my $fh = $job->{child_stdout};
@@ -387,7 +394,7 @@ sub read_stdout {
 	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stdout_closed}++;
-    return () if wantarray; # XXXXXXXX
+    return () if wantarray;
     return;
   }
   if (defined getsockname($fh)) {
@@ -409,13 +416,11 @@ sub read_stdout {
 	}
 	$job->{child_stdout_closed}++;
 	close $fh;
-	return (); # XXXXXXXX
-	#return;   # XXXXXXXX
+	return ();
 
       } else {
 
 	@lines = ();
-	# XXXXXXXX @lines = ('');
 	seek $fh, 0, 1;
 	Forks::Super::pause();
       }
@@ -460,7 +465,7 @@ sub read_stderr {
       debug("Forks::Super::read_stderr(): ",
 	    "fh closed for $job->{pid}");
     }
-    return () if wantarray; # XXXXXXXX
+    return () if wantarray;
     return;
   }
   my $fh = $job->{child_stderr};
@@ -470,7 +475,7 @@ sub read_stderr {
 	    "fh unavailable for $job->{pid}");
     }
     $job->{child_stderr_closed}++;
-    return () if wantarray; # XXXXXXXX
+    return () if wantarray;
     return;
   }
   if (defined getsockname($fh)) {
@@ -492,10 +497,10 @@ sub read_stderr {
 	}
 	$job->{child_stderr_closed}++;
 	close $fh;
-	return (); # XXXXXXXX return;
+	return ();
 
       } else {
-	@lines = (); # XXXXXXXX @lines = ('');
+	@lines = ();
 	seek $fh, 0, 1;
 	Forks::Super::pause();
       }
@@ -533,10 +538,169 @@ sub close_fh {
   $pid_or_job->close_fh;
 }
 
-##################################################
-
 ######################################################################
 
+
+sub kill {
+  my ($signal, @jobs) = @_;
+  my $kill_proc_group = $signal =~ s/^-//;
+  my $num_signalled = 0;
+  my $run_queue_needed = 0;
+  if ($signal !~ /\D/) {
+    # convert to canonical signal name.
+    $signal = Forks::Super::Util::signal_name($signal);
+  }
+  if ($signal eq '') {
+    carp "Forks::Super::kill: invalid signal spec $_[0]\n";
+    return 0;
+  }
+
+  @jobs = map { ref $_ eq 'Forks::Super::Job' 
+		  ? $_ : Forks::Super::Job::get($_) } @jobs;
+  @jobs = grep { !$_->is_complete
+		   && $_->{state} ne 'NEW'
+		   && $_->{state} ne 'LAUNCHING' } @jobs;
+
+  my @deferred_jobs = grep { $_->is_deferred } @jobs;
+  if (@deferred_jobs > 0) {
+    foreach my $j (@deferred_jobs) {
+      if (Forks::Super::Util::is_kill_signal($signal)) {
+	$j->mark_complete;
+	$j->{status} = Forks::Super::Util::signal_number($signal) || -1;
+	$j->mark_reaped;
+	$num_signalled++;
+      } elsif ($signal eq 'STOP') {
+	$j->{state} = 'SUSPENDED-DEFERRED';
+	$num_signalled++;
+      } elsif ($signal eq 'CONT') {
+	$j->{state} = 'DEFERRED';
+	$run_queue_needed++;
+	$num_signalled++;
+      } elsif ($signal eq 'ZERO') {
+	$num_signalled++;
+      } else {
+	carp_once [$signal], "Received signal '$signal' on deferred job(s),",
+	  " Ignoring.\n";
+      }
+    }
+    @jobs = grep { ! $_->is_deferred } @jobs;
+    if (@jobs == 0) {
+      return $num_signalled;
+    }
+  }
+
+  my @pids = map { $_->{real_pid} } @jobs;
+  if ($DEBUG) {
+    debug("Sending signal $signal to pids: ", join(' ',@pids));
+  }
+  my @terminated = ();
+
+  if (@pids > 0) {
+
+    if ($^O eq 'MSWin32') {
+
+      # preferred way to kill a MSWin32 pseudo-process
+      # is with the Win32 API "TerminateThread". Using Perl's kill
+      # usually doesn't work
+
+      foreach my $pid (sort {$a <=> $b} @pids) {
+	if ($pid < 0) {
+	  local $! = 0;
+	  my $signalled = 0;
+
+	  if (Forks::Super::Util::is_kill_signal($signal)) {
+	    if (Forks::Super::Job::OS::Win32::terminate_thread(-$pid)) {
+	      $signalled = 1;
+	      $num_signalled++;;
+	      push @terminated, $pid;
+	    }
+	  } elsif ($signal eq 'STOP') {
+	    if (Forks::Super::Job::OS::Win32::suspend_thread(-$pid)) {
+	      $signalled = 1;
+	      $num_signalled++;
+	    }
+	  } elsif ($signal eq 'CONT') {
+	    if (Forks::Super::Job::OS::Win32::resume_thread(-$pid)) {
+	      $signalled = 1;
+	      $num_signalled++;
+	    }
+	  } else {
+	    carp_once [$signal], "Forks::Super::kill(): ",
+	      "Called on MSWin32 with SIG$signal\n",
+	      "Ignored because this module can't find a suitable way to\n",
+	      "express that signal on MSWin32.\n";
+	  }
+
+	  if (!$signalled) {
+	    if (!CONFIG('Win32::API')) {
+	      carp_once "Using potentially unsafe kill() command ",
+		"on MSWin32 psuedo-process.\n",
+		"Install Win32::API module for a safer alternative.\n";
+	    }
+	    local $! = 0;
+	    $num_signalled += CORE::kill($kill_proc_group 
+					 ? -$signal : $signal, $pid);
+	    print STDERR "XXXXXX MSWin32 kill error $! $^E\n" if $!;
+	  }
+	} else {
+	  $num_signalled += CORE::kill($kill_proc_group 
+				       ? -$signal : $signal, $pid);
+        }
+      }
+    } elsif (@pids > 0) {
+      local $! = 0;
+      if (Forks::Super::Util::is_kill_signal($signal)) {
+	foreach my $pid (@pids) {
+	  $! = 0;
+	  if (CORE::kill $signal, $pid) {
+	    $num_signalled++;
+	    push @terminated, $pid;
+	  }
+	  if ($!) {
+	    print STDERR "XXXXXX kill error $! $^E\n";
+	  }
+	}
+      } else {
+	$num_signalled += CORE::kill $signal, @pids;
+	if ($!) {
+	  print STDERR "XXXXXX kill error $! $^E\n";
+	}
+      }
+    }
+  }
+
+  if (@terminated > 0) {
+    my $old_status = $?;
+    foreach my $pid (@terminated) {
+      if ($pid == waitpid $pid, 0, 1.0) {
+	# unreap.
+	my $j = Forks::Super::Job::get($pid);
+	$j->{state} = 'COMPLETE';
+	delete $j->{reaped};
+	$? = $old_status;
+      }
+    }
+  }
+
+  if ($run_queue_needed) {
+    Forks::Super::Queue::run_queue();
+  }
+  return $num_signalled;
+}
+
+sub kill_all {
+  my ($signal) = @_;
+  my @all_jobs;
+  if ($signal eq 'CONT') {
+    @all_jobs = grep { $_->is_suspended } @Forks::Super::ALL_JOBS;
+  } elsif ($signal eq 'STOP') {
+    @all_jobs = grep { $_->is_active || $_->{state} eq 'DEFERRED' }
+      @Forks::Super::ALL_JOBS;
+  } else {
+    @all_jobs = grep { $_->is_active } @Forks::Super::ALL_JOBS;
+  }
+  Forks::Super::kill $signal, @all_jobs;
+}
 
 1;
 
@@ -546,11 +710,12 @@ __END__
 
 =head1 NAME
 
-Forks::Super - extensions and convenience methods for managing background processes.
+Forks::Super - extensions and convenience methods 
+for managing background processes.
 
 =head1 VERSION
 
-Version 0.29
+Version 0.30
 
 =head1 SYNOPSIS
 
@@ -624,11 +789,11 @@ Version 0.29
     }
 
     # jobs fail (without blocking) if the system is too busy
-    $Forks::Super::MAX_PROC = 5;
+    $Forks::Super::MAX_LOAD = 2.0;
     $Forks::Super::ON_BUSY = 'fail';
     $pid = fork { cmd => $task };
     if    ($pid > 0) { print "'$task' is running\n" }
-    elsif ($pid < 0) { print "5 or more jobs running -- didn't start '$task'\n"; }
+    elsif ($pid < 0) { print "current CPU load > 2.0 -- didn't start '$task'\n"; }
 
     # $Forks::Super::MAX_PROC setting can be overridden. Start job immediately if < 3 jobs running
     $pid = fork { sub => 'MyModule::MyMethod', args => [ @b ], max_proc => 3 };
@@ -690,8 +855,8 @@ and to get the most out of your system's resources.
 =head1 C<$pid = fork( \%options )>
 
 The new C<fork> call attempts to spawn a new process.
-With no arguments, it behaves the same as the Perl system
-call L<< fork()|perlfunc/fork >>:
+With no arguments, it behaves the same as the Perl
+L<< fork()|perlfunc/fork >> system call.
 
 =over 4
 
@@ -1103,21 +1268,18 @@ overridden by also specifying C<max_proc> or C<force> options.
 Setting C<$Forks::Super::MAX_PROC> to zero or a negative number will
 disable the check for too many simultaneous processes.
 
-=cut
+=item C<$Forks::Super::MAX_LOAD = $max_cpu_load>
 
-############################################################
+=item C<< fork { max_load => $max_cpu_load } >>
 
-This feature is not ready, but here is the documentation:
-
-_item C<$Forks::Super::MAX_LOAD = $max_cpu_load>
-
-_item C<< fork { max_load => $max_cpu_load } >>
-
-Specifies a maximum CPU load threshold, beyond which this
-module will not spawn any new jobs.
+Specifies a maximum CPU load threshold. The C<fork>
+command will not spawn any new jobs while the current
+system CPU load is larger than this threshold.
+CPU load checks are disabled if this value is set to zero
+or to a negative number.
 
 B<Note that the metric of "CPU load" is different on 
-different operation systems>. 
+different operating systems>. 
 On Windows (including Cygwin), the metric is CPU
 utilization, which is always a value between 0 and 1.
 On Unix-ish systems, the metric is the 1-minute system 
@@ -1128,7 +1290,11 @@ intensive task, it will take at least several seconds
 for that change to have a large impact on the 1-minute
 utilization.
 
-############################################################
+If your system does not have a well-behaved C<uptime(1)>
+command, then you may need to install the C<Sys::CpuLoadX>
+module to use this feature. For now, the C<Sys::CpuLoadX>
+module is only available bundled with C<Forks::Super> and
+otherwise cannot be downloaded from CPAN.
 
 =item C<$Forks::Super::ON_BUSY = "block" | "fail" | "queue">
 
@@ -1295,7 +1461,8 @@ delayed if the callback functions take too long to run.
 
 On supported operating systems, and after the successful creation
 of the child process, attempt to set the operating system priority
-of the child process.
+of the child process, using your operating system's notion of
+what priority is.
 
 On unsupported systems, this option is ignored.
 
@@ -1310,9 +1477,9 @@ to allow the process to use the corresponding processor, and set it to
 restrictions on the valid range of values imposed by the operating
 system.
 
-As of version 0.07, supported systems are Cygwin, Win32,
-Linux (on systems with C<taskset(1)>),
-and possibly BSD.
+This feature requires the L<Sys::CpuAffinity> module. The
+C<Sys::CpuAffinity> module is bundled with C<Forks::Super>,
+or it may be obtained from CPAN.
 
 =item C<< fork { debug => $bool } >>
 
@@ -1490,6 +1657,45 @@ waited on.
 If the optional C<$timeout> argument is supplied, the
 function will block for at most C<$timeout> seconds before
 returning.
+
+=item C<$num_signalled = Forks::Super::kill $signal, @jobsOrPids>
+
+Send a signal to the background processes specified
+either by process IDs, job names, or C<Forks::Super::Job>
+objects. Returns the number of jobs that were successfully
+signalled.
+
+This method "does what you mean" with respect to terminating,
+suspending, or resuming processes. In this way, jobs in the
+job queue (that don't even have a proper PID) may still be
+"signalled". On Windows systems, which do not have a Unix-like
+signals framework, this can be accomplished through 
+the appropriate Windows API calls. It is highly recommended
+that you install the L<Win32::API> module for this purpose.
+
+On Windows, which does not have a Unix-like signals framework,
+this method will sometimes "do what you mean" with respect
+to suspending, resuming, and terminating processes through
+other Windows API calls. It is highly recommended that you
+install the L<Win32::API> module for this purpose.
+
+See also the L<Forks::Super::Job::suspend|Forks::Super::Job/"suspend">
+and L<resume|Forks::Super::Job/"resume"> methods. It is
+preferable (out of portability concerns) to use these methods
+
+    $job->suspend;
+    $job->resume;
+
+rather than C<Forks::Super::kill>
+
+    Forks::Super::kill 'STOP', $job;
+    Forks::Super::kill 'CONT', $job;
+
+=item C<$num_signalled = Forks::Super::kill_all $signal>
+
+Sends a "signal" (see expanded meaning of "signal" in
+L</"kill">, above). to all relevant processes spawned from the
+C<Forks::Super> module. 
 
 =item C<Forks::Super::isValidPid( $pid )>
 
@@ -1903,6 +2109,40 @@ captures the process id of the last job to be run in the background.
 
 =back
 
+=head1 EXPORTS
+
+This module always exports the C<fork>, C<wait>, C<waitpid>, 
+and C<waitall> functions, overloading the Perl system calls
+with the same names. Mixing C<Forks::Super> calls with the
+similarly-named Perl calls sis strongly discouraged, but you
+can access the original system calls at C<CORE::fork>,
+C<CORE::wait>, etc.
+
+Functions that can be exported to the caller's package include
+
+    Forks::Super::bg_eval
+    Forks::Super::bg_qx
+    Forks::Super::isValidPid
+    Forks::Super::pause
+    Forks::Super::read_stderr
+    Forks::Super::read_stdout
+
+Module variables that can be exported are:
+
+    %Forks::Super::CHILD_STDIN
+    %Forks::Super::CHILD_STDOUT
+    %Forks::Super::CHILD_STDERR
+
+The special tag C<:var> will export all three of these hash tables
+to the calling namespace.
+
+The tag C<:all> will export all the functions and variables
+listed above.
+
+The C<Forks::Super::kill> function cannot be exported
+for now, while I think through the implications of
+overloading yet another Perl system call.
+
 =head1 DIAGNOSTICS
 
 =over 4
@@ -2047,6 +2287,16 @@ systems. It is possible that some features will not work
 as advertised. Please report any problems you encounter 
 to E<lt>mob@cpan.orgE<gt> and I'll see what I can do 
 about it.
+
+=head2 Segfaults during cleanup
+
+On some systems, it has been observed that an application 
+using the C<Forks::Super> module may run normally, but might
+produce a segmentation fault or other error during cleanup.
+This will cause the application to exit with a non-zero exit
+code, even when the code accomplished everything it was 
+supposed to. The cause and solution of these errors is an
+area of ongoing research.
 
 =cut
 

@@ -9,10 +9,7 @@ Possible TODOs:
 		names, accessible in the parent at something like 
 		$Forks::Super::CHILD_FH{$pid}{X}
 
-    ___ incorporate CPU load into system busy-ness calc (see 
-		Parallel::ForkControl) (Parallel::ForkControl uses uptime(1) 
-		as  a "cheap linux only hack"
-		See also: Win32::Process::CpuUsage, Sys::CPU, Sys::CpuLoad).
+    _X_ incorporate CPU load into system busy-ness calc
 
     ___ incorporate free memory into system busy-ness calc 
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
@@ -23,30 +20,51 @@ Possible TODOs:
 	_X_ document, extend file vs. socket discussion
 	    On MSWin32, for example, pipe capacity is 512 bytes?
 
-    ___ facilities to suspend jobs when the system gets to busy
-        and to resume them when the system gets less busy.
-        I bet this will be hard to do with Win32.
+    ___ support sockets/pipes for cmd-style forks like IPC::Open3 does.
+
+    _x_ facilities to suspend and resume jobs 
+
+	either suspend/resume based on the busyness of the system
+	or on demand. I bet this will be hard to do with Win32.
 
 	Consider a callback function that returns < 0 if an active job
 	should be suspended, > 0 if a suspended job should be activated,
 	and 0/undef if the job should be left in its current state
 
-    _x_ fork { cpu_affinity => $bitmask }
+	_X_ How should we suspend/resume jobs on the queue? By
+	    having the additional job state "SUSPENDED-DEFERRED"
 
-                _X_ linux
-		_X_ MSWin32
-		___ BSD
-		_X_ Cygwin
-		_X_ documented
-	 	___ Solaris
-		___ Irix
-		___ OS X
-		___ any others ?
+	What if the child process is trapping SIGSTOP? For now that's
+	not my problem. Maybe we can ask the operating system if the
+	process is suspended.
 
-    ___ All the work on creating a portable front-end to setting CPU
+    _x_ What should  wait  and  waitall  do when only suspended jobs
+        are left?
+
+	When only deferred jobs are left, that is ok. We will wait
+	indefinitely until something triggers the jobs.
+
+	Some possibilities:
+
+	1. carp and return  constant ONLY_SUSPENDED_JOBS_LEFT => -1.75
+
+        2. resume one job. Repeat as necessary.
+
+        3. wait indefinitely. Statistics show that civilizations will
+	   rise again. There will once again be lemon soaked paper napkins.
+
+	_X_ by default we'll go with option 3. An undocumented feature is
+	    to set $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS
+	    to change the default behavior.
+
+	___ change this feature to documented?
+
+    _X_ fork { cpu_affinity => $bitmask }
+
+    _X_ All the work on creating a portable front-end to setting CPU
 	affinity would make a great Sys::CpuAffinity module
 
-	Something to portably count the number of cpu's is good, too.
+    _X_ Something to portably count the number of cpu's is good, too.
 
     ___ Support for launching tasks on remote hosts (maybe that's beyond
         the scope of this module) See Paralell::PVM?
@@ -79,36 +97,18 @@ Possible TODOs:
 
     _X_	Defect to fix, $Forks::Super::MAX_PROC = "0"
 
-    _X_	Decompose source into manageable modules
-
-		Forks::Super::OS, Forks::Super::OS::XXX
-		Forks::Super::Filehandle
-		Forks::Super::Timeout
-		Forks::Super::Uninterruptable
-		Forks::Super::Depend
-
-    ___	Forks::Super::Job::OS::XXX modules to implement
-		set_os_priority
-		    for Unixish sys (incl Cygwin) setpriority() does the job
-		set_cpu_affinity
-		    this is different for every OS
-		get_cpu_load
-		    most Unixes have uptime(1)
-		    the specific C system calls are different
-	for different kinds of systems.
-	Also
-		get_cpu_load
-
-        _x_ OS::Win32
-        _x_ OS::Linux -- first use of "conditional" Inline::C code
-	___ OS::BSD
-	___ OS::Solaris
-	___ OS::Aix
-	___ OS::Irix
-
-    ___	kill_all($signal), kill($signal, @jobs)
+    _x_	kill_all($signal), kill($signal, @jobs)
 
 	Deliver a signal to all jobs or to a list of jobs.
+
+	_X_ document
+	_X_ handle things in Forks::Super context
+	    _X_ INT,QUIT,TERM etc. on DEFERRED jobs can cancel them
+	    _X_ INT,QUIT,TERM etc. on SUSPENDED jobs can restart them and then kill them
+	    _X_ STOP on an ACTIVE job will change state to SUSPENDED
+	    _X_ CONT on a SUSPENDED job will resume it
+		(do we need to implement suspend/resume
+	    _X_ Special handling for pseudo procs on Windows
 
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. See what
@@ -125,10 +125,7 @@ Possible TODOs:
 	$Forks::Super::Queue::QUEUE_INTERRUPT can be (additionally) tied
 	to restart queue monitor and reinstall signal handler on update
 
-    _X_ A JSON-compatible bg_eval function for cases where JSON is
-	available and YAML isn't
-
-    ___ Better EXPORTS documentation in pod.
+    _X_ Better EXPORTS documentation in pod.
 
     ___ Test needed, Win32+cmd, See Job.pm:344
 
@@ -138,21 +135,11 @@ Possible TODOs:
         (opened by Forks::Super::XXX modules, not the total number)
 
         Be a little robust when IPC setup fails because of too many open
-	filehandles. Pause and retry; close the "oldest" filehandles.
+	filehandles. Pause and retry; close the "oldest" filehandles?
 
-    ___ 0.27 is an issue fix release with emphasis on testing existing
-    	features under load and on several different OS. The releases
-        after that can focus on some new features that are straightforward
-	to add (or at least to try) like
-	    _X_	JSON to bg_eval
-		$Forks::Super::OPEN_FH, more robust IPC
-		cpu load
-		hook up Sys-CpuAffinity
-		suspend/resume feature
-	    _X_ using pipes
-
-    ___ On Unix test 60-os, skip priority tests is priority is already 20
+    _X_ On Unix test 60-os, skip priority tests is priority is already 20
         (meaning the test is already being conducted in super nice mode
         and the priority can't be changed ...)
 
-
+    ___ With cmd and child_fh => "in" where cmd has pipes (cmd1 | cmd2),
+	'<.fhfork/.fh_xxx' needs to go _before_ the first pipe

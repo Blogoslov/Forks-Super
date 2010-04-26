@@ -104,13 +104,16 @@ $pid = fork { sub => sub { my (@x) = @_;
 			   open(T, ">", $output);
 			   print T "@x - $$\n";
 			   close T;
-			   exit 1;	
+			   exit 14;
 			 },
 			   args => [ "Hello", "-", "World" ] };
 ok(isValidPid($pid), "fork to anonymous sub successful");
 $p = wait;
-ok($?>>8 == 1, "child status $? \$? != 0");
-ok($pid == $p, "wait reaped child $pid == $p");
+
+# failure point on linux under load ...
+
+ok($?>>8 == 14, "child status $? \$? != 0");     ### 14 ###
+ok($pid == $p, "wait reaped child $pid == $p");  ### 15 ###
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello - World - $pid";
@@ -128,9 +131,9 @@ my $t = Forks::Super::Util::Time();
 $p = wait;
 my $v = Forks::Super::Util::Time();
 ($t,$u) = ($v-$t, $v-$u);
-ok($p == $pid, "wait on sleepy sub ok");
-ok($u >= 2.9 && $t <= 5.05,     ### 19 ### was 4 obs 4.69
-   "background sub ran ${t}s ${u}s, expected 3-4s"); ### 19 ###
+ok($p == $pid, "wait on sleepy sub ok");        ### 18 ###
+ok($u >= 2.9 && $t <= 5.05,                     ### 19 ### was 4 obs 4.69
+   "background sub ran ${t}s ${u}s, expected 3-4s");
 
 ##################################################################
 

@@ -11,7 +11,7 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
@@ -54,7 +54,7 @@ sub is_number {
 sub isValidPid {
   my ($pid) = @_;
   return 0 if !defined $pid || !is_number($pid);
-  return $^O eq "MSWin32" ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
+  return $^O eq 'MSWin32' ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
 }
 
 sub set_productive_pause_code (&) {
@@ -127,7 +127,7 @@ sub pause {
 sub qualify_sub_name {
   my $name = shift;
   my $invalid_package = shift || "Forks::Super";
-  if (ref $name eq "CODE" || $name =~ /::/ || $name =~ /\'/) {
+  if (ref $name eq 'CODE' || $name =~ /::/ || $name =~ /\'/) {
     return $name;
   }
 
@@ -138,6 +138,39 @@ sub qualify_sub_name {
     $calling_package = caller($i);
   }
   return join "::", $calling_package, $name;
+}
+
+our (%SIG_NO, @SIG_NAME);
+
+sub signal_name {
+  my $num = shift;
+  _load_signal_data();
+  return $SIG_NAME[$num];
+}
+
+sub signal_number {
+  my $name = shift;
+  _load_signal_data();
+  return $SIG_NO{$name};
+}
+
+# signal names that are normally instructions to terminate a program
+# this list may need some work
+my %_kill_sigs = (HUP => 1, INT => 1, QUIT => 1,
+		  ILL => 1, ABRT => 1, KILL => 1,
+		  SEGV => 1, TERM => 1, BREAK => 1);
+sub is_kill_signal {
+  my $sig = shift;
+  $sig = $SIG_NAME[$sig] if $sig !~ /\D/;
+  return $_kill_sigs{$sig} || 0;
+}
+
+sub _load_signal_data {
+  return if @SIG_NAME > 0;
+  use Config;
+  @SIG_NAME = split / /, $Config{sig_name};
+  my $i = 0;
+  %SIG_NO = map { $_ => $i++ } @SIG_NAME;
 }
 
 1;

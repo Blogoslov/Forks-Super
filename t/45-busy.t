@@ -1,7 +1,9 @@
 use Forks::Super ':test';
-use Test::More tests => 9;
+use Test::More tests => 10;
 use strict;
 use warnings;
+
+$Devel::Trace::TRACE=0;
 
 #
 # test that jobs don't launch when the system is
@@ -65,3 +67,45 @@ ok($t >= 2.15 && $t <= 6,                    ### 9 ### was 4 obs 6.75!
    "Took ${t}s for all jobs to finish; expected 3-4"); 
 
 #######################################################
+
+$Forks::Super::MAX_PROC = 3;
+$Forks::Super::ON_BUSY = "fail";
+
+my $pid = fork { sub => 
+	sub { # a subroutine that will make the processor busy for a while
+	  my $z=0;
+	  my $timeout = time + ($^O eq 'MSWin32' ? 10 : 30);
+	  while (time < $timeout) {
+	    $z += rand()-rand() 
+	  }
+	} };
+
+$Devel::Trace::TRACE=1;
+$Forks::Super::MAX_LOAD = 0.001;
+sleep 1;
+SKIP: {
+  my $load = Forks::Super::Job::get_cpu_load();
+  if ($load < 0) {
+    skip "get_cpu_load function not available", 1;
+  }
+  for (my $i=0; $i<5; $i++) {
+    $load = Forks::Super::Job::get_cpu_load();
+    print STDERR "Cpu load: $load\n";
+    last if $load > 0.1;
+    sleep 1;
+  }
+  $pid2 = fork { sub => sub { sleep 4 } };
+  ok(isValidPid($pid) && !isValidPid($pid2), "$pid2 fail while system is loaded");
+}
+
+# on MSWin32 it is harder to gracefully kill a child process,
+# but the CPU load measurement has less inertia so we don't
+# have to let the process run as long
+
+if ($^O eq 'MSWin32') {
+  waitall;
+} else {
+  kill 'INT',$pid;
+}
+exit 0;
+

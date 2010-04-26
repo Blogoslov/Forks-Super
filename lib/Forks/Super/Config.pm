@@ -22,15 +22,17 @@ sub init {
   $IS_TEST = 0;
   $IS_TEST_CONFIG = 0;
 
+  $CONFIG{'Win32::API'} = 0 if $ENV{NO_WIN32_API};
+
   use Config;
   my $i = 0;
-  if (defined $Config::Config{"sig_name"}) {
-    %signo = map { $_ => $i++ } split / /, $Config::Config{"sig_name"};
+  if (defined $Config::Config{'sig_name'}) {
+    %signo = map { $_ => $i++ } split / /, $Config::Config{'sig_name'};
   }
 }
 
 sub init_child {
-  unconfig("filehandles");
+  unconfig('filehandles');
 }
 
 sub unconfig {
@@ -62,12 +64,12 @@ sub CONFIG {
   }
 
   # check for OS-dependent Perl functionality
-  if ($module eq "getpgrp" or $module eq "alarm"
-      or $module eq "SIGUSR1" or $module eq "getpriority"
-      or $module eq "select4" or $module eq "pipe") {
+  if ($module eq 'getpgrp' or $module eq 'alarm'
+      or $module eq 'SIGUSR1' or $module eq 'getpriority'
+      or $module eq 'select4' or $module eq 'pipe') {
 
     return $CONFIG{$module} = _CONFIG_Perl_component($module);
-  } elsif (substr($module,0,1) eq "/") {
+  } elsif (substr($module,0,1) eq '/') {
     return $CONFIG{$module} = _CONFIG_external_program($module);
   } else {
     return $CONFIG{$module} =
@@ -89,7 +91,7 @@ sub _CONFIG_module {
     if ($@) {
       carp "Forks::Super::CONFIG: ",
 	"Module $module was loaded but could not import with settings [",
-	join (",", @settings), "]\n" if $warn;
+	join (',', @settings), "]\n" if $warn;
     }
   }
   if ($IS_TEST_CONFIG) {
@@ -101,33 +103,33 @@ sub _CONFIG_module {
 sub _CONFIG_Perl_component {
   my ($component) = @_;
   local $@;
-  if ($component eq "getpgrp") {
+  if ($component eq 'getpgrp') {
     undef $@;
     my $z = eval { getpgrp(0) };
-    $CONFIG{"getpgrp"} = $@ ? 0 : 1;
-  } elsif ($component eq "getpriority") {
+    $CONFIG{'getpgrp'} = $@ ? 0 : 1;
+  } elsif ($component eq 'getpriority') {
     undef $@;
     my $z = eval { getpriority(0,0) };
-    $CONFIG{"getpriority"} = $@ ? 0 : 1;
-  } elsif ($component eq "alarm") {
+    $CONFIG{'getpriority'} = $@ ? 0 : 1;
+  } elsif ($component eq 'alarm') {
     undef $@;
     my $z = eval { alarm 0 };
-    $CONFIG{"alarm"} = $@ ? 0 : 1;
-  } elsif ($component eq "SIGUSR1") {
+    $CONFIG{'alarm'} = $@ ? 0 : 1;
+  } elsif ($component eq 'SIGUSR1') {
 
     # %SIG is a special hash -- defined $SIG{USR1} might be false
     # but USR1 might still appear in keys %SIG.
 
-    my $SIG = join " ", " ", keys %SIG, " ";
+    my $SIG = join ' ', ' ', keys %SIG, ' ';
     my $target_sig = defined $Forks::Super::QUEUE_INTERRUPT
-      ? $Forks::Super::QUEUE_INTERRUPT : "";
-    $CONFIG{"SIGUSR1"} =
+      ? $Forks::Super::QUEUE_INTERRUPT : '';
+    $CONFIG{'SIGUSR1'} =
       $SIG =~ / $target_sig / ? 1 : 0;
-  } elsif ($component eq "select4") { # 4-arg version of select
+  } elsif ($component eq 'select4') { # 4-arg version of select
     undef $@;
     my $z = eval { select undef,undef,undef,0.5 };
-    $CONFIG{"select4"} = $@ ? 0 : 1;
-  } elsif ($component eq "pipe") {
+    $CONFIG{'select4'} = $@ ? 0 : 1;
+  } elsif ($component eq 'pipe') {
     undef $@;
     eval {
       my ($read,$write);
@@ -135,7 +137,7 @@ sub _CONFIG_Perl_component {
       close $read;
       close $write;
     };
-    $CONFIG{"pipe"} = $@ ? 0 : 1;
+    $CONFIG{'pipe'} = $@ ? 0 : 1;
   }
 
   # getppid  is another OS-dependent Perl system call
@@ -174,7 +176,7 @@ sub _CONFIG_external_program {
   # poor man's which
   my @path1 = split /:/, $ENV{PATH};
   my @path2 = split /;/, $ENV{PATH};
-  foreach my $path (@path1, @path2, ".") {
+  foreach my $path (@path1, @path2, '.') {
     if (-x "$path/$xprogram") {
       if ($IS_TEST_CONFIG) {
 	print STDERR "CONFIG\{$external_program\} enabled\n";

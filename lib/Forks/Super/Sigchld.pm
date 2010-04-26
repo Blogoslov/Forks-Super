@@ -33,7 +33,7 @@ sub handle_CHLD {
 #    $SIGCHLD_CAUGHT[1]++;
 #    debug("Forks::Super::handle_CHLD[2]: SIGCHLD caught local")
 #      if $DEBUG;
-#  }; # if $^O ne "MSWin32";
+#  }; # if $^O ne 'MSWin32';
 
   $SIGCHLD_CAUGHT[0]++;
   my $sig = shift;
@@ -50,7 +50,6 @@ sub handle_CHLD {
     return;
   }
 
-
   if ($SIG_DEBUG) {
     use Time::HiRes;
     my $z = Time::HiRes::gettimeofday() - $^T;
@@ -66,12 +65,14 @@ sub handle_CHLD {
     my $pid = -1;
     my $old_status = $?;
     my $status = $old_status;
-    for (my $tries=1; !isValidPid($pid) && $tries <= 10; $tries++) {
+    for (my $tries=1; !isValidPid($pid) && $tries <= 3; $tries++) {
       $pid = CORE::waitpid -1, WNOHANG;
       $status = $?;
     }
     $? = $old_status;
     last if !isValidPid($pid);
+
+# print STDERR "XXXXXX CORE::waitpid returned $pid\n";
 
     $nhandled++;
 
@@ -82,7 +83,8 @@ sub handle_CHLD {
       if ($SIG_DEBUG) {
 	use Time::HiRes;
 	my $z = Time::HiRes::gettimeofday() - $^T;
-	push @CHLD_HANDLE_HISTORY, "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
+	push @CHLD_HANDLE_HISTORY, 
+	  "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
       }
 
       $Forks::Super::Queue::_REAP = 1;

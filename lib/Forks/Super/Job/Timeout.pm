@@ -29,7 +29,7 @@ sub config_timeout_child {
   my $timeout = 9E9;
   if (defined $job->{timeout}) {
     $timeout = $job->{timeout};
-    if ($job->{style} eq "exec") {
+    if ($job->{style} eq 'exec') {
       carp "Forks::Super: exec option used, timeout option ignored\n";
       return;
     }
@@ -38,7 +38,7 @@ sub config_timeout_child {
     if ($job->{expiration} - Forks::Super::Util::Time() < $timeout) {
       $timeout = $job->{expiration} - Forks::Super::Util::Time();
     }
-    if ($job->{style} eq "exec") {
+    if ($job->{style} eq 'exec') {
       carp "Forks::Super: exec option used, expiration option ignored\n";
       return;
     }
@@ -58,7 +58,7 @@ sub config_timeout_child {
   #
   # see the END{} block that covers child cleanup below
   #
-  if (Forks::Super::Config::CONFIG("getpgrp")) {
+  if (Forks::Super::Config::CONFIG('getpgrp')) {
     $ORIG_PGRP = getpgrp(0);
     setpgrp(0, $$);
     $NEW_PGRP = $job->{pgid} = getpgrp(0);
@@ -91,18 +91,18 @@ sub config_timeout_child {
     local *__ANON__ = 'the Forks::Super::Job::Timeout::SIGALRM handler';
     warn "Forks::Super: child process timeout\n";
     $TIMEDOUT = 1;
-    if (Forks::Super::Config::CONFIG("getpgrp")) {
+    if (Forks::Super::Config::CONFIG('getpgrp')) {
       if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
 	local $SIG{INT} = 'IGNORE';
 	$DISABLE_INT = 1;
-	kill -($Forks::Super::Config::signo{"INT"} || 2), getpgrp(0);
+	CORE::kill -($Forks::Super::Config::signo{'INT'} || 2), getpgrp(0);
 	$DISABLE_INT = 0;
       }
-    } elsif ($^O eq "MSWin32") {
+    } elsif ($^O eq 'MSWin32') {
       my $proc = Forks::Super::Job::get_win32_proc();
       my $pid = Forks::Super::Job::get_win32_proc_pid();
 
-      if (Forks::Super::Config::CONFIG("Win32::Process") && defined $proc) {
+      if (Forks::Super::Config::CONFIG('Win32::Process') && defined $proc) {
 
 	my $exitCode;
 	my $ec = $proc->GetExitCode($exitCode);
@@ -124,18 +124,18 @@ sub config_timeout_child {
 	  }
 	}
       } else {
-	# local $SIG{INT} = 'IGNORE';
 	$DISABLE_INT = 1;
-	kill 'INT', $$;
+	Forks::Super::kill('INT', $$);
+	# CORE::kill 'INT', $$;
 	$DISABLE_INT = 0;
       }
     }
-    if ($^O eq "MSWin32" && $DEBUG) {
+    if ($^O eq 'MSWin32' && $DEBUG) {
       debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
     }
     exit 255;
   };
-  if (Forks::Super::Config::CONFIG("alarm")) {
+  if (Forks::Super::Config::CONFIG('alarm')) {
     alarm $timeout;
     debug("Forks::Super::Job::config_timeout_child(): ",
 	  "alarm set for ${timeout}s in child process $$")
@@ -150,37 +150,38 @@ sub config_timeout_child {
 END {
   # clean up child
   if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) { # FSJ::Timeout END {}
-    if (Forks::Super::Config::CONFIG("alarm")) {
+    if (defined $Forks::Super::Config::CONFIG{'alarm'}
+	&& $Forks::Super::Config::CONFIG{'alarm'}) {
       alarm 0;
     }
-    if (!$TIMEDOUT) {
-      return;
-    }
-    if ($DISABLE_INT) {
-      # our child process received its own SIGINT that got sent out
-      # to its children/process group. We intended the exit status
-      # here to be as if it had die'd.
+    if ($TIMEDOUT) {
+      if ($DISABLE_INT) {
+	# our child process received its own SIGINT that got sent out
+	# to its children/process group. We intended the exit status
+	# here to be as if it had die'd.
 
-      $? = 255 << 8;
-    }
-    if (Forks::Super::Config::CONFIG("getpgrp")) {
-      # try to kill off any grandchildren
-      if ($ORIG_PGRP == $NEW_PGRP) {
-	carp "Forks::Super::child_exit: original setpgrp call failed, ",
-	  "child-of-child process might not be terminated.\n";
-      } else {
-	setpgrp(0, $ORIG_PGRP);
-	$NEWNEW_PGRP = getpgrp(0);
-	if ($NEWNEW_PGRP eq $NEW_PGRP) {
-	  carp "Forks::Super::child_exit: final setpgrp call failed, ",
-	    "[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
-	    "child-of-child processes might not be terminated.\n";
+	$? = 255 << 8;
+      }
+      if (Forks::Super::Config::CONFIG('getpgrp')) {
+	# try to kill off any grandchildren
+	if ($ORIG_PGRP == $NEW_PGRP) {
+	  carp "Forks::Super::child_exit: original setpgrp call failed, ",
+	    "child-of-child process might not be terminated.\n";
 	} else {
-	  local $SIG{INT} = 'IGNORE';
-	  my $num_killed = kill 'INT', -$NEW_PGRP; # kill -PID === kill PGID. Not portable
-	  if ($num_killed && $NEW_PGRP && $DEBUG) {
-	    debug("Forks::Super::child_exit: sent SIGINT to ",
-		  "$num_killed grandchildren");
+	  setpgrp(0, $ORIG_PGRP);
+	  $NEWNEW_PGRP = getpgrp(0);
+	  if ($NEWNEW_PGRP eq $NEW_PGRP) {
+	    carp "Forks::Super::child_exit: final setpgrp call failed, ",
+	      "[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
+		"child-of-child processes might not be terminated.\n";
+	  } else {
+	    local $SIG{INT} = 'IGNORE';
+	    my $num_killed = CORE::kill 'INT', -$NEW_PGRP; 
+	    # kill -PID === kill PGID. Not portable
+	    if ($num_killed && $NEW_PGRP && $DEBUG) {
+	      debug("Forks::Super::child_exit: sent SIGINT to ",
+		    "$num_killed grandchildren");
+	    }
 	  }
 	}
       }

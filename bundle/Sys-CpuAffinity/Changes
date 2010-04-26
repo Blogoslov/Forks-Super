@@ -1,0 +1,17 @@
+Revision history for Sys-CpuAffinity
+
+0.94	2010-04-24
+	Bug fix in _configExternalProgram's poor man's which.
+	XS support for Windows/Cygwin if Win32::XXX modules aren't available.
+
+0.93	2010-04-21
+	Fix infinite loop in t/11 for single-processor systems.
+
+0.91    2010-04-20
+	Removed _configInlineCode calls, will use XS from now on.
+	Bug fix setting affinity for systems with exactly 32 processors.
+	Stub for IRIX support.
+
+0.90    2010-04-11 Initial release
+	Good support for Windows, Cygwin, Linux
+	Basic support for Solaris, FreeBSD, maybe other BSDs

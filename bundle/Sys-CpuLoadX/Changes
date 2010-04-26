@@ -1,0 +1,6 @@
+Revision history for Perl extension Sys::CpuLoadX
+
+0.02 2010-04-16
+     Imported BSD/Linux code from Sys::CpuLoad package.
+     Imported Win32/Cygwin code from Win32::SystemInfo::CpuUsage package
+

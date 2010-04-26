@@ -15,18 +15,18 @@ use Carp;
 sub TIESCALAR {
   my ($class, $style, $command_or_code, %other_options) = @_;
   my $self = { value_set => 0, style => $style };
-  if ($style eq "eval") {
+  if ($style eq 'eval') {
     $self->{code} = $command_or_code;
-    if ($other_options{"use_YAML"}) {
+    if ($other_options{'use_YAML'}) {
       require YAML;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 			  sub => sub {
 			    my $Result = $command_or_code->();
 			    print STDOUT YAML::Dump($Result);
 			  }, _is_bg => 1, _useYAML => 1 };
-    } elsif ($other_options{"use_JSON"}) {
+    } elsif ($other_options{'use_JSON'}) {
       require JSON;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 			  sub => sub {
 			    my $Result = $command_or_code->();
 			    if (ref $Result eq "") {
@@ -39,10 +39,10 @@ sub TIESCALAR {
       croak "Forks::Super::Tie::BackgroundScalar: expected YAML or JSON ",
 	"to be available\n";
     }
-  } elsif ($style eq "qx") {
+  } elsif ($style eq 'qx') {
     $self->{command} = $command_or_code;
-    $self->{stdout} = "";
-    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+    $self->{stdout} = '';
+    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 			  cmd => $command_or_code,
 			  stdout => \$self->{stdout}, _is_bg => 1 };
   }
@@ -64,7 +64,7 @@ sub _retrieve_value {
       return;
     }
   }
-  if ($self->{style} eq "eval") {
+  if ($self->{style} eq 'eval') {
     my $stdout = join'', Forks::Super::read_stdout($self->{job_id});
     if ($self->{job}->{_useYAML}) {
       require YAML;
@@ -86,7 +86,7 @@ sub _retrieve_value {
       croak "Forks::Super::Tie::BackgroundScalar: ",
 	"YAML or JSON required to use bg_eval\n";
     }
-  } elsif ($self->{style} eq "qx") {
+  } elsif ($self->{style} eq 'qx') {
     $self->{value_set} = 1;
     $self->{value} = $self->{stdout};
   }

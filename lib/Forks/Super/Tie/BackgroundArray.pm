@@ -17,28 +17,28 @@ use Carp;
 sub TIEARRAY {
   my ($classname, $style, $command_or_code, %other_options) = @_;
   my $self = { value_set => 0, value => undef, style => $style };
-  if ($style eq "eval") {
+  if ($style eq 'eval') {
     $self->{code} = $command_or_code;
-    if ($other_options{"use_YAML"}) {
+    if ($other_options{'use_YAML'}) {
       require YAML;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 				  sub => sub {
 				    my @Result = $command_or_code->();
 				    print STDOUT YAML::Dump(@Result);
 				  }, _is_bg => 2, _useYAML => 1 };
-    } elsif ($other_options{"use_JSON"}) {
+    } elsif ($other_options{'use_JSON'}) {
       require JSON;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 				  sub => sub {
 				    my @Result = $command_or_code->();
 				    print STDOUT JSON::encode_json([@Result]);
 				  }, _is_bg => 2, _useJSON => 1 };
     }
-  } elsif ($style eq "qx") {
+  } elsif ($style eq 'qx') {
     $self->{command} = $command_or_code;
     $self->{delimiter} = $/;
-    $self->{stdout} = "";
-    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => "out",
+    $self->{stdout} = '';
+    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 					     cmd => $command_or_code,
 					     stdout => \$self->{stdout},
 					     _is_bg => 2};
@@ -60,7 +60,7 @@ sub _retrieve_value {
       return;
     }
   }
-  if ($self->{style} eq "eval") {
+  if ($self->{style} eq 'eval') {
     my $stdout = join'', Forks::Super::read_stdout($self->{job_id});
     if ($self->{job}->{_useYAML}) {
       require YAML;
@@ -81,7 +81,7 @@ sub _retrieve_value {
       croak "Forks::Super::Tie::BackgroundArray: ",
 	"YAML or JSON required to use bg_eval\n";
     }
-  } elsif ($self->{style} eq "qx") {
+  } elsif ($self->{style} eq 'qx') {
     my @result = ();
     if (defined $self->{delimiter}) {
       @result = split /$self->{delimiter}/, $self->{stdout};

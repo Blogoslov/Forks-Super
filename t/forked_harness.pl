@@ -54,7 +54,7 @@ my $shuffle = '';
 my $repeat = 1;
 my $xrepeat = 1;
 my $quiet = 0;
-my $maxproc = 9;
+my $maxproc = &maxproc_initial;
 my $check_endgame = 0;
 my $abort_on_first_error = '';
 my $debug = '';
@@ -105,7 +105,7 @@ if (@ARGV == 0) {
   $glob_required = 1;
 }
 
-if ($^O eq "MSWin32" || $glob_required) {
+if ($^O eq 'MSWin32' || $glob_required) {
   # might need to glob the command line arg ourselves ...
   my @to_glob = grep { /[*?]/ } @ARGV;
   if (@to_glob > 0) {
@@ -327,9 +327,11 @@ sub process {
   }
 
   my @s = @stdout;
+  my $not_ok = 0;
   foreach my $s (@s) {
     if ($s =~ /^not ok (\d+)/) {
       $fail{$test_file}{$1}++;
+      $not_ok++;
     }
     foreach my $pattern (@output_patterns) {
       if ($s =~ qr/$pattern/) {
@@ -337,6 +339,9 @@ sub process {
 	last;
       }
     }
+  }
+  if ($status == 35584 && $not_ok == 0) {
+    $redo++;
   }
   # XXX elsif ($quiet && $use_harness) { should summarize test results }
 
@@ -448,6 +453,37 @@ sub check_endgame {
   $0 = "-";
   # to do: check the process table and see if any of the
   #    processes came from here ...
+}
+
+#
+# find good initial setting for $Forks::Super::MAX_PROC.
+# This can be overridden with -m|--maxproc command-line arg.
+#
+sub maxproc_initial {
+  if ($ENV{MAX_PROC}) {
+    return $ENV{MAX_PROC};
+  }
+  eval {
+    require Sys::CpuAffinity;
+  };
+  if ($@) {
+    return 9;
+  }
+  my $n = Sys::CpuAffinity::getNumCpus();
+  if ($n <= 0) {
+    return 9;
+  }
+  my @mask = Sys::CpuAffinity::getAffinity($$);
+  if (@mask < $n) {
+    $n = @mask;
+  }
+  if ($n == 1) {
+    return 4;
+  } elsif ($n == 2) {
+    return 6;
+  } else {
+    return int(2 * $n + 1);
+  }
 }
 
 

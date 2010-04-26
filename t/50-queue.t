@@ -41,9 +41,9 @@ $pid2 = fork { sub => sub { sleep 4 } };
 ok(isValidPid($pid) && isValidPid($pid2), "two successful fork calls");
 
 my $ordinary = fork { sub => sub { sleep 3 }, queue_priority => 0 };
-$^O eq "MSWin32" ? Forks::Super::pause(1) : sleep 1;
+$^O eq 'MSWin32' ? Forks::Super::pause(1) : sleep 1;
 my $mild = fork { sub => sub { sleep 3 }, queue_priority => -1 };
-$^O eq "MSWin32" ? Forks::Super::pause(1) : sleep 1;
+$^O eq 'MSWin32' ? Forks::Super::pause(1) : sleep 1;
 my $urgent = fork { sub => sub { sleep 3 } , queue_priority => 1 };
 
 ok(!isValidPid($ordinary) && !isValidPid($mild) && !isValidPid($urgent),

@@ -20,7 +20,7 @@ if (!Forks::Super::CONFIG("alarm")) {
 
 SKIP: {
   if (!Forks::Super::Config::CONFIG("getpgrp")) {
-    if (!($^O eq "MSWin32" 
+    if (!($^O eq 'MSWin32' 
 	  && Forks::Super::Config::CONFIG("Win32::Process"))) {
 
       skip "Skipping tests about timing out grandchildren "

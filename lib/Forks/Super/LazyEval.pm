@@ -13,13 +13,13 @@ use warnings;
 our @EXPORT = qw(bg_eval bg_qx);
 
 sub bg_eval (&;@) {
-  my $useYAML = CONFIG("YAML");
-  my $useJSON = CONFIG("JSON");
+  my $useYAML = CONFIG('YAML');
+  my $useJSON = CONFIG('JSON');
   if (!($useYAML || $useJSON)) {
     croak "Forks::Super: bg_eval call requires either YAML or JSON\n";
   }
   my ($code, @other_options) = @_;
-  if (@other_options > 0 && ref $other_options[0] eq "HASH") {
+  if (@other_options > 0 && ref $other_options[0] eq 'HASH') {
     @other_options = %{$other_options[0]};
   }
   my $p = $$;
@@ -48,7 +48,7 @@ sub bg_eval (&;@) {
 
 sub bg_qx {
   my ($command, @other_options) = @_;
-  if (@other_options > 0 && ref $other_options[0] eq "HASH") {
+  if (@other_options > 0 && ref $other_options[0] eq 'HASH') {
     @other_options = %{$other_options[0]};
   }
   my $p = $$;

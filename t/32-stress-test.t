@@ -21,22 +21,27 @@ $Forks::Super::Sigchld::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
 
 #my $limits_file = "t/out/limits.$^O.$]";
-my $limits_file = "system-limits";
 
-if (! -r $limits_file) {
+my ($limits_file) = grep { -r $_ } 
+	"system-limits.$^O.$]", 
+	"system-limits.$^O",
+	"system-limits";
 
+if (! defined $limits_file) {
+
+  $limits_file = "system-limits";
   open LOCK, '>>', "$limits_file.lock";
   flock LOCK, 2;
 
   if (! -r $limits_file) {
     print STDERR "System limitations file not found. Trying to create ...\n";
-    system($^X, "system-limits.PL");
+    system($^X, "system-limits.PL", $limits_file);
   }
 
   close LOCK;
 }
 
-if (! -r $limits_file) {
+if ($limits_file eq '' || ! -r $limits_file) {
   print STDERR "System limitations file $limits_file not found. ",
     "Can't proceed\n";
   exit 1;
@@ -67,7 +72,7 @@ SKIP: {
       }
     }
     close L;
-  } elsif ($^O eq "MSWin32") {
+  } elsif ($^O eq 'MSWin32') {
     $nn = 60;
     $nn = 50 if $] le "5.006999";
 

@@ -3,7 +3,6 @@ use Forks::Super ':test';
 use strict;
 use warnings;
 
-
 #
 # single callbacks
 #
@@ -73,10 +72,9 @@ $pid2 = fork { sub => sub { sleep 2 }, depend_on => 'quux',
 				 finish => sub { $w = 40 },
 				 bogus => sub { $w =41 } } };
 ok($w == 38, "fail callback runs");
+
+# $Forks::Super::Util::DEFAULT_PAUSE = 
 waitall;
 ok($w == 38, "no other callbacks after fail");
 
 use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
-
-#########################################################
-
