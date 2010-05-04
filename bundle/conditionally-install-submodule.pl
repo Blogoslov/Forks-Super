@@ -98,7 +98,7 @@ sub check_install_is_desired {
 
 sub build_and_install_submodule {
 
-  my $Build_cmd = $^O eq 'MSWin32' ? 'Build' : './Build';
+  my $Build_cmd = $^O eq 'MSWin32' ? "$^X Build" : './Build';
   unlink "Build", "Build.bat";
 
   local $@ = undef;
@@ -132,7 +132,7 @@ sub build_and_install_submodule {
 sub clean {
   my ($Build_cmd) = @_;
 
-  system("$Build_cmd clean");
+#  system("$Build_cmd clean");
 }
 
 

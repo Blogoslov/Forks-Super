@@ -44,7 +44,7 @@ ok(!isValidPid($pid6), "force failed fork");
 
 @to_kill = grep { isValidPid($_) } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
 print "to kill: @to_kill\n";
-kill 'TERM', @to_kill if @to_kill > 0 && $^O ne 'MSWin32';
+Forks::Super::kill 'TERM', @to_kill if @to_kill > 0;
 waitall;
 
 $Forks::Super::MAX_PROC = 3;
@@ -55,14 +55,3 @@ ok(!isValidPid($pid7), "failed fork with logic");
 ok(isValidPid($pid8), "successful fork with logic");
 waitall;
 
-__END__
--------------------------------------------------------
-
-Feature:	user code to determine when system is busy
-
-What to test:	always on always succeeds
-		always off always fails
-		random
-		filter on commands
-
--------------------------------------------------------

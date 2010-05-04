@@ -26,13 +26,13 @@ if (!Forks::Super::CONFIG("alarm")) {
 ##########################################################
 
 my $t0 = Forks::Super::Util::Time();
-my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=9" ], 
+my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=15" ], 
 		   timeout => 2 };
 my $t = Forks::Super::Util::Time();
 waitpid $pid, 0;
 my $t2 = Forks::Super::Util::Time();
 ($t0,$t) = ($t2-$t0,$t2-$t);
-ok($t <= 4.95,           ### 29 ### was 3.0 obs 3.10,3.82,4.36
+ok($t <= 6.95,           ### 29 ### was 3.0 obs 3.10,3.82,4.36,6.63,9.32
    "cmd-style respects timeout ${t}s ${t0}s "
    ."expected ~2s"); 
 

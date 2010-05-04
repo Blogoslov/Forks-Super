@@ -37,13 +37,18 @@ require "t/inventory.pl";
 select STDERR;
 
 EXERCISE_COUNT_NCPUS();
-EXERCISE_GET_AFFINITY();
-if (Sys::CpuAffinity::getNumCpus() <= 1) {
+my $n = Sys::CpuAffinity::getNumCpus();
+if ($n <= 1) {
  SKIP: {
-    skip "set affinity test. Only one processor on this system", 1;
+    if ($n == 1) {
+      skip "affinity exercise. Only one processor on this system", 1;
+    } else {
+      skip "affinity exercise. Can't detect number of processors", 1;
+    }
   }
   exit 0;
 }
+EXERCISE_GET_AFFINITY();
 EXERCISE_SET_AFFINITY();
 ok(1);
 
@@ -110,7 +115,7 @@ sub EXERCISE_SET_AFFINITY {
 	}
 	my $r = Sys::CpuAffinity::getAffinity($pid);
 	my $result = $r==$rr ? "FAIL" : " ok ";
-	printf "    %-25s => %3d ==> %3d   [%s]\n", $technique, 
+	printf "    %-25s => %3u ==> %3u   [%s]\n", $technique, 
 	  $mask, $r, $result;
     }
 }

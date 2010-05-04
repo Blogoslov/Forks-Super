@@ -57,7 +57,7 @@ my $builderclass = Module::Build->subclass(
      unlink <contrib/ok/*.xs>,<contrib/fail/*.xs>,'lib/Sys/CpuAffinity.xs';
      if (@POSTMOD) {
        open my $xs_fh, '>', 'lib/Sys/CpuAffinity.xs' or croak $!;
-       print $xs_fh @INCLUDE, @PREMOD, $MODULE, @POSTMOD;
+       print $xs_fh @INCLUDE, @PREMOD, $MODULE, @POSTMOD, "\n\n\n";
        close $xs_fh;
      }
    }
@@ -88,16 +88,9 @@ my $bugtracker_url
   = 'http://rt.cpan.org/NoAuth/Bugs.html?Dist=Sys-CpuAffinity';
 my $extra_compiler_flags = '';
 my $extra_linker_flags = '';
+
 if ($^O =~ /irix/) {
   $extra_linker_flags = '-lcpuset';
-}
-if ($^O eq 'MSWin32' || $^O eq 'cygwin') {
-  $extra_compiler_flags = '-lkernel32';
-  $extra_linker_flags = '-lkernel32';
-  if ($^O eq 'cygwin') {
-    $extra_compiler_flags .= ' -L/usr/lib/w32api';
-    $extra_linker_flags .= ' -L/usr/lib/w32api';
-  }
 }
 
 my $builder = $builderclass->new(

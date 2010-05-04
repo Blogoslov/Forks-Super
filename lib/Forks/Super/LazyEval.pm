@@ -38,7 +38,7 @@ sub bg_eval (&;@) {
       use_YAML => $useYAML, use_JSON => $useJSON,
       @other_options;
     if ($$ != $p) {
-      # a WTF observed on MSWin32
+      # a WTF observed on Windows
       croak "Forks::Super::bg_eval: ",
 	"Inconsistency in process IDs: $p changed to $$!\n";
     }
@@ -63,7 +63,7 @@ sub bg_qx {
     tie $result, 'Forks::Super::Tie::BackgroundScalar',
       'qx', $command, @other_options;
     if ($$ != $p) {
-      # a WTF observed on MSWin32
+      # a WTF observed on Windows
       croak "Forks::Super::bg_eval: ",
 	"Inconsistency in process IDs: $p changed to $$!\n";
     }

@@ -64,7 +64,7 @@ my $builderclass = Module::Build->subclass(
      unlink <contrib/ok/*.xs>,<contrib/fail/*.xs>,$xsFileName;
      if (@POSTMOD) {
        open my $xs_fh, '>', $xsFileName or croak $!;
-       print $xs_fh @INCLUDE, @PREMOD, $MODULE, @POSTMOD;
+       print $xs_fh @INCLUDE, @PREMOD, $MODULE, @POSTMOD, "\n\n\n";
        close $xs_fh;
      }
    }

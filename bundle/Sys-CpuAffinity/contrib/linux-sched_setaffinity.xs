@@ -15,7 +15,7 @@ int sched_setaffinity_set_affinity(int pid, int cpumask)
     int i,r;
 
     CPU_ZERO(&mask);
-    for (i=0; i<16 && i<CPU_SETSIZE; i++) {
+    for (i=0; i<32 && i<CPU_SETSIZE; i++) {
 	if (0 != (cpumask & (1 << i))) {
 	    CPU_SET(i, &mask);
 	}

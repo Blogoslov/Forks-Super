@@ -28,7 +28,7 @@ fprintf(stderr,"getaffinity3\n");
 fprintf(stderr,"getaffinity4\n");
   }
 fprintf(stderr,"getaffinity5\n");
-  for (i = r = 0; i < CPU_SETSIZE && i < 16; i++) {
+  for (i = r = 0; i < CPU_SETSIZE && i < 32; i++) {
 fprintf(stderr,"getaffinity6\n");
    if (CPU_ISSET(i, &sched_getaffinity_set2)) {
 fprintf(stderr,"getaffinity7\n");
@@ -42,13 +42,14 @@ fprintf(stderr,"getaffinitya\n");
 }
 int sched_getaffinity_get_affinity_no_debug(int pid)
 {
+  /* infinite loop when there is only 1 cpu? */
   int i, r, z;
   sched_getaffinity_initialize();
   z = sched_getaffinity((pid_t) pid, CPU_SETSIZE, sched_getaffinity_set1);
   if (z) {
     return 0;
   }
-  for (i = r = 0; i < CPU_SETSIZE && i < 16; i++) {
+  for (i = r = 0; i < CPU_SETSIZE && i < 32; i++) {
     if (CPU_ISSET(i, &sched_getaffinity_set2 )) {
       r |= 1 << i;
     }

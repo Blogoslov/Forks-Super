@@ -25,13 +25,13 @@ if (!Forks::Super::CONFIG("alarm")) {
 
 #######################################################
 
-my $future = Forks::Super::Util::Time() + 10;
+my $future = Forks::Super::Util::Time() + 15;
 my $pid = fork { sub => sub { sleep 5; exit 0 }, expiration => $future };
 my $t = Forks::Super::Util::Time();
 my $p = wait;
 $t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "wait successful");
-ok($t < 9, "job completed before expiration ${t}s expected ~5s");
+ok($t < 10, "job completed before expiration ${t}s expected ~5s");
 ok($? == 0, "job completed with zero exit status");
 
 #######################################################

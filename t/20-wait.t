@@ -8,14 +8,14 @@ use warnings;
 #
 
 my $pid = fork { sub => sub { sleep 2 ; exit 2 } };
-sleep 3;
+sleep 4;
 my $t = Forks::Super::Util::Time();
 my $p = wait;
 $t = Forks::Super::Util::Time() - $t;
 my $s = $?;
 ok(isValidPid($pid), "fork was successful");
 ok($p == $pid, "wait captured correct pid");
-ok($t <= 1, "fast wait took ${t}s, expected <=1s");
+ok($t <= 1.05, "fast wait took ${t}s, expected <=1s");
 ok($s == 512, "wait set exit status in \$\?");
 
 ############################################

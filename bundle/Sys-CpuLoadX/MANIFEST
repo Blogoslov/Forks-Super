@@ -5,6 +5,7 @@ README              - read this first
 lib/Sys/CpuLoadX.pm
 contrib/CpuLoad.xs
 contrib/CpuUsage.xs
+contrib/foo.xs
 t/00-load.t
 t/01-get_cpu_load.t
 bundle.pl

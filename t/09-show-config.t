@@ -13,6 +13,6 @@ Forks::Super::CONFIG("Win32::Process");
 Forks::Super::CONFIG("SIGUSR1");
 Forks::Super::CONFIG("getpgrp");
 Forks::Super::CONFIG("alarm");
-Forks::Super::CONFIG("/taskset");
+Forks::Super::CONFIG("Sys::CpuAffinity");
+Forks::Super::CONFIG("Sys::CpuLoadX");
 Forks::Super::CONFIG("/uptime");
-Forks::Super::CONFIG("BSD::Process::Affinity");

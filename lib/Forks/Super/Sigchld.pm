@@ -21,20 +21,6 @@ our $SIG_DEBUG = $ENV{SIG_DEBUG};
 # were not handled correctly.
 #
 sub handle_CHLD {
-
-#
-# does re-installing the signal handler prevent child from
-# being reaped in a timely manner?
-# With this block below enabled, Test 40#11 sometimes took 5s
-# instead of 3s ...
-#
-#  local $SIG{CHLD} = sub {
-#    $SIGCHLD_CAUGHT[0]++;
-#    $SIGCHLD_CAUGHT[1]++;
-#    debug("Forks::Super::handle_CHLD[2]: SIGCHLD caught local")
-#      if $DEBUG;
-#  }; # if $^O ne 'MSWin32';
-
   $SIGCHLD_CAUGHT[0]++;
   my $sig = shift;
   # poor man's synchronization
@@ -71,8 +57,6 @@ sub handle_CHLD {
     }
     $? = $old_status;
     last if !isValidPid($pid);
-
-# print STDERR "XXXXXX CORE::waitpid returned $pid\n";
 
     $nhandled++;
 

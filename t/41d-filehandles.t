@@ -33,11 +33,11 @@ my $pid = fork {
       sleep 2;
     } };
 ok($output eq "" && $error =~ /overwrite/,          ### 1d ###
-   "output($output)/error($error) not updated until child is complete");
+   "$$\\output($output)/error($error) not updated until child is complete");
 waitpid $pid, 0;
 ok($output eq "dlrow olleH\n", "updated output from stdout");
 ok($error !~ /overwrite/, "error ref was overwritten");
-ok($error eq "Got input: $input");
+ok($error =~ qr"^Got input: $input", "\$error=$error");
 
 my @input = ("Hello world\n", "How ", "is ", "it ", "going?\n");
 my $orig_output = $output;

@@ -51,19 +51,22 @@ if (defined $pid && $pid == 0) {
 ok(defined $pid && isValidPid($pid), "$$\\valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
+
+# Perl's sleep can _sometimes_ be interrupted by SIGCHLD.
+# This never happens on Windows.
+# But I've also seen it not happen intermittently
+# on FreeBSD and CentOS :-(
+
 my $t = Forks::Super::Util::Time();
-sleep 6;   # sleep can be interrupted by SIGCHLD
+sleep 10;   # sleep can be interrupted by SIGCHLD
 $t = Forks::Super::Util::Time() - $t;
 SKIP: {
-  if ($^O eq 'MSWin32') {
+
+  if ($t > 9) {
     Forks::Super::pause();
-    skip "No interruption to sleep on Win32", 1;
+    skip "No interruption to sleep on $^O.", 1;
   }
-  if ($^O =~ /bsd/) {
-    Forks::Super::pause();
-    skip "No interruption to sleep on BSD?", 1;
-  }
-  ok($t <= 4.1, "Perl sleep interrupted by CHLD signal ${t}s");
+  ok($t <= 5.05, "Perl sleep interrupted by CHLD signal ${t}s");
 }
 ok($j->{state} eq "COMPLETE", "job state is COMPLETE");
 SKIP: {

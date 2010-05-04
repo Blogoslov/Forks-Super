@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use base qw(DynaLoader);
 
-our $VERSION = '0.94';
+our $VERSION = '0.95';
 eval { bootstrap Sys::CpuAffinity $VERSION };
 
 sub import {
@@ -23,10 +23,16 @@ sub _maskToArray {
 }
 
 sub _arrayToMask {
-    my ($mask) = (0,0);
+    my $mask = 0;
     $mask |= (1 << $_) for @_;
     return $mask;
 }
+
+
+
+# does 1<<32 equal 1 or 4294967296 on this system?
+# when it's 1, we need to say 2**$np instead of 1<<$np
+our $_INT32 = !(1 - (1 << 32));
 
 #
 # Development guide:
@@ -80,22 +86,18 @@ sub setAffinity {
   my ($pid, $mask, %flags) = @_; # %flags reserved for future use
   if (ref $mask eq 'ARRAY') {
     $mask = 0;
-    $mask |= (1 << $_) for @{$_[1]};
+    $mask += (2 ** $_) for @{$_[1]};
   }
+  my $np = getNumCpus();
   if ($mask == -1) {
-    my $np = getNumCpus();
     if ($np > 0) {
-      $mask = 0;
-      for my $bit (0..$np-1) {
-	$mask |= 1 << $bit;
-      }
+      $mask = (2 ** $np) - 1;
     }
   }
   if ($mask <= 0) {
     carp "Sys::CpuAffinity: invalid mask $mask in call to setAffinty\n";
     return;
   }
-  my $np = getNumCpus();
 
   # http://www.cpantesters.org/cpan/report/07107190-b19f-3f77-b713-d32bba55d77f
   # 1 << 32 == 1  caused test failure in v0.90
@@ -114,8 +116,7 @@ sub setAffinity {
     }
   }
 
-  return 0
-    || _setAffinity_with_Win32API($pid,$mask)
+  return _setAffinity_with_Win32API($pid,$mask)
     || _setAffinity_with_Win32Process($pid,$mask)
     || _setAffinity_with_taskset($pid,$mask)
     || _setAffinity_with_xs_sched_setaffinity($pid,$mask)
@@ -149,7 +150,9 @@ sub getNumCpus() {
     || _getNumCpus_from_psrinfo()
     || _getNumCpus_from_hinv()
     || _getNumCpus_from_hwprefs()
+    || _getNumCpus_from_system_profiler()
     || _getNumCpus_from_prtconf()
+    || _getNumCpus_from_Test_Smoke_SysInfo()
     || _getNumCpus_from_ENV()
     || -1;
 }
@@ -361,9 +364,13 @@ sub _getNumCpus_from_hinv {   # NOT TESTED irix
   return 0 if $^O =~ /irix/i;
   return 0 if !_configExternalProgram("hinv");
   my $cmd = _configExternalProgram("hinv");
-  my @result = qx($cmd | grep -i processor 2> /dev/null);
-  my ($result) = grep { /^\d+ .* [Pp]rocessors?/ } @result;
-  return (split /\s+/, $result)[0] || 0;
+
+  # found this in Test::Smoke::SysInfo v0.042 in Test-Smoke-1.43 module
+  my @processor = qx($cmd -c processor);
+  _debug("\"hinv -c processor\" output: ", @processor);
+  my ($cpu_cnt) = grep /\d+.+processors?$/i, @processor;
+  my $ncpu = (split " ", $cpu_cnt)[0];
+  return $ncpu;
 }
 
 
@@ -373,7 +380,27 @@ sub _getNumCpus_from_hwprefs {   # NOT TESTED darwin
   my $cmd = _configExternalProgram("hwprefs");
   my $result = qx($cmd cpu_count 2>/dev/null);
   $result =~ s/\s+$//;
+  _debug("\"$cmd cpu_count\" output: ", $result);
   return $result || 0;
+}
+
+sub _getNumCpus_from_system_profiler {  # NOT TESTED darwin
+  return 0 if $^O !~ /darwin/ && $^O !~ /MacOS/i;
+  return 0 if !_configExternalProgram("system_profiler");
+
+  # with help from Test::Smoke::SysInfo
+  my $cmd = _configExternalProgram("system_profiler");
+  my $system_profiler_output 
+    = qx($cmd -detailLevel mini SPHardwardDataType);
+  my %system_profiler;
+  $system_profiler{uc $1} = $2
+    while $system_profiler_output =~ m/^\s*([\w ]+):\s+(.+)$/gm;
+
+  my $ncpus = $system_profiler{'NUMBER OF CPUS'};
+  if (!defined $ncpus) {
+    $ncpus = $system_profiler{'TOTAL NUMBER OF CORES'};
+  }
+  return $ncpus;
 }
 
 sub _getNumCpus_from_prtconf {    # NOT TESTED
@@ -387,6 +414,15 @@ sub _getNumCpus_from_prtconf {    # NOT TESTED
   return 0 if !$result;
   my ($ncpus) = $result =~ /:\s+(\d+)/;
   return $ncpus || 0;
+}
+
+sub _getNumCpus_from_Test_Smoke_SysInfo {   # NOT TESTED
+  return 0 if !_configModule('Test::Smoke::SysInfo');
+  my $sysinfo = Test::Smoke::SysInfo->new();
+  if (defined $sysinfo && defined $sysinfo->{_ncpu}) {
+    return $sysinfo->{_ncpu};
+  }
+  return;
 }
 
 ######################################################################
@@ -523,7 +559,7 @@ sub _getAffinity_with_pbind {
     } else {
       carp "_getAffinity_with_pbind: ",
 	"process $pid unbound but can't count processors\n";
-      return 0xFFFF; 
+      return 2**32 - 1;
     }
   } elsif ($pbind_output =~ /: (\d+)/) {
     my $bound_processor = $1;
@@ -648,7 +684,7 @@ sub _setAffinity_with_Win32API {
     # 0x0200: THREAD_SET_LIMITED_INFORMATION
     my $threadHandle;
     local $! = undef;
-    $^E = '';
+    $^E = 0;
     return 0 unless $threadHandle
       = _win32api("OpenThread", 0x0060, 0, -$pid)
 	|| _win32api("OpenThread", 0x0600, 0, -$pid)
@@ -740,7 +776,12 @@ sub _setAffinity_with_xs_processor_bind {
   } else {
     my @amask = _maskToArray($mask);
     return 0 if !defined &xs_setaffinity_process_bind;
-    my $result = xs_setaffinity_processor_bind($pid,$amask[0]);
+
+    # solaris processor_bind() is for binding to a single processor.
+    # see comment under _setAffinity_with_pbind().
+
+    my $element = 0;
+    my $result = xs_setaffinity_processor_bind($pid,$amask[$element]);
     _debug("result from setaffinity_processor_bind: $result");
     return $result;
   }
@@ -966,7 +1007,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-Version 0.94
+Version 0.95
 
 =head1 SYNOPSIS
 
@@ -1015,20 +1056,22 @@ several techniques for manipulating CPU affinities in
 other existing modules, and Sys::CpuAffinity will use
 these modules if they are available:
 
-    Inline, Inline::C [useful for any system]
     Win32::API, Win32::Process [MSWin32, cygwin]
     BSD::Process::Affinity [*bsd]
-    Solaris::Lgrp [solaris]
 
 =head1 SUPPORTED SYSTEMS
 
 The techniques for manipulating CPU affinities for Windows
 (including Cygwin) and Linux have been refined and tested
 pretty well. Some techniques applicable to BSD systems
-(particularly FreeBSD) have been tested a little bit. The
-hope is that this module will include more techniques for
+(particularly FreeBSD) and Solaris have been tested a little bit. 
+The hope is that this module will include more techniques for
 more systems in future releases. See the L</"NOTE TO DEVELOPERS">
 below for information about how you can help.
+
+MacOS is explicitly not supported, as there does not appear to
+be any public interface for specifying the CPU affinity of
+a process directly.
 
 =head1 SUBROUTINES/METHODS
 
@@ -1153,9 +1196,11 @@ be included in the next release.
 
 =head1 ACKNOWLEDGEMENTS
 
-=cut 
+L<BSD::Process::Affinity> for demonstrating how to get/set affinities
+on BSD systems.
 
-# Some BSD code shamelessly lifted from L<BSD::Process::Affinity>.
+L<Test::Smoke::SysInfo> has some fairly portable code for detecting
+the number of processors.
 
 =head1 LICENSE AND COPYRIGHT
 
@@ -1222,6 +1267,10 @@ Rumors of cpu affinity on other systems:
 
     AIX:  /bindprocessor, bindprocessor() in <sys/processor.h>
     MacOS: thread_policy_set(),thread_policy_get() in <mach/thread_policy.h>
+
+	In MacOS it is possible to assign threads to the same
+	processor, but generally not to assign them to any particular
+	processor. MacOS is totally unsupported for now.
 
 
 how to find the number of processors:

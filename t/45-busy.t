@@ -20,9 +20,6 @@ my $sleepy = \&sleepy;
 $Forks::Super::MAX_PROC = 3;
 $Forks::Super::ON_BUSY = "block";
 
-
-#### failure point 0.06, MSWin32 5.00. Was the system overloaded? ####
-
 my $pid1 = fork { sub => $sleepy };
 my $pid2 = fork { sub => $sleepy };
 my $t = Forks::Super::Util::Time();
@@ -37,7 +34,7 @@ my $t2 = Forks::Super::Util::Time();
 my $pid4 = fork { sub => $sleepy };
 my $t3 = Forks::Super::Util::Time();
 ($t2,$t0) = ($t3-$t2, $t3-$t0);
-ok($t2 >= 2 || ($t0 > 3.0), "blocked fork took ${t}s expected >2s");
+ok($t2 >= 2 || ($t0 > 3.0), "blocked fork took ${t}s ${t0}s expected >2s");
 ok(isValidPid($pid4), "blocking fork returns valid pid $pid4"); ### 4 ###
 waitall;
 

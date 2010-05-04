@@ -10,6 +10,8 @@ WINBASEAPI HANDLE WINAPI OpenThread(DWORD,BOOL,DWORD);
 #endif
 
 
+
+
 int win32_set_thread_affinity(DWORD thread_id, DWORD mask)
 {
   HANDLE handle;

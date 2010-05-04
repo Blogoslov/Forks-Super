@@ -10,7 +10,7 @@ use warnings;
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
+if (!Forks::Super::CONFIG('alarm')) {
  SKIP: {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 10;
@@ -42,7 +42,7 @@ SKIP: {
   ($t,$t2) = ($t3-$t,$t3-$t2);
   my $j = Forks::Super::Job::get($pid);
   my $t4 = $j->{end} - $j->{start};
-  ok($p == $pid && $t >= 5 && $t4 <= 10 && $t2 <= 10,  # was 8/9 obs 9.8/9.8
+  ok($p == $pid && $t >= 5 && $t4 <= 10 && $t2 <= 10,  # was 8/9 obs 11.26
      "external prog took ${t}s ${t2}s ${t4}s, expected 5-7s");
   if ($t <= 14) {
     sleep 20 - $t;
@@ -62,10 +62,10 @@ SKIP: {
     pop @data_i while @data_i > 0 && $data_i[-1] !~ /\S/;
     my $last_count_i = $data_i[-1] + 0;
 
-    ok($last_count_i > 5,
+    ok($last_count_i >= 5,
        "Last count from $file_i was $last_count_i, "
-       . "Expect > 5");   ### 19,20,21,22 ###
-    if ($last_count_i <= 5) {
+       . "Expect >= 5");   ### 19,20,21,22 ###
+    if ($last_count_i < 5) {
       print STDERR "File contents were:\n", @orig_data_i, "\n";
     }
     unlink $file_i if  $last_count_i > 5;

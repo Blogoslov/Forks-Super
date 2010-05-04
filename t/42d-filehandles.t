@@ -32,20 +32,20 @@ if (-x '/bin/sort') {
 }
 
 my $input = join("\n", qw(the quick brown fox jumps over the lazy dog)) . "\n";
-my $output = "";
+my $output = '';
 my $error = "overwrite me\n";
 
 $Forks::Super::ON_BUSY = "queue";
 
 my $pid = fork { stdin => $input, stdout => \$output, stderr => \$error, 
               cmd => \@cmd, delay => 2 };
-ok($output eq "" && $error =~ /overwrite/, 
-   "output/error not updated until child is complete");
+ok($output eq '' && $error =~ /overwrite/,
+   "$$\\output/error not updated until child is complete");
 waitpid $pid, 0;
 ok($output eq "brown\ndog\nfox\njumps\nlazy\nover\nquick\nthe\nthe\n",
-   "updated output from stdout");
+   "updated output from stdout\ncmd \"@cmd\", output:\n$output");
 ok(!$error || $error !~ /overwrite/, "error ref was overwritten");
-ok(!defined $error || $error eq "", "error ref was overwritten");
+ok($error !~ /overwrite/, "error ref was overwritten/\$error=$error");
 
 my @input = ("tree 1\n","bike 2\n","camera 3\n","car 4\n","hand 5\n","gun 6\n");
 my $orig_output = $output;

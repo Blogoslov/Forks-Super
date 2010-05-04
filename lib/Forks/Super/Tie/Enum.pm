@@ -37,5 +37,20 @@ sub STORE {
   }
 }
 
+sub _has_attr {
+  my ($obj, $value) = @_;
+  foreach my $attr (@{$ATTR{$obj}}) {
+    if (uc $value eq uc $attr) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+sub _get_value {
+  my ($obj) = @_;
+  return $VALUE{$obj};
+}
+
 1;
 

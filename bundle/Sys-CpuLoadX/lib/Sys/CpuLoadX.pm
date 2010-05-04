@@ -22,7 +22,7 @@ our $WIN32_INTERVAL = 1000; # milliseconds to run to get CPU usage
   local $@;
   eval { bootstrap Sys::CpuLoadX $VERSION };
   if ($@) {
-    warn "bootstrap Sys::CpuLoadX call failed: $@\n";
+    warn "bootstrap Sys::CpuLoadX call failed.\n";
   }
 }
 

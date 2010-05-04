@@ -11,7 +11,7 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 

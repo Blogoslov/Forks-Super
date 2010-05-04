@@ -101,32 +101,39 @@ sub config_timeout_child {
     } elsif ($^O eq 'MSWin32') {
       my $proc = Forks::Super::Job::get_win32_proc();
       my $pid = Forks::Super::Job::get_win32_proc_pid();
-
-      if (Forks::Super::Config::CONFIG('Win32::Process') && defined $proc) {
-
-	my $exitCode;
-	my $ec = $proc->GetExitCode($exitCode);
-	if ($exitCode == &Win32::Process::STILL_ACTIVE
-	   || $ec == &Win32::Process::STILL_ACTIVE) {
-
-#	  my $result = $proc->Kill(0x102); # 0x102: "STATUS_TIMEOUT"
-#	  my $result = Win32::Process::KillProcess($pid, 0x102);
-#	  my $result = kill 9, $pid;
-
+      if (defined $proc) {
+	if ($proc eq '__open3__') {
+	  # Win32::Process nice to have but not required.
 	  # TASKKILL is pretty standard on Windows systems, isn't it?
 	  # Maybe not completely standard :-(
 	  my $result = system("TASKKILL /F /T /PID $pid > nul");
+	} elsif ($proc eq '__z__') {
+	  $proc = undef;
+	  if (defined $Forks::Super::Job::self
+	      && $Forks::Super::Job::self->{debug}) {
 
-	  $proc->GetExitCode($exitCode);
-	  if ($DEBUG) {
-	    debug("Terminating active MSWin32 process result=$result ",
-		  "exitCode=$exitCode");
+	    debug("Job ", $Forks::Super::Job::self->toShortString(),
+		  " has timed out. The grandchildren from this process",
+		  " are NOT being terminated.");
+	  }
+	} elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
+	  my ($ec,$exitCode);
+	  $ec = $proc->GetExitCode($exitCode);
+	  if ($exitCode == &Win32::Process::STILL_ACTIVE
+	      || $ec == &Win32::Process::STILL_ACTIVE) {
+
+	    my $result = system("TASKKILL /F /T /PID $pid > nul");
+
+	    $proc->GetExitCode($exitCode);
+	    if ($DEBUG) {
+	      debug("Terminating active MSWin32 process result=$result ",
+		    "exitCode=$exitCode");
+	    }
 	  }
 	}
       } else {
 	$DISABLE_INT = 1;
 	Forks::Super::kill('INT', $$);
-	# CORE::kill 'INT', $$;
 	$DISABLE_INT = 0;
       }
     }

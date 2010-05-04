@@ -20,7 +20,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 sub new {
   my ($class, $opts) = @_;
@@ -319,6 +319,10 @@ sub launch {
 
   my $retries = $job->{retries} || 1;
 
+#  *STDIN->flush();
+#  *STDOUT->flush();
+#  *STDERR->flush();
+
   my $pid = CORE::fork();
   while (!defined $pid && --$retries > 0) {
     warn "Forks::Super::launch: ",
@@ -389,36 +393,27 @@ sub launch {
       local $ENV{_FORK_PPID} = $$;
       local $ENV{_FORK_PID} = $$;
 
-      if (Forks::Super::Config::CONFIG('Win32::Process')) {
-
-	# XXX - is this ok for commands with redirected STDIN?
-	my $pid = open my $proch, "-|", join(' ',@{$job->{cmd}});
-	Win32::Process::Open($WIN32_PROC, $pid, 0);
-	$WIN32_PROC_PID = $pid;
-
-	# if desired, this is the place to set OS priority,
-	# process CPU affinity, other OS features.
-	if (defined $job->{cpu_affinity}) {
-	  $WIN32_PROC->SetProcessAffinityMask($job->{cpu_affinity});
-	}
-
-	CORE::waitpid $pid, 0;
-	close $proch;
-	$c1 = $?;
-	debug("Exit code of $$ was $c1") if $job->{debug};
+      # There are lots of ways to spawn a process in Windows
+      if (1 && Forks::Super::Config::CONFIG('Win32::Process')) {
+	$c1 = Forks::Super::Job::OS::Win32::open_win32_process($job);
+      } elsif (1 && Forks::Super::Config::CONFIG('Win32::Process')) {
+	$c1 = Forks::Super::Job::OS::Win32::open2_win32_process($job);
+      } elsif (1) {
+	$c1 = Forks::Super::Job::OS::Win32::open3_win32_process($job);
+      } elsif (0 && Forks::Super::Config::CONFIG('Win32::Process')) {
+	$c1 = Forks::Super::Job::OS::Win32::create_win32_process($job);
       } else {
-	$c1 = system( @{$job->{cmd}} );
-	debug("Exit code of $$ was $c1") if $job->{debug};
+	$c1 = Forks::Super::Job::OS::Win32::system_win32_process($job);
       }
     } else {
       $c1 = system( @{$job->{cmd}} );
-      debug("Exit code of $$ was $c1") if $job->{debug};
     }
+    debug("Exit code of $$ was $c1") if $job->{debug};
     deinit_child();
     exit $c1 >> 8;
   } elsif ($job->{style} eq 'exec') {
-    local $ENV{_FORK_PPID} = $$ if $^O eq 'MSWin32';
-    local $ENV{_FORK_PID} = $$ if $^O eq 'MSWin32';
+    local $ENV{_FORK_PPID} = $$;
+    local $ENV{_FORK_PID} = $$;
     debug("Exec'ing [ @{$job->{exec}} ]") if $job->{debug};
     exec( @{$job->{exec}} );
   } elsif ($job->{style} eq 'sub') {
@@ -722,9 +717,9 @@ sub config_child {
   $Forks::Super::Job::self = $job;
   Forks::Super::Job::Callback::config_callback_child($job);
   $job->config_debug_child;
-  $job->config_fh_child;
   Forks::Super::Job::Timeout::config_timeout_child($job);
   Forks::Super::Job::OS::config_os_child($job);
+  $job->config_fh_child;
   return;
 }
 
@@ -803,6 +798,10 @@ sub init_child {
 }
 
 sub deinit_child {
+#  close STDOUT;
+#  close STDIN;
+#  close STDERR;
+  Forks::Super::Job::Ipc::deinit_child();
   close STDOUT if -p STDOUT;
   close STDERR if -p STDERR;
   close STDIN if -p STDIN;
@@ -818,7 +817,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.30
+0.31
 
 =head1 SYNOPSIS
 

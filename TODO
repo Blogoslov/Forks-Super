@@ -20,7 +20,9 @@ Possible TODOs:
 	_X_ document, extend file vs. socket discussion
 	    On MSWin32, for example, pipe capacity is 512 bytes?
 
-    ___ support sockets/pipes for cmd-style forks like IPC::Open3 does.
+    _x_ support sockets/pipes for cmd-style forks like IPC::Open3 does.
+	_X_ for Unixy systems
+	___ for MSWin32
 
     _x_ facilities to suspend and resume jobs 
 
@@ -59,13 +61,6 @@ Possible TODOs:
 
 	___ change this feature to documented?
 
-    _X_ fork { cpu_affinity => $bitmask }
-
-    _X_ All the work on creating a portable front-end to setting CPU
-	affinity would make a great Sys::CpuAffinity module
-
-    _X_ Something to portably count the number of cpu's is good, too.
-
     ___ Support for launching tasks on remote hosts (maybe that's beyond
         the scope of this module) See Paralell::PVM?
 
@@ -80,8 +75,9 @@ Possible TODOs:
                     of memory/swap space), so expectations of recovery
                     shouldn't be too high
 
-    ___	configure during build. discover the maximum number of simultaneous
-	processes that can be spawned and set MAX_PROC, DEFAULT_MAX_PROC.
+    ___	configure during build. discover the number of processors and
+	the maximum number of simultaneous processes that can be spawned 
+	and set MAX_PROC, DEFAULT_MAX_PROC.
 	Could also be good to know the max number of open filehandles
 	and plan around it.
 
@@ -95,51 +91,54 @@ Possible TODOs:
     ___	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
 	then all IPC should be through sockets or pipes.
 
-    _X_	Defect to fix, $Forks::Super::MAX_PROC = "0"
-
-    _x_	kill_all($signal), kill($signal, @jobs)
-
-	Deliver a signal to all jobs or to a list of jobs.
-
-	_X_ document
-	_X_ handle things in Forks::Super context
-	    _X_ INT,QUIT,TERM etc. on DEFERRED jobs can cancel them
-	    _X_ INT,QUIT,TERM etc. on SUSPENDED jobs can restart them and then kill them
-	    _X_ STOP on an ACTIVE job will change state to SUSPENDED
-	    _X_ CONT on a SUSPENDED job will resume it
-		(do we need to implement suspend/resume
-	    _X_ Special handling for pseudo procs on Windows
-
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. See what
 	can be done to tighten up performance.
 
-    ___ more OS features, max load, whether or not they are portable
-
-    ___ $Forks::Super::Queue::QUEUE_MONITOR_FREQ can be a tied scalar
+    _x_ $Forks::Super::Queue::QUEUE_MONITOR_FREQ can be a tied scalar
 	that restarts the queue monitor process on update
+	___ add unit test
 
-	$Forks::Super::Queue::QUEUE_INHIBIT_MONITOR can be a tied scalar
+    _x_	$Forks::Super::Queue::QUEUE_INHIBIT_MONITOR can be a tied scalar
 	that calls kill_queue_monitor on update to zero.
+	___ add unit test
 
-	$Forks::Super::Queue::QUEUE_INTERRUPT can be (additionally) tied
+    _x_	$Forks::Super::Queue::QUEUE_INTERRUPT can be (additionally) tied
 	to restart queue monitor and reinstall signal handler on update
-
-    _X_ Better EXPORTS documentation in pod.
+	___ add unit test
 
     ___ Test needed, Win32+cmd, See Job.pm:344
 
     ___ Investigate apparent incompatibility with Win32::API, perl 5.12.0
 
-    ___ $Forks::Super::OPEN_FH to track the number of open filehandles
+    _o_ $Forks::Super::OPEN_FH to track the number of open filehandles
         (opened by Forks::Super::XXX modules, not the total number)
 
         Be a little robust when IPC setup fails because of too many open
 	filehandles. Pause and retry; close the "oldest" filehandles?
 
-    _X_ On Unix test 60-os, skip priority tests is priority is already 20
-        (meaning the test is already being conducted in super nice mode
-        and the priority can't be changed ...)
-
-    ___ With cmd and child_fh => "in" where cmd has pipes (cmd1 | cmd2),
+    _x_ With cmd and child_fh => "in" where cmd has pipes (cmd1 | cmd2),
 	'<.fhfork/.fh_xxx' needs to go _before_ the first pipe
+	_X_ solve basic case
+	___ solve complicated case (where first pipe char might be a
+	    quoted argument, or part of an argument).
+	    e.g., what if the external command is
+		perl -F/\\\|/ -ane 'BLOCK' < .fhforkXXX/.fh_XXX | ./other_prog
+
+    _X_ Should we use IO::File->new_tmpfile instead of
+	Forks::Super::Job::Ipc::_choose_fh_filename ?
+	No. We generally need to write files in one process and read them
+	in another.
+
+    ___ fork { run => [ \@cmd, ... ] }
+	to invoke or emulate IPC::Run's rich feature set
+
+    ___ What else can I learn by studying IPC::Run?
+
+    ___ Refactor fork return value to a tied scalar that 'fetch'es the
+	pid but has the methods of the Forks::Super::Job object.
+
+	Use cases:
+		$pid = fork { ... }
+		returns tied var to parent, scalar 0 to child, undef on error
+

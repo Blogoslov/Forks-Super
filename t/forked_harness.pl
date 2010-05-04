@@ -1,4 +1,4 @@
-#! /usr/bin/perl -w
+##! /usr/bin/perl -w
 # forked_harness.pl [options] tests
 #
 # Forks::Super proof-of-concept to run unit tests in parallel
@@ -59,13 +59,14 @@ my $check_endgame = 0;
 my $abort_on_first_error = '';
 my $debug = '';
 my @output_patterns = ();
+my $logfile = "/tmp/forked_harness.log";
 $::fail35584 = '';
 
 # [-h] [-c] [-v] [-I lib [-I lib [...]]] [-p xxx [-p xxx [...]]] [-s] 
 # [-t nnn] [-r nnn] [-x nnn] [-m nnn] [-q] [-a] [-g patt [-g patt [...]]
 
 # abcdefghijklmnopqrstuvwxyz
-# x s    x@   i  @xixi x i  
+# x s    x@  si  @xixi x i  
 my $result = GetOptions("harness" => \$use_harness,
 	   "callbacks=s" => \$use_callbacks,
 	   "verbose" => \$test_verbose,
@@ -79,6 +80,7 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "quiet" => \$quiet,
            "debug" => \$debug,
 	   "grep=s" => \@output_patterns,
+           "logfile=s" => \$logfile,
 	   "abort-on-fail" => \$abort_on_first_error);
 my @captured = ();
 my %fail = ();
@@ -137,26 +139,25 @@ if (@captured > 0) {
   @captured = ();
 }
 if (@result > 0) {
+  if ($logfile && open(LOG, '>>', $logfile)) {
+    print LOG $], " ", $^O, " ", scalar localtime, "\n";
+    print LOG @result;
+    print LOG "=====================================\n";
+    close LOG;
+  }
+
   print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
-  print "----------------------------------\n";
-  print @result;
-
-  open(LOG, ">>", "/tmp/forked_harness.log");
-  print LOG scalar localtime, "\n";
-  print LOG @result;
-  print LOG "=====================================\n";
-  close LOG;
-
-  print "\n\n\n\n\n\n\n\n\n\n";
+  print "=====================================\n";
   print scalar localtime, "\n";
   print @result;
   print "=====================================\n";
+  print "\n\n\n\n\n";
 }
 if (scalar keys %fail > 0) {
   print "\nTest failures:\n";
-  print "==============\n";
+  print "================\n";
   foreach my $test_file (sort keys %fail) {
-    foreach my $test_no (sort {$a<=>$b} keys %{$fail{$test_file}}) {
+    foreach my $test_no (sort {$a+0<=>$b+0} keys %{$fail{$test_file}}) {
       print "\t$test_file#$test_no ";
       if ($fail{$test_file}{$test_no} == 1) {
 	print "1 time\n";
@@ -274,7 +275,7 @@ sub launch_test_file {
   }
   my $pid = fork {
     cmd => [ @cmd ],
-      child_fh => "out,err",
+      child_fh => "out,err,socket",
 	callback => $callbacks,
 	  timeout => $timeout
 	};
@@ -329,8 +330,18 @@ sub process {
   my @s = @stdout;
   my $not_ok = 0;
   foreach my $s (@s) {
-    if ($s =~ /^not ok (\d+)/) {
+    if ($s =~ /^not ok (\d+)/) {        # raw test output
       $fail{$test_file}{$1}++;
+      $not_ok++;
+    }
+    if ($s =~ /Failed tests:\s+(.+)/  # ExtUtils::Command::MM::test_harness
+       || $s =~ /DIED. FAILED tests (.+)/) {
+      my @failed_tests = split /\s*,\s*/, $1;
+      foreach my $failed_test (@failed_tests) {
+	my ($test1,$test2) = split /-/, $failed_test;
+	$test2 ||= $test1;
+	$fail{$test_file}{$_}++ for $test1..$test2;
+      }
       $not_ok++;
     }
     foreach my $pattern (@output_patterns) {
@@ -340,14 +351,21 @@ sub process {
       }
     }
   }
-  if ($status == 35584 && $not_ok == 0) {
-    $redo++;
-  }
-  # XXX elsif ($quiet && $use_harness) { should summarize test results }
+
+  # there are some circumstances where the tests passed but there
+  # was some intermittent error during cleanup. Detect some of these
+  # and redo the test.
 
   if (grep { /^Failed/ && /100.00% okay/ } @stderr) {
     $redo++;
+  } elsif ($use_harness && grep /All \d+ subtests passed/, @stdout) {
+    $redo++;
+  } elsif ($status == 35584 && $not_ok == 0) {
+    $redo++;
+  } elsif ($status != 0 && $not_ok == 0) {
+    $fail{$test_file}{'unknown'} += $status >> 8;
   }
+  # XXX elsif ($quiet && $use_harness) { should summarize test results }
 
   if ($redo) {
 
@@ -380,11 +398,13 @@ sub process {
     if (!$use_harness 
 	|| (grep /Result: FAIL/, @stdout)
         || (grep /Failed Test/, @stdout)) {
-      push @result, "Error in $test_file: $status / $total_status\n";
-      push @result, "--------------------------------------\n";
-      push @result, 
-	@stdout, "-----------------------------------\n", 
-	  @stderr, "===================================\n";
+      if ($abort_on_first_error == 0) {
+	push @result, "Error in $test_file: $status / $total_status\n";
+	push @result, "--------------------------------------\n";
+	push @result, 
+	  @stdout, "-----------------------------------\n", 
+	    @stderr, "===================================\n";
+      }
     } else {
       $status = 0;
     }

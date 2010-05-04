@@ -13,10 +13,13 @@ my $var6 = sub { $var = 6 };
 
 my $pid = fork { sub => sub { sleep 3 },
 		   callback => sub { $var = 4 } };
+my $j = Forks::Super::Job::get($pid);
 ok($var == 1, "finish callback waits until finish");
 sleep 1;
 ok($var == 1, "finish callback waits until finish");
-Forks::Super::pause(4);
+for (my $i=0; $i<10 && $j->{state} eq 'ACTIVE'; $i++) {
+  Forks::Super::pause(1);
+}
 ok($var == 4, "finish runs after finish, before reap");
 waitpid $pid, 0;
 ok($var == 4, "finish callback runs after finish");
@@ -44,8 +47,11 @@ $pid = fork { sub => sub { sleep 2 },
 		callback => { start => sub { $w = 11 },
 			      finish => sub { $w = 9 } } };
 ok($w == 11, "start callback invoked");
-Forks::Super::pause(3);
-ok($w == 9, "finish callback invoked");
+$j = Forks::Super::Job::get($pid);
+for (my $i = 0; $i < 7 && $j->{state} eq 'ACTIVE'; $i++) {
+  Forks::Super::pause(1);
+}
+ok($w == 9, "finish callback invoked"); ### 10 ###
 waitpid $pid,0;
 
 $w = 26;

@@ -18,7 +18,7 @@ $| = 1;
 
 $Carp::Internal{ (__PACKAGE__) }++;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -96,12 +96,8 @@ sub _init {
   Forks::Super::Debug::init();
   Forks::Super::Config::init();
 
-  # XXX - default value of MAX_PROC should be tied to
-  #       (1) number of processors on machine?
-  #       (2) maximum number of simultaneous procs supported by system
-  #           (see ./system-limits.PL)?
-  # ultimately we should discover this
-  $MAX_PROC = 9999;
+  # Default value for $MAX_PROC should be tied to system properties -- see TODO
+  $MAX_PROC = 9E9;
   $MAX_LOAD = -1;
 
   # OK for child process to call Forks::Super::fork()? That could be a bad idea
@@ -120,23 +116,13 @@ sub _init {
 
   *handle_CHLD = *Forks::Super::Sigchld::handle_CHLD;
 
-  if ($^O eq 'MSWin32') {
-    Forks::Super::Util::set_productive_pause_code {
-      Forks::Super::Queue::run_queue() if !$Forks::Super::Queue::_LOCK;
-
-      handle_CHLD(-1);
-    };
-  } else {
-    Forks::Super::Util::set_productive_pause_code {
-      Forks::Super::Queue::run_queue() if !$Forks::Super::Queue::_LOCK;
-
-      handle_CHLD(-1);
-    };
-  }
+  Forks::Super::Util::set_productive_pause_code {
+    Forks::Super::Queue::run_queue() if !$Forks::Super::Queue::_LOCK;
+    handle_CHLD(-1);
+  };
 
   Forks::Super::Wait::set_productive_waitpid_code {
     if ($^O eq 'MSWin32') {
-#      Forks::Super::Sigchld::handle_CHLD(-1);
       handle_CHLD(-1);
     }
   };
@@ -640,7 +626,7 @@ sub kill {
 	    local $! = 0;
 	    $num_signalled += CORE::kill($kill_proc_group 
 					 ? -$signal : $signal, $pid);
-	    print STDERR "XXXXXX MSWin32 kill error $! $^E\n" if $!;
+	    carp "MSWin32 kill error $! $^E\n" if $!;
 	  }
 	} else {
 	  $num_signalled += CORE::kill($kill_proc_group 
@@ -657,13 +643,13 @@ sub kill {
 	    push @terminated, $pid;
 	  }
 	  if ($!) {
-	    print STDERR "XXXXXX kill error $! $^E\n";
+	    carp "kill error $! $^E\n";
 	  }
 	}
       } else {
 	$num_signalled += CORE::kill $signal, @pids;
 	if ($!) {
-	  print STDERR "XXXXXX kill error $! $^E\n";
+	  carp "kill error $! $^E\n";
 	}
       }
     }
@@ -715,7 +701,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.30
+Version 0.31
 
 =head1 SYNOPSIS
 

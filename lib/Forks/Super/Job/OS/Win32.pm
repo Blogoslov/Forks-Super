@@ -121,10 +121,10 @@ sub get_thread_handle {
   }
 
   return 0
-    || win32api('OpenThread', 0x0060, 0, $thread_id)
-    || win32api('OpenThread', 0x0600, 0, $thread_id)
-    || win32api('OpenThread', $set_info ? 0x0040 : 0x0020, 0, $thread_id)
-    || win32api('OpenThread', $set_info ? 0x0200 : 0x0400, 0, $thread_id);
+    || win32api('OpenThread', 0x0060, 1, $thread_id)
+    || win32api('OpenThread', 0x0600, 1, $thread_id)
+    || win32api('OpenThread', $set_info ? 0x0040 : 0x0020, 1, $thread_id)
+    || win32api('OpenThread', $set_info ? 0x0200 : 0x0400, 1, $thread_id);
 }
 
 sub get_process_handle {
@@ -324,6 +324,93 @@ sub get_system_info {
       = unpack('VVVVVVVvv', substr($buffer,4));
   }
   return %SYSTEM_INFO;
+}
+
+sub open_win32_process {
+  my ($job) = @_;
+  my $cmd = join ' ', @{$job->{cmd}};
+  my $pid = open my $proch, "-|", "$cmd";
+  Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
+  $Forks::Super::Job::WIN32_PROC_PID = $pid;
+
+  # if desired, this is the place to set OS priority,
+  # process CPU affinity, other OS features.
+  if (defined $job->{cpu_affinity}) {
+    $Forks::Super::Job::WIN32_PROC->SetProcessAffinityMask(
+		$job->{cpu_affinity});
+  }
+  CORE::waitpid $pid, 0;
+  my $c1 = $?;
+  debug("Exit code of $$ was $c1") if $job->{debug};
+  return $c1;
+}
+
+sub open2_win32_process {
+  my ($job) = @_;
+  my $cmd = join ' ', @{$job->{cmd}};
+  my $pid = open my $proch, "|-", "$cmd";
+  Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
+  $Forks::Super::Job::WIN32_PROC_PID = $pid;
+
+  # if desired, this is the place to set OS priority,
+  # process CPU affinity, other OS features.
+  if (defined $job->{cpu_affinity}) {
+    $Forks::Super::Job::WIN32_PROC->SetProcessAffinityMask(
+		$job->{cpu_affinity});
+  }
+  CORE::waitpid $pid, 0;
+  my $c1 = $?;
+  debug("Exit code of $$ was $c1") if $job->{debug};
+  return $c1;
+}
+
+# XXX - doesn't work, doesn't handoff redirected filehandles properly
+sub create_win32_process {
+  my ($job) = @_;
+  my $cmd = join ' ', @{$job->{cmd}};
+  my ($appname) = split /\s+/, $cmd; # XXX - not idiot proof
+  $Forks::Super::Job::WIN32_PROC = '';
+  Win32::Process::Create($Forks::Super::Job::WIN32_PROC,
+			 $appname,
+			 $cmd,
+			 1,0,'.');
+  $Forks::Super::Job::WIN32_PROC_PID
+    = $Forks::Super::Job::WIN32_PROC->GetProcessID();
+  if (defined $job->{cpu_affinity}) {
+    $Forks::Super::Job::WIN32_PROC->SetProcessAffinityMask(
+		$job->{cpu_affinity});
+  }
+  CORE::waitpid $Forks::Super::Job::WIN32_PROC_PID, 0;
+  my $c1 = $?;
+  debug("Exit code of $$ was $c1") if $job->{debug};
+  return $c1;
+}
+
+sub system_win32_process {
+  my ($job) = @_;
+  $Forks::Super::Job::WIN32_PROC = '__z__';
+  $ENV{'__FORKS_SUPER_PARENT_THREAD'} = $$;
+  # no way to update cpu affinity, priority with this method
+  my $c1 = system( @{$job->{cmd}} );
+  $Forks::Super::Job::WIN32_PROC = undef;
+  return $c1;
+}
+
+sub open3_win32_process {
+  my ($job) = @_;
+  my $cmd = join ' ', @{$job->{cmd}};
+  my $pid = open my $proch, '|-', $cmd;
+  $Forks::Super::Job::WIN32_PROC_PID = $pid;
+  $Forks::Super::Job::WIN32_PROC = '__open3__';
+
+  if (defined $job->{cpu_affinity} && CONFIG('Sys::CpuAffinity')) {
+    Sys::CpuAffinity::setAffinity($pid, $job->{cpu_affinity});
+  }
+
+  close $proch;
+  my $c1 = $?;
+  $Forks::Super::Job::WIN32_PROC = undef;
+  return $c1;
 }
 
 1;

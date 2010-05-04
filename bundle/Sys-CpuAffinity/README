@@ -23,11 +23,15 @@ SUPPORTED SYSTEMS
 The techniques for manipulating CPU affinities for Windows
 (including Cygwin) and Linux have been refined and tested
 pretty well. Some techniques applicable to BSD systems
-(particularly FreeBSD) have been tested a little bit. The
-hope is that this module will include more techniques for
-more systems in future releases. See the NOTE TO DEVELOPERS
-in the module's perldoc for information about how you
-can help.
+(particularly FreeBSD) and Solaris have been tested a little 
+bit. The hope is that this module will include more techniques 
+for more systems in future releases. See the NOTE TO 
+DEVELOPERS in the module's perldoc for information about 
+how you can help.
+
+MacOS is explicitly not supported, as there does not appear to
+be any public interface for specifying the CPU affinity of
+a process directly.
 
 RECOMMENDED MODULES
 
@@ -37,7 +41,6 @@ available.
 
         Win32::API, Win32::Process [MSWin32, cygwin]
         BSD::Process::Affinity [*bsd]
-        Solaris::Lgrp [solaris]
 
 
 INSTALLATION

@@ -40,7 +40,16 @@ sleep 1;
 my @out = Forks::Super::read_stdout($pid);
 my @err = Forks::Super::read_stderr($pid);
 ok(@out == 15, "got 15==" . scalar @out . " lines of output");
-ok(@err == 2, "got 2==" . scalar @err . " lines of error");
+
+# stderr could receive 2 or 3 lines, depending on whether 
+# error from $command1 is concatenated to $command2 or
+# goes to actual standard error.
+ok(@err == 2 || @err == 3, "got 2|3==" . scalar @err . " lines of error");
+
+if (@out != 15 || (@err != 2 && @err != 3)) {
+  print STDERR "\@out:\n @out\n-----------------\nerr:\n @err\n----------\n";
+}
+
 ok($out[0] eq "$msg\n", "got expected output from child");
 ok($err[0] =~ /received message $msg/, "got expected error from child");
 

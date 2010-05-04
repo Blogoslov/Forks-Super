@@ -114,7 +114,7 @@ sub validate_cpu_affinity {
   my $job = shift;
   my $bitmask = $job->{cpu_affinity};
   my $np = get_number_of_processors();
-  $np = '' if $np <= 0;
+  $np = 0 if $np <= 0;
   if ($np > 0 && $bitmask >= (2 ** $np)) {
     $job->{_cpu_affinity} = $bitmask;
     $bitmask &= (2 ** $np) - 1;

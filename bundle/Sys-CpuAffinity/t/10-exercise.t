@@ -8,9 +8,21 @@ my $ntests = 13;
 my $n = Sys::CpuAffinity::getNumCpus();
 ok($n > 0, "discovered $n processors");
 
+if ($^O =~ /darwin/i || $^O =~ /MacOS/i) {
+ SKIP: {
+    skip "get/set affinity not supported on MacOS", $ntests - 1;
+  }
+  exit 0;
+}
+
+
 if ($n <= 1) {
  SKIP: {
-    skip "can't test affinity on single cpu system", $ntests - 1;
+    if ($n == 1) {
+      skip "can't test affinity on single cpu system", $ntests - 1;
+    } else {
+      skip "can't test: can't detect number of cpus", $ntests - 1;
+    }
   }
   exit 0;
 }
@@ -69,6 +81,13 @@ SKIP: {
     Sys::CpuAffinity::setAffinity($$, $simpleMask);
     skip "complex mask test. Need >2 cpus to form complex mask", 2;
   }
+
+  if ($^O =~ /solaris/) {
+    skip "complex mask test. Processes in $^O may only bind to "
+      . "1 or all processors", 2;
+  }
+
+
   $z = Sys::CpuAffinity::setAffinity($$, $complexMask);
   ok($z != 0, "complex setCpuAffinity returned non-zero");
 
@@ -97,7 +116,7 @@ if ($ENV{DEBUG}) {
 open F, '<', $f;
 my $g = <F>;
 my ($y3) = $g =~ /getAffinity:(\d+)/;
-ok(defined $y3 && $y3 > 0 && $y3 < (1<<$n), "got pseudo-proc affinity $y3");
+ok(defined $y3 && $y3 > 0 && $y3 < (2**$n), "got pseudo-proc affinity $y3");
 
 $g = <F>;
 my ($r3) = $g =~ /targetAffinity:(\d+)/;
@@ -126,10 +145,10 @@ sub getComplexMask {
   if ($n < 3) {
     return getSimpleMask($n);
   }
-  my $s = 1 << ($n - 1);
+  my $s = 2 ** $n;
   my $r;
   do {
-    $r = 1 + int(rand(2 * $s - 2));
+    $r = 1 + int(rand($s - 2));
   } while ( $r == 0                  # don't want no bits set 
 	   || ($r & ($r-1)) == 0     # don't want one bit set
 	   || ($r+1) == 2**$n );     # don't want all bits set
@@ -138,6 +157,5 @@ sub getComplexMask {
 
 sub getUnbindMask {
   my $n = shift;
-  my $s = 1 << ($n - 1);
-  return 2 * ($s - 1) + 1;
+  return 2 ** $n - 1;
 }

@@ -24,10 +24,11 @@ $Forks::Super::ON_BUSY = "queue";
 
 my $pid1 = fork { sub => sub { sleep 5 } };
 my $t = Forks::Super::Util::Time();
-my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, queue_priority => 10 };
+my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, 
+		    queue_priority => 10 };
 my $pid3 = fork { sub => sub { }, queue_priority => 5 };
 $t = Forks::Super::Util::Time() - $t;
-ok($t <= 1.5, "fast return ${t}s for queued job, expected <= 1s"); ### 1 ###
+ok($t <= 1.95, "fast return ${t}s for queued job, expected <= 1s"); ### 1 ###
 my $j1 = Forks::Super::Job::get($pid1);
 my $j2 = Forks::Super::Job::get($pid2);
 my $j3 = Forks::Super::Job::get($pid3);

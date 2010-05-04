@@ -3,7 +3,7 @@ use Test::More tests => 8;
 use strict;
 use warnings;
 
-if ($^O eq 'MSWin32' && Forks::Super::Config::CONFIG("Win32::API") == 0) {
+if ($^O eq 'MSWin32' && Forks::Super::Config::CONFIG('Win32::API') == 0) {
  SKIP: {
     skip "kill is unsafe on MSWin32 without Win32::API", 5;
   }
@@ -13,9 +13,15 @@ if ($^O eq 'MSWin32' && Forks::Super::Config::CONFIG("Win32::API") == 0) {
 # as of v0.30, the kill and kill_all functions are not very well speced out.
 # these tests should pass in the current incarnation, though.
 
-my $pid1 = fork { sub => sub { sleep 15 } };
-my $pid2 = fork { sub => sub { sleep 15 } };
-my $pid3 = fork { sub => sub { sleep 15 } };
+my $bgsub = sub {
+  # In case process doesn't know it's supposed to exit on SIGQUIT:
+  $SIG{QUIT} = sub { die "$$ received SIGQUIT\n" };
+  sleep 15;
+};
+
+my $pid1 = fork { sub => $bgsub };
+my $pid2 = fork { sub => $bgsub };
+my $pid3 = fork { sub => $bgsub };
 my $j1 = Forks::Super::Job::get($pid1);
 
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),

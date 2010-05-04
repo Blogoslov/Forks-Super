@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 299;
+use Test::More tests => 301;
 use Carp;
 use strict;
 use warnings;
@@ -46,6 +46,19 @@ if ($limits_file eq '' || ! -r $limits_file) {
     "Can't proceed\n";
   exit 1;
 }
+
+my %LIMITS = ();
+open my $limit_fh, '<', $limits_file || croak "no limits file $limits_file $!";
+while (<$limit_fh>) {
+  chomp;
+  my ($key,$val) = split /:/, $_, 2;
+  $LIMITS{$key} = $val;
+}
+
+ok($LIMITS{'system'} eq $^O, 
+   "limits file configured for system $LIMITS{system}==$^O");
+ok($LIMITS{version} <= $],
+   "limits file configured for version $LIMITS{version}<=$]");
 
 my $NN = 149;
 my $nn = $NN;

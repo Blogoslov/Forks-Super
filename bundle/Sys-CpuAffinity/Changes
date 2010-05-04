@@ -1,5 +1,10 @@
 Revision history for Sys-CpuAffinity
 
+0.95	2010-05-04
+	XS files for Win32.
+	Can call Test::Smoke::SysInfo to detect num cpus.
+	Borrowed code from Test::Smoke::SysInfo for Darwin and Irix.
+
 0.94	2010-04-24
 	Bug fix in _configExternalProgram's poor man's which.
 	XS support for Windows/Cygwin if Win32::XXX modules aren't available.

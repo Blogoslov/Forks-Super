@@ -23,7 +23,7 @@ sub repeater {
   my $curpos;
   local $!;
 
-  binmode STDOUT;  # for MSWin32 compatibility
+  binmode STDOUT;  # for Windows compatibility
   binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {

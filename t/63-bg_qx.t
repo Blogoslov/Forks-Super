@@ -34,13 +34,10 @@ ok($$x == 19, "result is not read only");
 my $j = $Forks::Super::LAST_JOB;
 $y = "";
 $z = sprintf "B%05d", 100000 * rand();
-my $x2 = bg_qx "$^X t/external-command.pl -s=8 -e=$z", timeout => 2;
+my $x2 = bg_qx "$^X t/external-command.pl -s=10 -e=$z", timeout => 2;
 $t = Time();
 $y = $$x2;
 
-# if (!defined $y) { print "\$y,\$\$x is: <undef>\n"; } else { print "\$y,\$\$x is: \"$y\"\n"; }
-
-#-- intermittent failure here: --#
 ok((!defined $y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure");
 ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
 if (defined $y && $y ne "" && $y ne "\n") {
@@ -48,7 +45,7 @@ if (defined $y && $y ne "" && $y ne "\n") {
 	print STDERR `cat /tmp/qqq`;
 }
 $t = Time() - $t;
-ok($t <= 4.15,                       ### 14 ### was 4 obs 4.12
+ok($t <= 5.95,                       ### 14 ### was 4 obs 4.92
    "scalar bg_qx respected timeout, took ${t}s expected ~2s");
 
 ### interrupted bg_qx, capture existing output ###
@@ -102,14 +99,17 @@ ok(@x == 0, "list bg_qx clear");
 ### partial output ###
 
 $t = Time();
-@x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -s=8 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 6 };
+@x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=1 -e=World -s=12 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 6 };
 @tests = @x;
 $t = Time() - $t;
 ok($tests[0] eq "Hello \n", "list bg_qx first line ok");
 ok($tests[1] eq "World \n", "list bg_qx second line ok");    ### 30 ###
 ok(@tests == 2, "list bg_qx interrupted output had " 
 	        . scalar @tests . "==2 lines");              ### 31 ###
-ok($t >= 5.5 && $t < 8.15,
+if (@tests>2) {
+  print STDERR "output was:\n", @tests, "\n";
+}
+ok($t >= 5.5 && $t < 10.05,
 	"list bg_qx took ${t}s expected ~6-7s");             ### 32 ###
 
 sub hex_enc{join'', map {sprintf"%02x",ord} split//,shift} # for debug

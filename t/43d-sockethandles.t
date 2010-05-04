@@ -50,7 +50,7 @@ waitall;
 foreach (@pids) {
   push @cdata, Forks::Super::read_stdout($_);
 }
-ok(@pdata > 0 && @pdata == @cdata, "parent & child processed "
+ok(@pdata > 0 && @pdata == @cdata, "$$\\parent & child processed "
    .(scalar @pdata)."/".(scalar @cdata)." strings");
 @pdata = sort @pdata;
 @cdata = sort @cdata;

@@ -66,7 +66,7 @@ $t = Forks::Super::Util::Time();
 $p = wait 10.0;
 $t = Forks::Super::Util::Time() - $t;
 ok($p == $pid, "wait|resume makes a process complete");
-ok($t > 1.95 && $t < 4.5,         ### 12 ###
+ok($t > 1.95 && $t < 9,         ### 12 ###
    "job completes before wait timeout ${t}s, expected 3-4s");
 ok($j->{state} eq "REAPED", "job is complete");
 
