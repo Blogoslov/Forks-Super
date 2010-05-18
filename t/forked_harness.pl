@@ -59,6 +59,7 @@ my $check_endgame = 0;
 my $abort_on_first_error = '';
 my $debug = '';
 my @output_patterns = ();
+my $use_socket = '';
 my $logfile = "/tmp/forked_harness.log";
 $::fail35584 = '';
 
@@ -66,13 +67,13 @@ $::fail35584 = '';
 # [-t nnn] [-r nnn] [-x nnn] [-m nnn] [-q] [-a] [-g patt [-g patt [...]]
 
 # abcdefghijklmnopqrstuvwxyz
-# x s    x@  si  @xixi x i  
+# x s    x@  si  @xixi x i x 
 my $result = GetOptions("harness" => \$use_harness,
 	   "callbacks=s" => \$use_callbacks,
 	   "verbose" => \$test_verbose,
 	   "include=s" => \@use_libs,
 	   "popts=s" => \@perl_opts,
-	   "shuffle" => \$shuffle,
+	   "s|shuffle" => \$shuffle,
 	   "timeout=i" => \$timeout,
 	   "repeat=i" => \$repeat,
            "xrepeat=i" => \$xrepeat,
@@ -81,6 +82,7 @@ my $result = GetOptions("harness" => \$use_harness,
            "debug" => \$debug,
 	   "grep=s" => \@output_patterns,
            "logfile=s" => \$logfile,
+	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
 my @captured = ();
 my %fail = ();
@@ -128,7 +130,8 @@ if ($debug) {
 }
 my (%j,$count);
 
-$SIG{SEGV} = \&handle_SIGSEGV;
+$SIG{SEGV} = \&handle_SIG;
+$SIG{SYS} = \&handle_SIG;
 &main;
 if (@captured > 0) {
   print "============================================\n";
@@ -169,10 +172,11 @@ if (scalar keys %fail > 0) {
   print "================\n";
 }
 
-sub handle_SIGSEGV {
+sub handle_SIG {
   use Carp;
+  my $name = shift;
   print STDERR "\n" x 10;
-  Carp::confess "SIGSEGV caught in $0 @ARGV\n";
+  Carp::confess "SIG$name caught in $0 @ARGV\n";
 }
 
 sub main {
@@ -275,10 +279,10 @@ sub launch_test_file {
   }
   my $pid = fork {
     cmd => [ @cmd ],
-      child_fh => "out,err,socket",
-	callback => $callbacks,
-	  timeout => $timeout
-	};
+    child_fh => $use_socket ? "out,err,socket" : "out,err",
+    callback => $callbacks,
+    timeout => $timeout
+  };
 
   $j{$pid} = $test_file;
   $j{"$test_file:pid"} = $pid;

@@ -2,9 +2,9 @@ use Forks::Super ':test';
 use Test::More tests => 11;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 150;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 #
 # test whether a parent process can have access to the
@@ -58,12 +58,12 @@ sub repeater {
     Forks::Super::debug("repeater: time expired. ",
 			"Not processing any more input");
     Forks::Super::debug("input was from file: $f_in");
-    open(F_IN, "<", $f_in);
-    while (<F_IN>) {
+    open(my $F_IN, "<", $f_in);
+    while (<$F_IN>) {
       s/\s+$//;
       Forks::Super::debug("    input $.: $_");
     }
-    close F_IN;
+    close $F_IN;
   }
   close STDOUT;
   close STDERR;
@@ -105,3 +105,4 @@ ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
 ok($err[-1] eq "$msg\n", "got Expected line from child error");
 waitall;
 
+eval { alarm 0 };

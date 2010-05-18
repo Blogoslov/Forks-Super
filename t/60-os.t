@@ -37,12 +37,9 @@ SKIP: {
 
 ######################################################################
 
-# update cpu affinity
+# update cpu affinity - doesn't work very well on all platforms.
 
 SKIP: {
-  local $!;
-  my $lenient = 0;
-
   if (!CONFIG("Sys::CpuAffinity")) {
     skip "cpu affinity test: requires Sys::CpuAffinity", 1;
   }
@@ -53,6 +50,13 @@ SKIP: {
   }
   if ($np <= 0) {
     skip "cpu affinity test: could not detect number of processors!", 1;
+  }
+  if ($^O =~ /darwin/i || $^O =~ /aix/i || $^O =~ /^hp/i) {
+    skip "cpu affinity test: unsupported or poorly supported platform", 1;
+  }
+  if (Sys::CpuAffinity::getAffinity($$) <= 0) {
+    skip "cpu affinity test: "
+      . "Sys::CpuAffinity::getAffinity() not functioning on $^O/$]", 1;
   }
 
   my $pid3 = fork { sub => sub { sleep 10 }, cpu_affinity => 0x02 };

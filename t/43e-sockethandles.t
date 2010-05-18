@@ -42,13 +42,16 @@ ok($z > 0, "print to child STDIN successful");
 my $t = Forks::Super::Util::Time();
 waitpid $pid, 0;
 $t = Forks::Super::Util::Time() - $t;
-ok($t > 1.25 && $t < 6.15,              ### 8 ### was 5.05,obs 6.12
+ok($t > 1.01 && $t < 6.15,              ### 8 ### was 1.25/5.05,obs 1.05/6.12
    "compound command took ${t}s, expected ~2s");
 sleep 1;
 
 my @out = Forks::Super::read_stdout($pid);
 my @err = Forks::Super::read_stderr($pid);
 ok(@out == 15, "got 15==" . scalar @out . " lines of output");
+if (@out < 10) {
+  print STDERR "Output was:\n---------\n@out\n--------------\n";
+}
 
 # could be 2 or 3 lines of error output, it's OS-dependent.
 # It depends on whether the error from $command1

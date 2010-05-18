@@ -1,8 +1,14 @@
 Revision history for Forks-Super
 
+0.32    2010-05-18
+        New system dependent Forks::Super::SysInfo package.
+        Changes to Ipc.pm for robustness and to ease testing/debugging.
+        Put README.txt file into temporary IPC directories.
+        Improved cleanup of queue monitor.
+
 0.31    2010-05-04
         Extend socket IPC to cmd/exec-style forks (except MSWin32).
-	Making use of tie behavior to more Forks::Super::Queue variables.
+        Making use of tie behavior to more Forks::Super::Queue variables.
 
 0.30    2010-04-25
         Implemented suspend/resume functionality (for Windows, too).
@@ -87,4 +93,3 @@ Revision history for Forks-Super
 
 0.04    2009-11-14
         Alpha release.
-

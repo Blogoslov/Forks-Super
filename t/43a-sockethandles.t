@@ -2,9 +2,9 @@ use Forks::Super ':test';
 use Test::More tests => 12;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 #
 # test whether a parent process can have access to the
@@ -117,3 +117,4 @@ ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
 ok($err[-1] eq "$msg\n", "got Expected line from child error");
 waitall;
 
+eval { alarm 0 };

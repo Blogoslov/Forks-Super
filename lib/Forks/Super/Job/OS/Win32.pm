@@ -66,7 +66,7 @@ our %_WIN32_API_SPECS
 	        'BOOL TerminateThread(HANDLE h,DWORD x)' ],
     );
 
-*Forks::Super::Job::OS::get_number_of_processors = *get_number_of_processors;
+# *Forks::Super::Job::OS::get_number_of_processors = *get_number_of_processors;
 
 ######################################################################
 
@@ -283,19 +283,6 @@ sub resume_thread {
 }
 
 ######################################################################
-
-sub get_number_of_processors {
-  if (defined $ENV{NUMBER_OF_PROCESSORS}) {
-    return $ENV{NUMBER_OF_PROCESSORS};
-  }
-
-  my %system_info = get_system_info();
-  if (defined $system_info{'NumberOfProcessors'}) {
-    return $system_info{'NumberOfProcessors'};
-  }
-
-  return Forks::Super::Job::OS::get_number_of_processors_generic();
-}
 
 our %SYSTEM_INFO = ();
 sub get_system_info {

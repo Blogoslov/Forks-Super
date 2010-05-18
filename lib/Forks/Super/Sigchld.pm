@@ -1,3 +1,7 @@
+#
+# Forks::Super::Sigchld - SIGCHLD handler for Forks::Super module
+#
+
 package Forks::Super::Sigchld;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
@@ -78,16 +82,18 @@ sub handle_CHLD {
     } else {
       # There are (at least) two reasons that we get to this code branch:
       #
-      # 1. A child process completes so quickly that it is reaped in this subroutine
-      #    before the parent process has finished initializing its state.
-      #    Treat this as a bastard pid. We'll check later if the parent process
-      #    knows about this process.
+      # 1. A child process completes so quickly that it is reaped in 
+      #    this subroutine *before* the parent process has finished 
+      #    initializing its state.
+      #    Treat this as a bastard pid. We'll check later if the 
+      #    parent process knows about this process.
       # 2. In Cygwin, the system sometimes fails to clean up the process
       #    correctly. I notice this mainly with deferred jobs.
 
       debug("Forks::Super::handle_CHLD(): got CHLD signal ",
 	    "but can't find child to reap; pid=$pid") if $DEBUG;
-      $Forks::Super::BASTARD_DATA{$pid} = [ Forks::Super::Time(), $status ];
+
+      Forks::Super::_you_bastard($pid, $status);
     }
     $Forks::Super::Queue::_REAP = 1;
   }

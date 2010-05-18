@@ -27,7 +27,7 @@ my $j1 = Forks::Super::Job::get($pid1);
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "launched $pid1,$pid2,$pid3");
 
-my $y = Forks::Super::kill 'QUIT', $j1;
+my $y = Forks::Super::kill('QUIT', $j1);
 ok($y == 1, "kill signal to $pid1 sent successfully $y==1");
 sleep 1;
 
@@ -38,7 +38,7 @@ ok($t < 6,              ### 3 ### was 3, obs 4.4,5.44 on Cygwin
    "process $pid1 took ${t}s to reap, expected fast"); # [sometimes it can take a while, though]
 ok($p == $pid1, "kill signal to $p==$pid1 successful");        ### 4 ###
 
-my $z = Forks::Super::kill_all 'TERM';
+my $z = Forks::Super::kill_all('TERM');
 ok($z == 2, "kill_all signal to $z==$pid2,$pid3 successful");
 sleep 1;
 
@@ -49,12 +49,12 @@ $pid2 = fork { sub => sub { sleep 5 } };
 $pid3 = fork { sub => sub { sleep 5 }, depend_on => $pid1 };
 $j1 = Forks::Super::Job::get($pid1);
 sleep 1;
-$y = Forks::Super::kill 'INT', $pid1;
+$y = Forks::Super::kill('INT', $pid1);
 sleep 1;
 Forks::Super::Queue::run_queue();
 ok($y == 1, "sent INT to $y==1 proc");
 ok($j1->is_complete, "killed job is complete " . $j1->{state});
 waitall;
 
-$y = Forks::Super::kill 'INT', $pid1, $pid2, $pid3;
+$y = Forks::Super::kill('INT', $pid1, $pid2, $pid3);
 ok($y == 0, "kill to complete jobs returns 0");

@@ -9,8 +9,6 @@ Possible TODOs:
 		names, accessible in the parent at something like 
 		$Forks::Super::CHILD_FH{$pid}{X}
 
-    _X_ incorporate CPU load into system busy-ness calc
-
     ___ incorporate free memory into system busy-ness calc 
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
 		"non functional")
@@ -24,21 +22,12 @@ Possible TODOs:
 	_X_ for Unixy systems
 	___ for MSWin32
 
-    _x_ facilities to suspend and resume jobs 
+    ___ suspend/resume callback function
 
-	either suspend/resume based on the busyness of the system
-	or on demand. I bet this will be hard to do with Win32.
-
-	Consider a callback function that returns < 0 if an active job
-	should be suspended, > 0 if a suspended job should be activated,
-	and 0/undef if the job should be left in its current state
-
-	_X_ How should we suspend/resume jobs on the queue? By
-	    having the additional job state "SUSPENDED-DEFERRED"
-
-	What if the child process is trapping SIGSTOP? For now that's
-	not my problem. Maybe we can ask the operating system if the
-	process is suspended.
+	run periodically on all active AND suspended jobs
+	if return value < 0, then active job is suspended
+	if return value > 0, then suspended job is resumed
+	if return value == 0, then stay in current state
 
     _x_ What should  wait  and  waitall  do when only suspended jobs
         are left?
@@ -69,13 +58,13 @@ Possible TODOs:
 		like Proc::Fork. Call CORE::fork() several times if
 		it's not creating child processes.
 		_X_ implement
-		___ test (mock?)
+		___ test (mock? 
 		_X_ document - failed CORE::fork calls usually indicate
                     some bad system condition (too many processes, out
                     of memory/swap space), so expectations of recovery
                     shouldn't be too high
 
-    ___	configure during build. discover the number of processors and
+    _X_	configure during build. discover the number of processors and
 	the maximum number of simultaneous processes that can be spawned 
 	and set MAX_PROC, DEFAULT_MAX_PROC.
 	Could also be good to know the max number of open filehandles
@@ -95,23 +84,16 @@ Possible TODOs:
 	especially when there are lots of short tasks. See what
 	can be done to tighten up performance.
 
-    _x_ $Forks::Super::Queue::QUEUE_MONITOR_FREQ can be a tied scalar
-	that restarts the queue monitor process on update
-	___ add unit test
-
-    _x_	$Forks::Super::Queue::QUEUE_INHIBIT_MONITOR can be a tied scalar
-	that calls kill_queue_monitor on update to zero.
-	___ add unit test
-
-    _x_	$Forks::Super::Queue::QUEUE_INTERRUPT can be (additionally) tied
-	to restart queue monitor and reinstall signal handler on update
-	___ add unit test
+    ___ Tests for tied scalar behavior of
+	___ $Forks::Super::Queue::QUEUE_MONITOR_FREQ
+	___ $Forks::Super::Queue::QUEUE_INHIBIT_MONITOR
+	___ $Forks::Super::Queue::QUEUE_INTERRUPT
 
     ___ Test needed, Win32+cmd, See Job.pm:344
 
     ___ Investigate apparent incompatibility with Win32::API, perl 5.12.0
 
-    _o_ $Forks::Super::OPEN_FH to track the number of open filehandles
+    _x_ $Forks::Super::OPEN_FH to track the number of open filehandles
         (opened by Forks::Super::XXX modules, not the total number)
 
         Be a little robust when IPC setup fails because of too many open
@@ -125,11 +107,6 @@ Possible TODOs:
 	    e.g., what if the external command is
 		perl -F/\\\|/ -ane 'BLOCK' < .fhforkXXX/.fh_XXX | ./other_prog
 
-    _X_ Should we use IO::File->new_tmpfile instead of
-	Forks::Super::Job::Ipc::_choose_fh_filename ?
-	No. We generally need to write files in one process and read them
-	in another.
-
     ___ fork { run => [ \@cmd, ... ] }
 	to invoke or emulate IPC::Run's rich feature set
 
@@ -141,4 +118,22 @@ Possible TODOs:
 	Use cases:
 		$pid = fork { ... }
 		returns tied var to parent, scalar 0 to child, undef on error
+		$pid->state;
+		$pid->status;
 
+	This might not be possible.
+
+    ___ More information to Forks::Super::SysInfo.
+	___ e.g. "has Unixy signal framework"
+	___ "is Windows"
+	___ "is Windows/Cygwin"
+	___ we can spoof this information for some tests ...
+
+    ___ More tests from a child process and see what breaks.
+		use Forks::Super;
+		CORE::fork() && exit;
+		# now $$ != $MAIN_PID but this is the
+		# "parent" process of Forks::Super.
+		do_something_and_see_if_it_works();
+
+    _o_ Investigate "filehandle leaks" in t/forked_harness.pl.

@@ -4,9 +4,8 @@ use strict;
 use warnings;
 $| = 1;
 
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 #
 # test whether a parent process can have access to the
@@ -71,4 +70,4 @@ ok($pc_equal, "parent/child agree on output");
 
 use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
 
-__END__
+eval { alarm 0 };

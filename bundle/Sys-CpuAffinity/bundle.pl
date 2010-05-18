@@ -8,8 +8,13 @@ use warnings;
 my $buildClass = 'Sys::CpuAffinity::Custom::Builder';
 my $SuperModule = 'Forks::Super';
 my $TargetModule = 'Sys::CpuAffinity';
-my $TargetModuleMinVersion = '0.90';
+my $TargetModuleMinVersion = '0.94';
 my $version = MM->parse_version('lib/Sys/CpuAffinity.pm');
+if ($^O =~ /solaris/i) {
+  $TargetModuleMinVersion = '0.96';
+} elsif ($^O =~ /darwin/i || $^O =~ /irix/i) {
+  $TargetModuleMinVersion = '0.95';
+}
 
 my $TargetModulePitch = qq[
 

@@ -2,9 +2,9 @@ use Forks::Super ':test';
 use Test::More tests => 6;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 150;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 #
 # test whether a parent process can have access to the
@@ -60,3 +60,4 @@ use Carp;$SIG{SEGV} = sub {
 };
 
 
+eval { alarm 0 };

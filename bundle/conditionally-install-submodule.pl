@@ -132,7 +132,7 @@ sub build_and_install_submodule {
 sub clean {
   my ($Build_cmd) = @_;
 
-#  system("$Build_cmd clean");
+  system("$Build_cmd clean");
 }
 
 

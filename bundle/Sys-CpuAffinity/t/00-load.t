@@ -3,8 +3,7 @@
 use Test::More tests => 1;
 
 BEGIN {
-    use_ok( 'Sys::CpuAffinity' ) || print "Bail out!
-";
+    use_ok( 'Sys::CpuAffinity' ) || print "Bail out!\n";
 }
 
 diag( "Testing Sys::CpuAffinity $Sys::CpuAffinity::VERSION, Perl $], $^X" );

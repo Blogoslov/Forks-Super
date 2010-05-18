@@ -1,16 +1,8 @@
 use Forks::Super ':test';
-use Test::More;
+use Test::More tests => 12;
 use strict;
 use warnings;
 $| = 1;
-
-{
-  plan tests => 12;
-}
-
-#if (Forks::Super::CONFIG("alarm")) {
-#  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-#}
 
 #
 # test whether a parent process can have access to the
@@ -34,8 +26,9 @@ sub repeater {
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while ($_ = defined getsockname(STDIN) ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
-    #while (<STDIN>) {
+    while ($_ = defined getsockname(STDIN) 
+	? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
+
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
@@ -102,11 +95,13 @@ Forks::Super::close_fh($pid);
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [\n @out ]");
 
 @err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
-ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
+ok(@err == 1,                            ### 8 ###
+   scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
 ok($out[0] eq "0:$msg\n", "got Expected first line from child output");
 ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
 ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
-ok($err[-1] eq "$msg\n", "got Expected line from child error");
+ok($err[-1] eq "$msg\n",                 ### 12 ###
+   "got Expected line from child error @err");
 
 my $r = waitall 10;

@@ -111,14 +111,16 @@ my $builder = $builderclass->new(
 	},
 	add_to_cleanup      => [ 'Sys-CpuAffinity-*', '_build', 
 			         '*.xs.o', 'lib/xs/*', 
+				 'lib/Sys/CpuAffinity.c',
+				 'lib/Sys/CpuAffinity.o',
 				 'lib/Sys/CpuAffinity.xs',
                                  'contrib/ok/*.xs', 'contrib/fail/*.xs',
                                  'blib', 'pod2htm*',
                                  'Makefile', 'Build'
 				 ],
 	create_makefile_pl  => 'passthrough',
-#	extra_compiler_flags => [ '-lkernel32' ],
-#	extra_linker_flags => [ '/usr/lib/w32api/libkernel32.a' ],
+	extra_compiler_flags => $extra_compiler_flags,
+	extra_linker_flags =>   $extra_linker_flags,
 	sign                => 0,
 );
 

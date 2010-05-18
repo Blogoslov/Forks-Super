@@ -1,5 +1,6 @@
 package Forks::Super;
 use 5.007003;     # for "safe" signals -- see perlipc
+use Forks::Super::SysInfo;
 use Forks::Super::Job;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
@@ -16,9 +17,12 @@ use strict;
 use warnings;
 $| = 1;
 
-$Carp::Internal{ (__PACKAGE__) }++;
+{
+  no warnings 'once';
+  $Carp::Internal{ (__PACKAGE__) }++;
+}
 
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -32,10 +36,10 @@ our %EXPORT_TAGS =
     'vars' => [ @export_ok_vars, @EXPORT ],
     'all' => [ @EXPORT_OK, @EXPORT ] );
 
+our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC);
 our ($DONT_CLEANUP, $CHILD_FORK_OK, $QUEUE_INTERRUPT, $PKG_INITIALIZED);
-our (%BASTARD_DATA);
-our $SOCKET_READ_TIMEOUT = 1.0;
+our (%IMPORT, $LAST_JOB, $LAST_JOB_ID, %BASTARD_DATA);
 
 sub import {
   my ($class,@args) = @_;
@@ -83,7 +87,7 @@ sub import {
     }
   }
 
-  $Forks::Super::IMPORT{$_}++ foreach @tags;
+  $IMPORT{$_}++ foreach @tags;
   Forks::Super->export_to_level(1, "Forks::Super", @tags?@tags:@EXPORT);
   return;
 }
@@ -96,8 +100,9 @@ sub _init {
   Forks::Super::Debug::init();
   Forks::Super::Config::init();
 
-  # Default value for $MAX_PROC should be tied to system properties -- see TODO
-  $MAX_PROC = 9E9;
+  # Default value for $MAX_PROC should be tied to system properties
+  $DEFAULT_MAX_PROC = $Forks::Super::SysInfo::MAX_FORK - 1;
+  $MAX_PROC = $DEFAULT_MAX_PROC;
   $MAX_LOAD = -1;
 
   # OK for child process to call Forks::Super::fork()? That could be a bad idea
@@ -688,6 +693,23 @@ sub kill_all {
   Forks::Super::kill $signal, @all_jobs;
 }
 
+sub _you_bastard {
+  my ($pid, $status) = @_;
+  $BASTARD_DATA{$pid} = [ Forks::Super::Util::Time(), $status ];
+  return;
+}
+
+sub _set_last_job {
+  my ($job, $id) = @_;
+  $LAST_JOB = $job;
+  $LAST_JOB_ID = $id;
+  return;
+}
+
+sub _is_test {
+  return defined $IMPORT{':test'} && $IMPORT{':test'};
+}
+
 1;
 
 __END__
@@ -701,7 +723,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.31
+Version 0.32
 
 =head1 SYNOPSIS
 

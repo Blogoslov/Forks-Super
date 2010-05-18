@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use base qw(DynaLoader);
 
-our $VERSION = '0.95';
+our $VERSION = '0.96';
 eval { bootstrap Sys::CpuAffinity $VERSION };
 
 sub import {
@@ -912,6 +912,13 @@ sub _configExternalProgram {
   if ($^O ne 'MSWin32') {
     my $which = qx(which $program 2>/dev/null);
     $which =~ s/\s+$//;
+
+    if ($which =~ / not in / 			# negative output on irix
+	|| $which =~ /no \Q$program\E in /	# negative output on solaris
+       ) {
+
+      $which = '';
+    }
     if ($which) {
       _debug("Program $program is available in $which");
       return $PROGRAM{$program} = $which;
@@ -1007,7 +1014,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-Version 0.95
+Version 0.96
 
 =head1 SYNOPSIS
 

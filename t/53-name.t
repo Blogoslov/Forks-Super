@@ -35,10 +35,8 @@ ok($p+$q == $pid1+$pid2, "waitpid by name second time");
 $q = waitpid "sleeperX", 0;
 ok($q == -1, "waitpid by name too many times");
 
-if (Forks::Super::CONFIG("alarm")) {
-    alarm 120;
-    $SIG{ALRM} = sub { die "Timeout\n" };
-}
+$SIG{ALRM} = sub { die "Timeout\n" };
+eval { alarm 120 };
 
 $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
@@ -124,6 +122,4 @@ ok($j3->{start} >= $j1->{start} && $j3->{start} >= $j2->{start},
 ok($j2->{start} >= $j1->{start} + 1.5, "respected depend_start+delay");
 ok($j3->{start} >= $j2->{end}, "resepected depend_on with depend_start");
 
-if (Forks::Super::CONFIG("alarm")) {
-    alarm 0;
-}
+eval { alarm 0 };

@@ -47,8 +47,7 @@ sub TIESCALAR {
 			  stdout => \$self->{stdout}, _is_bg => 1 };
   }
   $self->{job} = Forks::Super::Job::get($self->{job_id});
-  $Forks::Super::LAST_JOB_ID = $self->{job_id};
-  $Forks::Super::LAST_JOB = $self->{job};
+  Forks::Super::_set_last_job($self->{job}, $self->{job_id});
   $self->{value} = undef;
   bless $self, $class;
   return $self;

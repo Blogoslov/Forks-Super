@@ -21,6 +21,7 @@ MANIFEST
 README
 README.windows
 system-limits.PL
+SysInfo.pm.PL
 t/00-use.t
 t/01a-import.t
 t/01b-import.t

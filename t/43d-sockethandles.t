@@ -2,9 +2,9 @@ use Forks::Super ':test';
 use Test::More tests => 2;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 #
 # test whether a parent process can have access to the
@@ -111,4 +111,4 @@ ok($output eq "11dlrow olleH\n16?gniog ti si woH\n",
 
 use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
 
-__END__
+eval { alarm 0 };

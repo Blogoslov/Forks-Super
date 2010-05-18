@@ -13,7 +13,7 @@ use Carp;
 use strict;
 use warnings;
 
-$Carp::Internal{ (__PACKAGE__) }++;
+# $Carp::Internal{ (__PACKAGE__) }++;
 our $VERSION = $Forks::Super::Debug::VERSION;
 
 {

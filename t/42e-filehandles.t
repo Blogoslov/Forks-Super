@@ -34,12 +34,14 @@ ok($z > 0, "print to child STDIN successful");
 my $t = Forks::Super::Util::Time();
 waitpid $pid, 0;
 $t = Forks::Super::Util::Time() - $t;
-ok($t > 1.05 && $t < 5.05, "compound command took ${t}s, expected ~2s");
+ok($t > 1.05 && $t < 5.05,                 ### 6 ###
+   "compound command took ${t}s, expected ~2s");
 sleep 1;
 
 my @out = Forks::Super::read_stdout($pid);
 my @err = Forks::Super::read_stderr($pid);
-ok(@out == 15, "got 15==" . scalar @out . " lines of output");
+ok(@out == 15,                             ### 7 ###
+   "got 15==" . scalar @out . " lines of output");
 
 # stderr could receive 2 or 3 lines, depending on whether 
 # error from $command1 is concatenated to $command2 or

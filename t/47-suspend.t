@@ -48,7 +48,7 @@ $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS = 'wait';
 $t = Forks::Super::Util::Time();
 my $p = wait 5.0;
 $t = Forks::Super::Util::Time() - $t;
-ok($p == Forks::Super::Wait::TIMEOUT, "wait|wait times out $p==TIMEOUT");
+ok($p == &Forks::Super::Wait::TIMEOUT, "wait|wait times out $p==TIMEOUT");
 ok($t > 4.95, "wait|wait times out ${t}s, expected ~5s");
 ok($j->{state} eq 'SUSPENDED', "wait|wait does not resume job");
 
@@ -56,7 +56,7 @@ $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS = 'fail';
 $t = Forks::Super::Util::Time();
 $p = wait 5.0;
 $t = Forks::Super::Util::Time() - $t;
-ok($p == Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT, 
+ok($p == &Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT, 
    "wait|fail returns invalid");
 ok($t < 1.95, "fast fail ${t}s expected <1s");
 ok($j->{state} eq 'SUSPENDED', "wait|fail does not resume job");

@@ -44,8 +44,7 @@ sub TIEARRAY {
 					     _is_bg => 2};
   }
   $self->{job} = Forks::Super::Job::get($self->{job_id});
-  $Forks::Super::LAST_JOB_ID = $self->{job_id};
-  $Forks::Super::LAST_JOB = $self->{job};
+  Forks::Super::_set_last_job($self->{job}, $self->{job_id});
   bless $self, $classname;
   return $self;
 }

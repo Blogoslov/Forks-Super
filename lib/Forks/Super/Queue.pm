@@ -16,19 +16,21 @@ use warnings;
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID);
+our $VERSION = $Forks::Super::Debug::VERSION;
 
+our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID);
 our $QUEUE_MONITOR_FREQ;
+our $QUEUE_DEBUG = $ENV{FORKS_SUPER_QUEUE_DEBUG} || 0;
+our $QUEUE_MONITOR_LIFESPAN = 14400;
 our $DEFAULT_QUEUE_PRIORITY = 0;
 our $INHIBIT_QUEUE_MONITOR = 1;
 our $NEXT_DEFERRED_ID = -100000;
+
 our $OLD_SIG;
-our $VERSION = $Forks::Super::Debug::VERSION;
 our $MAIN_PID = $$;
-#our $QUEUE_MONITOR_LAUNCHED = 0;
 our $_LOCK = 0; # ??? can this prevent crash -- no, but it can cause deadlock
 our $CHECK_FOR_REAP = 1;
-our $QUEUE_DEBUG = $ENV{FORKS_SUPER_QUEUE_DEBUG} || 0;
+
 # set flag if the program is shutting down. Use flag in queue_job()
 # to suppress warning messages
 our $DURING_GLOBAL_DESTRUCTION = 0;
@@ -124,12 +126,26 @@ sub _launch_queue_monitor {
     } else {
       init_child();
     }
-    for (;;) {
+
+    # three ways the queue monitor can die:
+    #  1. (preferred) killed by the calling process (_kill_queue_monitor)
+    #  2. fails to signal calling process 10 straight times
+    #  3. exit after $QUEUE_MONITOR_LIFESPAN seconds
+
+    my $expire = time + $QUEUE_MONITOR_LIFESPAN;
+    my $consecutive_failures = 0;
+    while (time < $expire && $consecutive_failures < 10) {
       sleep $QUEUE_MONITOR_FREQ;
+
       if ($DEBUG || $QUEUE_DEBUG) {
 	debug("queue monitor $$ passing signal to $QUEUE_MONITOR_PPID");
       }
-      CORE::kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID;
+      if (CORE::kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID) {
+	$consecutive_failures = 0;
+      } else {
+	$consecutive_failures++;
+      }
+      last if time > $expire;
     }
     exit 0;
   }
@@ -213,7 +229,10 @@ sub run_queue {
   my ($ignore) = @_;
   return if @QUEUE <= 0;
   # XXX - run_queue from child ok if $Forks::Super::CHILD_FORK_OK
-  return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
+  {
+    no warnings 'once';
+    return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
+  }
   queue_job();
   return if @QUEUE <= 0;
   if ($_LOCK++ > 0) {
@@ -387,11 +406,15 @@ sub Forks::Super::Queue::InhibitQueueMonitor::STORE {
 
 # Restart queue monitor if value for $QUEUE_INTERRUPT is changed.
 
-*Forks::Super::Queue::QueueInterrupt::TIESCALAR
-  = \&Forks::Super::Tie::Enum::TIESCALAR;
+{
+  no warnings 'once';
 
-*Forks::Super::Queue::QueueInterrupt::FETCH
-  = \&Forks::Super::Tie::Enum::FETCH;
+  *Forks::Super::Queue::QueueInterrupt::TIESCALAR
+    = \&Forks::Super::Tie::Enum::TIESCALAR;
+
+  *Forks::Super::Queue::QueueInterrupt::FETCH
+    = \&Forks::Super::Tie::Enum::FETCH;
+}
 
 sub Forks::Super::Queue::QueueInterrupt::STORE {
   my ($self, $new_value) = @_;

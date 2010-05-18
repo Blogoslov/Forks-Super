@@ -1,4 +1,5 @@
 use Forks::Super ':test';
+use Forks::Super::SysInfo;
 use Test::More tests => 301;
 use Carp;
 use strict;
@@ -20,100 +21,40 @@ use warnings;
 $Forks::Super::Sigchld::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
 
-#my $limits_file = "t/out/limits.$^O.$]";
 
-my ($limits_file) = grep { -r $_ } 
-	"system-limits.$^O.$]", 
-	"system-limits.$^O",
-	"system-limits";
+ok($Forks::Super::SysInfo::SYSTEM eq $^O,
+   "Forks::Super::SysInfo configured for $Forks::Super::SysInfo::SYSTEM==$^O");
+ok($Forks::Super::SysInfo::PERL_VERSION <= $],
+   "Forks::Super::SysInfo configured for "
+   . "$Forks::Super::SysInfo::PERL_VERSION<=$]");
 
-if (! defined $limits_file) {
-
-  $limits_file = "system-limits";
-  open LOCK, '>>', "$limits_file.lock";
-  flock LOCK, 2;
-
-  if (! -r $limits_file) {
-    print STDERR "System limitations file not found. Trying to create ...\n";
-    system($^X, "system-limits.PL", $limits_file);
-  }
-
-  close LOCK;
-}
-
-if ($limits_file eq '' || ! -r $limits_file) {
-  print STDERR "System limitations file $limits_file not found. ",
-    "Can't proceed\n";
-  exit 1;
-}
-
-my %LIMITS = ();
-open my $limit_fh, '<', $limits_file || croak "no limits file $limits_file $!";
-while (<$limit_fh>) {
-  chomp;
-  my ($key,$val) = split /:/, $_, 2;
-  $LIMITS{$key} = $val;
-}
-
-ok($LIMITS{'system'} eq $^O, 
-   "limits file configured for system $LIMITS{system}==$^O");
-ok($LIMITS{version} <= $],
-   "limits file configured for version $LIMITS{version}<=$]");
 
 my $NN = 149;
 my $nn = $NN;
 SKIP: {
-  if (-f $limits_file) {
-    open(L, "<", $limits_file);
-    while (<L>) {
-      if (/maxfork:(\d+)/) {
-	$nn = $1;
-	print STDERR "$^O-$] can apparently support $nn simultaneous ",
-		"background procs\n";
-	$nn = int(0.75 * $nn);
-	if ($nn > $NN) {
-	  $nn = $NN;
-	}
+  $nn = int(0.85 * $Forks::Super::SysInfo::MAX_FORK) || 5;
+  $nn = $NN if $nn > $NN;
 
-	# solaris tends to barf on this test even though it passes
-	# the others -- disable until we figure out why.
-	# (raises SIGSYS? don't know if that is easy to trap)
-	if ($^O =~ /solaris/) {
-	  $nn = 0;
-	}
-
-      }
-    }
-    close L;
-  } elsif ($^O eq 'MSWin32') {
-    $nn = 60;
-    $nn = 50 if $] le "5.006999";
-
-    # perl 5.8 can handle ~60 simultaneous Windows threads on my system,
-    # but perl 5.6 looks like it can only take about 50
-
-  } elsif ($^O =~ /openbsd/) {
-    $nn = 48;
-  } elsif ($^O =~ /solaris/i) {
-
-    # solaris tends to barf on this test even when the other tests do fine.
-    # disable this test until we can see what is going on in solaris.
+  # solaris tends to barf on this test even though it passes
+  # the others -- disable until we figure out why.
+  # (raises SIGSYS? don't know if that is easy to trap)
+  if ($^O =~ /solaris/) {
     $nn = 0;
-
-  } elsif ($^O =~ /darwin/) {
-    $nn = 80;
   }
+
   if ($nn < $NN) {
     skip "Max ~$nn proc on $^O v$], can only do ".((2*$nn)+1)." tests", 
       2*($NN-$nn);
   }
 }
 
+
+print "\$nn is $nn $NN\n";
+
 for (my $i=0; $i<$nn; $i++) {
-  # failure point on some systems: Maximal count of pending signals (nnn) exceeded
-  # failure point on solaris-5.8.9 135/199
-  # failure point on solaris-5.11.3 29/75
-  # failure point on solaris-5.11.4 96/199
+  # failure point on some systems: 
+  #    Maximal count of pending signals (nnn) exceeded
+
   my $pid = fork { sub => sub { sleep 5 } };
   if (!isValidPid($pid)) {
     croak "fork failed i=$i OS=$^O V=$]";
@@ -128,6 +69,7 @@ for (my $i=0; $i<$nn; $i++) {
   my $p = wait;
   ok(isValidPid($p), "reaped $p");
 }
+
 #print @Forks::Super::CHLD_HANDLE_HISTORY;
 my $p = wait;
 ok($p == -1, "Nothing to reap");

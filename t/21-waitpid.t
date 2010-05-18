@@ -76,7 +76,7 @@ $Forks::Super::MAX_PROC = 100;
 my @rand = map { rand } 0..19;
 my $t0 = Forks::Super::Util::Time();
 for (my $i=0; $i<20; $i++) {
-  my $pid = fork { sub => sub { my $d=int(2+8*$rand[$i]); sleep $d; exit $i } };
+  my $pid = fork { sub => sub {my $d=int(2+8*$rand[$i]); sleep $d; exit $i} };
   ok(isValidPid($pid), "Launched $pid"); ### 13-32 ###
   $x{$pid} = $i;
 }
@@ -163,10 +163,11 @@ SKIP: {
       if ($z > 0.4) { delete $x{(keys%x)[0]}  }
     } elsif (defined $x{$p}) {
       ok(isValidPid($p), "Reaped $p");
-      ok($? >> 8 == $x{$p}, "$p correct exit code $x{$p}");
+      ok($? >> 8 == $x{$p}, "$p correct exit code $x{$p} == " . ($?>>8));
       delete $x{$p};
     } else {
-      # warn "pid $pid invalid --- trying again\n"; # nothing to be alarmed about
+      # warn "pid $pid invalid --- trying again\n"; 
+      # this is nothing to be alarmed about
     }
   }
 

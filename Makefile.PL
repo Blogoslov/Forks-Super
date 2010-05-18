@@ -2,6 +2,12 @@ use strict;
 use warnings;
 use ExtUtils::MakeMaker;
 
+# command-line argument  "bundle=1"
+# will force attempt to install bundled modules,
+# even if they are already installed
+
+
+
 # run installer for the additional modules
 # that were included with this distribution.
 #
@@ -30,6 +36,13 @@ sub install_bundled_modules {
   }
 }
 
+sub probe_system {
+  print STDERR "Gathering information on current system\n";
+  print STDERR "and creating Forks::Super::SysInfo package.\n";
+  system($^X, 'SysInfo.pm.PL',
+	 'lib/Forks/Super/SysInfo.pm');
+}
+
 sub recommend_modules {
   my @recommends = ("Time::HiRes" => '1.30', 
 		    "YAML" => '0.62',
@@ -47,6 +60,10 @@ sub recommend_modules {
 
 ######################################################################
 
+probe_system();
+my @old_ARGV = @ARGV;
+@ARGV = grep { !/^bundle\b/i } @ARGV;
+
 WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
          ? ('META_MERGE' => { 'recommends' => &recommend_modules })
@@ -58,7 +75,8 @@ WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION+0 >= 6.3002
       ? ('LICENSE'=> 'perl')
       : ()),
-    PL_FILES            => { },   # ignore system-limits.PL
+    PL_FILES            => {},
+
     PREREQ_PM => {
         'Test::More' => 0,
     },
@@ -75,7 +93,9 @@ WriteMakefile(
 					    'perl.exe.stackdump', # #$@^!cygwin
 					    '_Inline') },
 );
-&install_bundled_modules;
+
+@ARGV = @old_ARGV;
+install_bundled_modules();
 
 
 
@@ -83,15 +103,8 @@ WriteMakefile(
 package MY;
 
 ######################################################################
-# testing targets, including custom fasttest and stresstest targets,
-# depend on ./system-limits file
+# additional testing targets
 ######################################################################
-
-sub MY::test {
-  my $test = shift->SUPER::test(@_);
-  $test =~ s!^test(\w+) :: !test$1 :: system-limits !gm;
-  return $test;
-}
 
 sub MY::postamble {
 
@@ -101,19 +114,14 @@ sub MY::postamble {
   }
   my $postamble = <<"__END_POSTAMBLE__";
 
-# ------ system-limits file discovers some system limitations
-
-system-limits :: system-limits.PL pm_to_blib
-	\$(PERLRUNINST) system-limits.PL system-limits
-
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 
-fasttest :: pm_to_blib system-limits
+fasttest :: pm_to_blib
 	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -h
 
 # ------ stress test: run all tests in parallel 100 times
 
-stresstest :: pm_to_blib system-limits
+stresstest :: pm_to_blib
 	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) $stresstestargs
 
 __END_POSTAMBLE__

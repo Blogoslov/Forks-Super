@@ -16,11 +16,13 @@ use Forks::Super::Job::Callback qw(run_callback);
 use Exporter;
 use base 'Exporter';
 use Carp;
+use IO::Handle;
+use strict;
 use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 sub new {
   my ($class, $opts) = @_;
@@ -249,7 +251,7 @@ sub get_cpu_load {
 # is too busy to create a new child process or not
 #
 sub _can_launch {
-  # no warnings qw(once);
+  no warnings qw(once);
 
   my $job = shift;
   my $max_proc = defined $job->{max_proc}
@@ -613,6 +615,7 @@ sub preconfig_busy_action {
   if (defined $job->{on_busy}) {
     $job->{_on_busy} = $job->{on_busy};
   } else {
+    no warnings 'once';
     $job->{_on_busy} = $Forks::Super::ON_BUSY || 'block';
   }
   $job->{_on_busy} = uc $job->{_on_busy};
@@ -726,7 +729,7 @@ sub config_child {
 sub config_debug_child {
   my $job = shift;
   if ($job->{debug} && $job->{undebug}) {
-    if (!$Forks::Super::IMPORT{":test"}) {
+    if (Forks::Super::_is_test()) {
       debug("Disabling debugging in child $job->{pid}");
     }
     $Forks::Super::Debug::DEBUG = 0;
@@ -798,13 +801,10 @@ sub init_child {
 }
 
 sub deinit_child {
-#  close STDOUT;
-#  close STDIN;
-#  close STDERR;
   Forks::Super::Job::Ipc::deinit_child();
   close STDOUT if -p STDOUT;
   close STDERR if -p STDERR;
-  close STDIN if -p STDIN;
+  close STDIN if *STDIN->opened && -p STDIN;
 }
 
 1;
@@ -817,7 +817,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.31
+0.32
 
 =head1 SYNOPSIS
 

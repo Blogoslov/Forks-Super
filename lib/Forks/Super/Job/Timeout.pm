@@ -81,7 +81,7 @@ sub config_timeout_child {
   }
 
   if ($timeout < 1) {
-    if ($Forks::Super::IMPORT{":test"}) {
+    if (Forks::Super::_is_test()) {
       die "Forks::Super: quick timeout\n";
     }
     croak "Forks::Super::Job::config_timeout_child(): quick timeout";
@@ -95,7 +95,8 @@ sub config_timeout_child {
       if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
 	local $SIG{INT} = 'IGNORE';
 	$DISABLE_INT = 1;
-	CORE::kill -($Forks::Super::Config::signo{'INT'} || 2), getpgrp(0);
+	my $SIGINT = $Forks::Super::Config::signo{'INT'} || 2;
+	CORE::kill -$SIGINT, getpgrp(0);
 	$DISABLE_INT = 0;
       }
     } elsif ($^O eq 'MSWin32') {

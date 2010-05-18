@@ -38,7 +38,10 @@ if (defined $pid && $pid == 0) {
   my $y3 = Sys::CpuAffinity::getAffinity($$);
   print F "getAffinity:$y3\n";
 
-  my $r3 = getComplexMask($n);
+  # solaris can only bind a process to one processor
+  my $r3 = $^O =~ /solaris/i
+	? getSimpleMask($n)
+	: getComplexMask($n);
 
   print F "targetAffinity:$r3\n";
   my $z3 = Sys::CpuAffinity::setAffinity($$, $r3);

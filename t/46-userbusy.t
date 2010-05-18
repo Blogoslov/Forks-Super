@@ -44,7 +44,7 @@ ok(!isValidPid($pid6), "force failed fork");
 
 @to_kill = grep { isValidPid($_) } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
 print "to kill: @to_kill\n";
-Forks::Super::kill 'TERM', @to_kill if @to_kill > 0;
+Forks::Super::kill('TERM', @to_kill) if @to_kill > 0;
 waitall;
 
 $Forks::Super::MAX_PROC = 3;

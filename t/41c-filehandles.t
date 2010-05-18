@@ -2,9 +2,9 @@ use Forks::Super ':test';
 use Test::More tests => 2;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 150;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 ##################################################
 
@@ -60,3 +60,5 @@ for (my $i=0; $i<@pdata; $i++) {
 ok($pc_equal, "master/slave produced same data"); ### 22 ###
 
 ##########################################################
+
+eval { alarm 0 };

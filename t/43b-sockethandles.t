@@ -2,9 +2,9 @@ use Forks::Super ':test';
 use Test::More tests => 11;
 use strict;
 use warnings;
-if (Forks::Super::CONFIG("alarm")) {
-  alarm 60;$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-}
+
+$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
+eval { alarm 150 };
 
 #
 # test whether a parent process can have access to the
@@ -106,3 +106,4 @@ ok($out[-2] eq "0:$msg\n", "second line matches Expected pattern");
 ok($out[-1] eq "1:$msg\n", "third line matches Expected pattern");
 waitall;
 
+eval { alarm 0 };

@@ -37,7 +37,8 @@ if ($^O eq 'cygwin') {
 
 my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
 
-if (fork()) {
+my $pid = fork();
+if ($pid) {
   wait;
   for (my $i = 0; $i < 5; $i++) {
     if (! -r $limits_file) {
