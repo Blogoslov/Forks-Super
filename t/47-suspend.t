@@ -29,7 +29,7 @@ $j->resume;
 ok($j->{state} eq "ACTIVE", "job was resumed");
 waitpid $pid,0;
 $t = Forks::Super::Util::Time() - $t;
-ok($t >= 2.95, "\"time stopped\" while job was suspended, ${t} >= 3s");
+ok($t > 2.0, "\"time stopped\" while job was suspended, ${t} >= 3s");
 
 #############################################################################
 

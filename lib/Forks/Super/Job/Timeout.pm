@@ -8,12 +8,13 @@
 package Forks::Super::Job::Timeout;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
+use Forks::Super::Util qw(IS_WIN32);
 use POSIX;
 use Carp;
 use strict;
 use warnings;
 
-our $VERSION = $Forks::Super::Debug::VERSION;
+our $VERSION = $Forks::Super::Util::VERSION;
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
 our $TIMEDOUT = 0;
@@ -99,7 +100,7 @@ sub config_timeout_child {
 	CORE::kill -$SIGINT, getpgrp(0);
 	$DISABLE_INT = 0;
       }
-    } elsif ($^O eq 'MSWin32') {
+    } elsif (&IS_WIN32) {
       my $proc = Forks::Super::Job::get_win32_proc();
       my $pid = Forks::Super::Job::get_win32_proc_pid();
       if (defined $proc) {
@@ -138,7 +139,7 @@ sub config_timeout_child {
 	$DISABLE_INT = 0;
       }
     }
-    if ($^O eq 'MSWin32' && $DEBUG) {
+    if (&IS_WIN32 && $DEBUG) {
       debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
     }
     exit 255;

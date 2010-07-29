@@ -24,7 +24,7 @@ sub TIESCALAR {
 			    my $Result = $command_or_code->();
 			    print STDOUT YAML::Dump($Result);
 			  }, _is_bg => 1, _useYAML => 1 };
-    } elsif ($other_options{'use_JSON'}) {
+    } elsif ($other_options{'use_JSON2'}) {
       require JSON;
       $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
 			  sub => sub {
@@ -34,7 +34,19 @@ sub TIESCALAR {
 			    } else {
 			      print STDOUT JSON::encode_json([$Result]);
 			    }
-			  }, _is_bg => 1, _useJSON => 1 };
+			  }, _is_bg => 1, _useJSON => 1, _useJSON2 => 1 };
+    } elsif ($other_options{'use_JSON1'}) {
+      require JSON;
+      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
+			  sub => sub {
+			    my $Result = $command_or_code->();
+			    my $js = new JSON;
+			    if (ref $Result eq "") {
+			      print STDOUT $js->objToJson(["$Result"]);
+			    } else {
+			      print STDOUT $js->objToJson([$Result]);
+			    }
+			  }, _is_bg => 1, _useJSON => 1, _useJSON1 => 1 };
     } else {
       croak "Forks::Super::Tie::BackgroundScalar: expected YAML or JSON ",
 	"to be available\n";
@@ -70,7 +82,7 @@ sub _retrieve_value {
       my ($result) = YAML::Load( $stdout );
       $self->{value_set} = 1;
       $self->{value} = $result;
-    } elsif ($self->{job}->{_useJSON}) {
+    } elsif ($self->{job}->{_useJSON2}) {
 
       require JSON;
       if (!defined $stdout || $stdout eq "") {
@@ -78,6 +90,18 @@ sub _retrieve_value {
 	$self->{value} = undef;
       } else {
 	my $result = JSON::decode_json( $stdout );
+	$self->{value_set} = 1;
+	$self->{value} = $result->[0];
+      }
+    } elsif ($self->{job}->{_useJSON1}) {
+
+      require JSON;
+      if (!defined $stdout || $stdout eq "") {
+	$self->{value_set} = 1;
+	$self->{value} = undef;
+      } else {
+	my $js = new JSON;
+	my $result = $js->jsonToObj( $stdout );
 	$self->{value_set} = 1;
 	$self->{value} = $result->[0];
       }

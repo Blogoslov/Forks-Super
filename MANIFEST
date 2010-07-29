@@ -12,6 +12,7 @@ lib/Forks/Super/LazyEval.pm
 lib/Forks/Super/Tie/BackgroundArray.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
+lib/Forks/Super/Tie/IPCFileHandle.pm
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Util.pm
@@ -39,6 +40,7 @@ t/21-waitpid.t
 t/22-waitall.t
 t/23-wait-timeout.t
 t/24-kill.t
+t/25-open.t
 t/30-child-fork-behavior.t
 t/31-chld-signal.t
 t/32-stress-test.t

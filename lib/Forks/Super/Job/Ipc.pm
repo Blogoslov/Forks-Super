@@ -13,9 +13,11 @@
 package Forks::Super::Job::Ipc;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
+use Forks::Super::Util qw(IS_WIN32 is_socket);
 use Symbol qw(gensym);
 use IO::Handle;
 use File::Path;
+use Time::HiRes;
 use Carp;
 use Exporter;
 use base 'Exporter';
@@ -24,7 +26,7 @@ use warnings;
 
 our @EXPORT = qw(close_fh preconfig_fh config_fh_parent
 		 config_fh_child config_cmd_fh_child);
-our $VERSION = $Forks::Super::Debug::VERSION;
+our $VERSION = $Forks::Super::Util::VERSION;
 our (%FILENO, %SIG_OLD, $FH_COUNT, $FH_DIR_DEDICATED, @FH_FILES, %FH_FILES);
 our $SIGNALS_TRAPPED = 0;
 our $MAIN_PID = $$;
@@ -34,8 +36,6 @@ our $__MAX_OPEN_FH = do {
   $Forks::Super::SysInfo::MAX_OPEN_FH;
 };
 
-# use Tie::Trace;
-# Tie::Trace::watch $__OPEN_FH;
 
 
 # use $Forks::Super::FH_DIR instead of package scoped var --
@@ -57,24 +57,61 @@ sub _safeopen (*$$;$) {
   }
 
   my $result;
-  if (!defined $_[0]) {
-    $_[0] = gensym();
+  if (!defined $fh) {
+    $fh = gensym();
   }
   for (my $try = 1; $try <= 10; $try++) {
-    $result = defined $open3 
-      ? open($_[0], $open2, $open3) : open($_[0], $open2);
-    if ($result) {
-      $__OPEN_FH++;
-      $FILENO{$_[0]} = CORE::fileno($_[0]);
-      if ($mode =~ />/) {
-	$_[0]->autoflush(1);
-      }
-      last;
-    }
 
     if ($try == 10) {
       carp "Failed to open $mode $expr after 10 tries. Giving up.\n";
+      #$open3 ||= '';
+      #Carp::cluck "Failed to open [$mode $expr] [$open2 $open3] ",
+      #	  "after 10 tries. Giving up. $!\n";
       return 0;
+    }
+
+    if (defined $open3) {
+      $result = open ($fh, $open2, $open3);
+      $_[0] = $fh;
+    } else {
+      $result = open ($fh, $open2);
+      $_[0] = $fh;
+    }
+
+    if ($result) {
+      $__OPEN_FH++;
+
+      # dereferenced file handles are just symbol tables, and we
+      # can store arbitrary data in them [so long as they are
+      # not assigned to the symbol tables for *main or *Forks::Super::xxx ]
+      # -- there are a lot of ways we can make good use of this data.
+
+      my ($pkg,$file,$line) = caller;
+      $$fh->{opened} = Time::HiRes::gettimeofday();
+      $$fh->{caller} = "$pkg;$file:$line";
+      $$fh->{is_regular} = 1;
+      $$fh->{is_socket} = 0;
+      $$fh->{is_pipe} = 0;
+      $$fh->{mode} = $mode;
+      $$fh->{expr} = $expr;
+      my $fileno = $$fh->{fileno} = CORE::fileno($_[0]);
+      $FILENO{$_[0]} = $fileno;
+      if ($mode =~ />/) {
+	$_[0]->autoflush(1);
+      }
+
+      #       if $mode =~ /&/ and the underlying handle is a socket
+      #       or pipe, then shouldn't this handle also be a socket?
+      if ($mode =~ /&/) {
+
+	$$fh->{dup} = $$expr;
+	$$fh->{is_regular} = $$expr->{is_regular};
+	$$fh->{is_socket} = $$expr->{is_socket};
+	$$fh->{is_pipe} = $$expr->{is_pipe};
+
+      }
+
+      last;
     }
 
     if ($! =~ /too many open filehandles/i) {
@@ -124,15 +161,21 @@ sub preconfig_fh {
       }
     }
 
-    if ($^O eq 'MSWin32') {
+    if (&IS_WIN32) {
       if (!$ENV{WIN32_PIPE_OK}) {
 	$fh_spec =~ s/pipe/socket/i;
       }
+
+      if ($] < 5.007) {
+	if ($fh_spec =~ s/socke?t?//i + $fh_spec =~ s/pipe//i) {
+	  carp_once "Forks::Super::preconfig_fh: socket/pipe not allowed on Win32 v<5.7\n";
+	}
+      }
     }
     
-    #   if ($job->{style} ne 'cmd' && $job->{style} ne 'exec') {
     if (($job->{style} ne 'cmd' && $job->{style} ne 'exec') 
-	|| $^O ne 'MSWin32') {
+	|| !&IS_WIN32) {
+
       # sockets,pipes not supported for cmd/exec style forks.
       # we could support cmd-style with IPC::Open3-like framework ...
       if ($fh_spec =~ /sock/i) {
@@ -370,14 +413,24 @@ sub _create_socket_pair {
   }
   $s_child->autoflush(1);
   $s_parent->autoflush(1);
-  $s_child->blocking(not $^O ne 'MSWin32');
-  $s_parent->blocking(not $^O ne 'MSWin32');
-  $FILENO{$s_child} = CORE::fileno($s_child);
-  $FILENO{$s_parent} = CORE::fileno($s_parent);
+  $s_child->blocking(!!&IS_WIN32);
+  $s_parent->blocking(!!&IS_WIN32);
+  $$s_child->{fileno} = $FILENO{$s_child} = CORE::fileno($s_child);
+  $$s_parent->{fileno} = $FILENO{$s_parent} = CORE::fileno($s_parent);
+
+  $$s_child->{is_socket} = $$s_parent->{is_socket} = 1;
+  $$s_child->{is_pipe} = $$s_parent->{is_pipe} = 0;
+  $$s_child->{is_regular} = $$s_parent->{is_regular} = 0;
+  $$s_child->{is_child} = $$s_parent->{is_parent} = 1;
+  $$s_child->{is_parent} = $$s_parent->{is_child} = 0;
+  $$s_child->{opened} = $$s_parent->{opened} = Time::HiRes::gettimeofday();
+  my ($pkg,$file,$line) = caller(2);
+  $$s_child->{caller} = $$s_parent->{caller} = "$pkg;$file:$line";
+
   return ($s_child,$s_parent);
 }
 
-sub fileno {
+sub ___fileno {
   my $fh = shift;
   return $FILENO{$fh};
 }
@@ -387,14 +440,25 @@ sub _create_pipe_pair {
     croak "Forks::Super::Job::_create_pipe_pair(): no pipe\n";
   }
 
-  my ($p_read, $p_write);
+  my ($p_read, $p_write) = (gensym(), gensym());
   local $! = undef;
 
   pipe $p_read, $p_write;
   $p_write->autoflush(1);
 
-  $FILENO{$p_read} = CORE::fileno($p_read);
-  $FILENO{$p_write} = CORE::fileno($p_write);
+  $$p_read->{fileno} = $FILENO{$p_read} = CORE::fileno($p_read);
+  $$p_write->{fileno} = $FILENO{$p_write} = CORE::fileno($p_write);
+
+  $$p_read->{is_pipe} = $$p_write->{is_pipe} = 1;
+  $$p_read->{is_socket} = $$p_write->{is_socket} = 0;
+  $$p_read->{is_regular} = $$p_write->{is_regular} = 0;
+  $$p_read->{is_read} = $$p_write->{is_write} = 1;
+  $$p_read->{is_write} = $$p_write->{is_read} = 1;
+  $$p_read->{opened} = $$p_write->{opened} = Time::HiRes::gettimeofday();
+
+  my ($pkg,$file,$line) = caller(2);
+  $$p_read->{caller} = $$p_write->{caller} = "$pkg;$file:$line";
+
   return ($p_read, $p_write);
 }
 
@@ -412,7 +476,7 @@ sub _choose_fh_filename {
       $file .= $suffix;
     }
 
-    if ($^O eq 'MSWin32') {
+    if (&IS_WIN32) {
       $file =~ s!/!\\!g;
     }
 
@@ -441,7 +505,7 @@ sub _identify_shared_fh_dir {
   # Windows:   C:/Temp C:/Windows/Temp %HOME%
   # Other:     /tmp $HOME /var/tmp
   my @search_dirs = ($ENV{'HOME'}, $ENV{'PWD'});
-  if ($^O =~ /Win32/) {
+  if (&IS_WIN32) {
     push @search_dirs, 'C:/Temp', $ENV{'TEMP'}, 'C:/Windows/Temp',
       'C:/Winnt/Temp', 'D:/Windows/Temp', 'D:/Winnt/Temp',
       'E:/Windows/Temp', 'E:/Winnt/Temp', '.';
@@ -545,7 +609,7 @@ END {
     no warnings 'once';
     if (defined $Forks::Super::FH_DIR
 	&& 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
-      if ($^O eq 'MSWin32') {
+      if (&IS_WIN32) {
 	END_cleanup_MSWin32();
       } else {
 	END_cleanup();
@@ -560,7 +624,7 @@ END {
 #
 sub _trap_signals {
   return if $SIGNALS_TRAPPED++;
-  # return if $^O eq 'MSWin32';
+  # return if &IS_WIN32;
   foreach my $sig (qw(INT TERM HUP QUIT PIPE ALRM)) {
 
     # don't trap if it looks like a signal handler is already installed.
@@ -581,7 +645,7 @@ sub __cleanup__ {
   if ($DEBUG) {
     print STDERR "$$ received $SIG -- cleaning up\n";
   }
-  if ($^O eq 'MSWin32') {
+  if (&IS_WIN32) {
     END_cleanup_MSWin32();
   }
   exit 1;
@@ -820,6 +884,11 @@ sub config_fh_parent_stdin {
 	  $fh_config->{f_in}, "): $!\n";
     }
   }
+  if (defined $job->{child_stdin}) {
+    my $fh = $job->{child_stdin};
+    $$fh->{job} = $job;
+    $$fh->{purpose} = 'parent write to child stdin';
+  }
   return;
 }
 
@@ -879,6 +948,11 @@ sub config_fh_parent_stdout {
 	  $fh_config->{f_out}, "): $!\n";
       }
     }
+  }
+  if (defined $job->{child_stdout}) {
+    my $fh = $job->{child_stdout};
+    $$fh->{job} = $job;
+    $$fh->{purpose} = 'parent read from child stdout';
   }
   if ($fh_config->{join}) {
     delete $fh_config->{err};
@@ -953,6 +1027,11 @@ sub config_fh_parent_stderr {
       }
     }
   }
+  if (defined $job->{child_stderr}) {
+    my $fh = $job->{child_stderr};
+    $$fh->{job} = $job;
+    $$fh->{purpose} = 'parent read from child stderr';
+  }
   return;
 }
 
@@ -975,12 +1054,8 @@ sub config_fh_parent {
   if ($job->{fh_config}->{sockets}) {
     my $s1 = $job->{fh_config}->{csock};
     my $s2 = $job->{fh_config}->{csock2};
-    if (defined $s1) {
-      $__OPEN_FH -= close $s1;
-    } 
-    if (defined $s2) {
-      $__OPEN_FH -= close $s2;
-    }
+    _close($s1,1);
+    _close($s2,1);
   }
   if ($job->{fh_config}->{pipes}) {
     foreach my $pipeattr (qw(p_in p_to_out p_to_err)) {
@@ -1038,11 +1113,12 @@ sub config_fh_child_stdin {
 
     if (_safeopen($fh, '<', $fh_config->{f_in}, $job||1)) {
 
-      close STDIN if $^O eq 'MSWin32';
+      close STDIN if &IS_WIN32;
       _safeopen(*STDIN, '<&', $fh)
 	  or warn "Forks::Super::Job::config_fh_child(): ",
 	    "could not attach child STDIN to input filehandle: $!\n";
       debug("Reopened STDIN in child") if $job->{debug};
+      ${*STDIN}->{dup} = $fh_config->{f_in};
 
       # XXX - Unfortunately, if redirecting STDIN fails (and it might
       # if the parent is late in opening up the file), we have probably
@@ -1107,11 +1183,11 @@ sub config_fh_child_stdout {
     debug("Opening up $fh_config->{f_out} for output in the child   $$")
       if $job->{debug};
     if (_safeopen($fh,'>',$fh_config->{f_out})) {
-      close STDOUT if $^O eq 'MSWin32';
+      close STDOUT if &IS_WIN32;
       if (_safeopen(*STDOUT, ">&", $fh)) {
 	if ($fh_config->{join}) {
 	  delete $fh_config->{err};
-	  close STDERR if $^O eq 'MSWin32';
+	  close STDERR if &IS_WIN32;
 	  _safeopen(*STDERR, '>&', $fh)
 	    or warn "Forks::Super::Job::config_fh_child(): ",
 	      "could not attach STDERR to child output filehandle: $!\n";
@@ -1160,7 +1236,7 @@ sub config_fh_child_stderr {
     debug("Opening $fh_config->{f_err} as child STDERR")
       if $job->{debug};
     if (_safeopen($fh, '>', $fh_config->{f_err})) {
-      close STDERR if $^O eq 'MSWin32';
+      close STDERR if &IS_WIN32;
       _safeopen(*STDERR, '>&', $fh)
 	or warn "Forks::Super::Job::config_fh_child_stderr(): ",
 	  "could not attach STDERR to child error filehandle: $!\n";
@@ -1184,7 +1260,7 @@ sub config_fh_child {
   my $job = shift;
   return if not defined $job->{fh_config};
   if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
-    if ($^O eq 'MSWin32') {
+    if (&IS_WIN32) {
       return config_cmd_fh_child($job);
     }
   }
@@ -1223,7 +1299,7 @@ sub _collapse_command {
       push @new_cmd, $cmd;
     } elsif ($cmd !~ /\"/) {
       push @new_cmd, "\"$cmd\"";
-    } elsif ($cmd !~ /\'/ && $^O ne 'MSWin32') {
+    } elsif ($cmd !~ /\'/ && !&IS_WIN32) {
       push @new_cmd, "'$cmd'";
     } else {
       my $cmd2 = $cmd;
@@ -1310,8 +1386,12 @@ sub config_cmd_fh_child {
 sub _close {
   my $handle = shift;
   no warnings;
-  if (defined getsockname($handle)) {
-    my $z = shutdown($handle,2) + close $handle;
+  return 0 if !defined $handle;
+  return 0 if $$handle->{closed};
+  $$handle->{closed} ||= Time::HiRes::gettimeofday();
+  $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
+  if (is_socket($handle)) {
+    my $z = close $handle;
     $__OPEN_FH-- if $z;
     return $z;
   } else {

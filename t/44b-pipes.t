@@ -1,4 +1,5 @@
 use Forks::Super ':test';
+use Forks::Super::Util qw(is_pipe IS_WIN32);
 use Test::More tests => 11;
 use strict;
 use warnings;
@@ -31,20 +32,20 @@ sub repeater {
   while (time < $end_at) {
 
     # not using pipes on MSWin32 -- using sockets instead
-    while (defined ($_ = defined getsockname(STDIN) 
+    while (defined ($_ = Forks::Super::Util::is_socket(*STDIN) 
 	   ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>)) {
 
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
 	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
-			    fileno(STDIN));
+			    fileno(*STDIN));
       }
       if ($e) {
         print STDERR $_;
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
-			      fileno(STDERR));
+			      fileno(*STDERR));
 	}
       }
       for (my $i = 0; $i < $n; $i++) {
@@ -54,7 +55,7 @@ sub repeater {
 
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
-			      fileno(STDOUT));
+			      fileno(*STDOUT));
 	}
       }
     }
@@ -77,12 +78,20 @@ ok(isValidPid($pid), "started job with join");
 my $msg = sprintf "the message is %x", rand() * 99999999;
 my $z = print {$Forks::Super::CHILD_STDIN{$pid}} "$msg\n";
 ok($z > 0, "successful print to child STDIN");
-ok(defined($Forks::Super::CHILD_STDIN{$pid})
-   && (-p $Forks::Super::CHILD_STDIN{$pid}), "CHILD_STDIN is a pipe");
-ok(defined($Forks::Super::CHILD_STDOUT{$pid})
-   && (-p $Forks::Super::CHILD_STDOUT{$pid}), "CHILD_STDOUT is a pipe");
-ok(defined($Forks::Super::CHILD_STDERR{$pid})
-   && (-p $Forks::Super::CHILD_STDERR{$pid}), "CHILD_STDERR is a pipe");
+SKIP: {
+  if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
+    skip "using sockets instead of pipes on Win32", 3;
+  }
+  ok(defined($Forks::Super::CHILD_STDIN{$pid})
+     && (is_pipe($Forks::Super::CHILD_STDIN{$pid})), 
+     "CHILD_STDIN is a pipe");
+  ok(defined($Forks::Super::CHILD_STDOUT{$pid})
+     && (is_pipe($Forks::Super::CHILD_STDOUT{$pid})), 
+     "CHILD_STDOUT is a pipe");
+  ok(defined($Forks::Super::CHILD_STDERR{$pid})
+     && (is_pipe($Forks::Super::CHILD_STDERR{$pid})), 
+     "CHILD_STDERR is a pipe");
+}
 ok($Forks::Super::CHILD_STDOUT{$pid} eq $Forks::Super::CHILD_STDERR{$pid}, 
    "child stdout and stderr go to same fh");
 my $t = time;

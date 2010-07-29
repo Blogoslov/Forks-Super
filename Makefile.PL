@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
+use 5.007003;   # needs "safe signals" - see perlipc
 
 # command-line argument  "bundle=1"
 # will force attempt to install bundled modules,

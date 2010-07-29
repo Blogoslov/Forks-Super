@@ -1,4 +1,5 @@
 use Forks::Super ':test';
+use Forks::Super::Util qw(is_pipe IS_WIN32);
 use Test::More tests => 9;
 use strict;
 use warnings;
@@ -28,26 +29,26 @@ sub repeater {
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while ($_ = defined getsockname(STDIN) ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
+    while ($_ = Forks::Super::Util::is_socket(*STDIN) ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
     # while (<STDIN>) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
 	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
-			    fileno(STDIN));
+			    fileno(*STDIN));
       }
       if ($e) {
         print STDERR $_;
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
-			      fileno(STDERR));
+			      fileno(*STDERR));
 	}
       }
       for (my $i = 0; $i < $n; $i++) {
         print STDOUT "$i:$_";
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
-			      fileno(STDOUT));
+			      fileno(*STDOUT));
 	}
       }
     }
@@ -96,15 +97,20 @@ sub read_stderr_test {
 my ($z,$pid) = &read_stderr_test;
 ok(isValidPid($pid), "started job with join");
 ok($z > 0, "successful print to child STDIN");
-ok((defined $Forks::Super::CHILD_STDIN{$pid}
-   and -p $Forks::Super::CHILD_STDIN{$pid}), "CHILD_STDIN is a pipe");
+SKIP: {
+  if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
+    skip "using sockets instead of pipes on Win32", 3;
+  }
+  ok((defined $Forks::Super::CHILD_STDIN{$pid}
+      and is_pipe($Forks::Super::CHILD_STDIN{$pid})), "CHILD_STDIN is a pipe");
+  ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
+     "CHILD_STDOUT not defined pid $pid");
+  ok((defined $Forks::Super::CHILD_STDERR{$pid})
+     && is_pipe($Forks::Super::CHILD_STDERR{$pid}), "CHILD_STDERR is a pipe");
+}
 shutdown($Forks::Super::CHILD_STDIN{$pid},1) 
 	|| close $Forks::Super::CHILD_STDIN{$pid};
-ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
-   "CHILD_STDOUT not defined pid $pid");
 
-ok((defined $Forks::Super::CHILD_STDERR{$pid})
-   && -p $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR is a pipe");
 my $t = time;
 my @out = ();
 my @err = ();

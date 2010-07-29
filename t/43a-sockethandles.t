@@ -1,4 +1,5 @@
 use Forks::Super ':test';
+use Forks::Super::Util qw(is_socket);
 use Test::More tests => 12;
 use strict;
 use warnings;
@@ -56,18 +57,6 @@ sub repeater {
     }
     Forks::Super::pause();
   }
-  if (0 && $Forks::Super::DEBUG) { # f_in can't be read in socket context
-    my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
-    Forks::Super::debug("repeater: time expired. ",
-			"Not processing any more input");
-    Forks::Super::debug("input was from file: $f_in");
-    open(F_IN, "<", $f_in);
-    while (<F_IN>) {
-      s/\s+$//;
-      Forks::Super::debug("    input $.: $_");
-    }
-    close F_IN;
-  }
 }
 
 #######################################################
@@ -82,9 +71,9 @@ ok(defined $Forks::Super::CHILD_STDOUT{$pid}
    && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),"found stdout fh");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}
    && defined fileno($Forks::Super::CHILD_STDERR{$pid}),"found stderr fh");
-ok(defined getsockname($Forks::Super::CHILD_STDIN{$pid}) &&
-   defined getsockname($Forks::Super::CHILD_STDOUT{$pid}) &&
-   defined getsockname($Forks::Super::CHILD_STDERR{$pid}), 
+ok(is_socket($Forks::Super::CHILD_STDIN{$pid}) &&
+   is_socket($Forks::Super::CHILD_STDOUT{$pid}) &&
+   is_socket($Forks::Super::CHILD_STDERR{$pid}), 
    "STDxxx handles are socket handles");
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};

@@ -24,11 +24,6 @@ eval { alarm 150 };
 sub compute_checksums_in_child {
   binmode STDOUT;
   for (;;) {
-#    if (defined getsockname(STDIN)) {
-#      $_ = Forks::Super::_read_socket(undef, *STDIN, 0);
-#    } else {
-#      $_ = <STDIN>;
-#    }
     $_ = <STDIN>;
     if (not defined $_) {
       Forks::Super::pause();
@@ -42,7 +37,8 @@ sub compute_checksums_in_child {
 
 my @pids = ();
 for (my $i=0; $i<4; $i++) {
-  push @pids, fork { sub => \&compute_checksums_in_child, timeout => 20,
+  # v0.33: list context may be supported
+  push @pids, scalar fork { sub => \&compute_checksums_in_child, timeout => 20,
 			child_fh => "in,out,pipe" };
 }
 my @data = (@INC,%INC,keys(%!),keys(%ENV));

@@ -1,4 +1,5 @@
 use Forks::Super ':test';
+use Forks::Super::Util qw(is_pipe IS_WIN32);
 use Test::More tests => 12;
 use strict;
 use warnings;
@@ -26,27 +27,27 @@ sub repeater {
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while ($_ = defined getsockname(STDIN) 
+    while ($_ = Forks::Super::Util::is_socket(*STDIN) 
 	? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
 
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
 	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
-			    fileno(STDIN));
+			    fileno(*STDIN));
       }
       if ($e) {
         print STDERR $_;
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
-			      fileno(STDERR));
+			      fileno(*STDERR));
 	}
       }
       for (my $i = 0; $i < $n; $i++) {
         print STDOUT "$i:$_";
 	if ($Forks::Super::DEBUG) {
 	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
-			      fileno(STDOUT));
+			      fileno(*STDOUT));
 	}
       }
     }
@@ -73,10 +74,15 @@ ok(defined $Forks::Super::CHILD_STDOUT{$pid}
 ok(defined $Forks::Super::CHILD_STDERR{$pid} 
    && defined fileno($Forks::Super::CHILD_STDERR{$pid}),
    "found stderr fh");
-ok(-p $Forks::Super::CHILD_STDIN{$pid} &&
-   -p $Forks::Super::CHILD_STDOUT{$pid} &&
-   -p $Forks::Super::CHILD_STDERR{$pid},
-   "STDxxx handles are pipes");
+SKIP: {
+  if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
+    skip "using sockets instead of pipes on Win32", 1;
+  }
+  ok(is_pipe($Forks::Super::CHILD_STDIN{$pid}) &&
+     is_pipe($Forks::Super::CHILD_STDOUT{$pid}) &&
+     is_pipe($Forks::Super::CHILD_STDERR{$pid}),
+     "STDxxx handles are pipes");
+}
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";

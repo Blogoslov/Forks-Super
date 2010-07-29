@@ -7,6 +7,7 @@ package Forks::Super::Queue;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Tie::Enum;
+use Forks::Super::Util qw(IS_WIN32);
 use Carp;
 use Exporter;
 use base 'Exporter';
@@ -16,7 +17,7 @@ use warnings;
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-our $VERSION = $Forks::Super::Debug::VERSION;
+our $VERSION = $Forks::Super::Util::VERSION;
 
 our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID);
 our $QUEUE_MONITOR_FREQ;
@@ -52,12 +53,11 @@ sub init {
 
   tie $INHIBIT_QUEUE_MONITOR, 
     'Forks::Super::Queue::InhibitQueueMonitor', 
-    $^O eq 'MSWin32'; # XXX - or any other $^O with crippled signal framework
+    &IS_WIN32; # XXX - or any other $^O with crippled signal framework
 
   if (grep {/USR1/} keys %SIG) {
     $Forks::Super::QUEUE_INTERRUPT = 'USR1';
   }
-
 }
 
 sub init_child {

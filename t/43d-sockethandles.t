@@ -36,7 +36,8 @@ sub compute_checksums_in_child {
 
 my @pids = ();
 for (my $i=0; $i<4; $i++) {
-  push @pids, fork { sub => \&compute_checksums_in_child, timeout => 20,
+  # v0.33: list context may be supported
+  push @pids, scalar fork { sub => \&compute_checksums_in_child, timeout => 20,
 			child_fh => "in,out,socket" };
 }
 my @data = (@INC,%INC,keys(%!),keys(%ENV));

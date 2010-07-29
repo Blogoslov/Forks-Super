@@ -1,4 +1,5 @@
 use Forks::Super ':test';
+use Forks::Super::Util qw(is_socket);
 use Test::More tests => 12;
 use Carp;
 use strict;
@@ -24,14 +25,14 @@ ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "\%CHILD_STDOUT defined");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "\%CHILD_STDERR defined");
 
 if ($^O eq 'MSWin32') {
-  ok(!defined getsockname($Forks::Super::CHILD_STDIN{$pid}),
+  ok(!is_socket($Forks::Super::CHILD_STDIN{$pid}),
      "CHILD_STDIN is not a socket for cmd-style fork on MSWin32");
-  ok(!defined getsockname($Forks::Super::CHILD_STDOUT{$pid}),
+  ok(!is_socket($Forks::Super::CHILD_STDOUT{$pid}),
      "CHILD_STDOUT is not a socket for cmd-style fork on MSWin32");
 } else {
-  ok(defined getsockname($Forks::Super::CHILD_STDIN{$pid}),
+  ok(is_socket($Forks::Super::CHILD_STDIN{$pid}),
      "CHILD_STDIN is a socket for cmd-style fork");
-  ok(defined getsockname($Forks::Super::CHILD_STDOUT{$pid}),
+  ok(is_socket($Forks::Super::CHILD_STDOUT{$pid}),
      "CHILD_STDOUT is a socket for cmd-style fork");
 }
 

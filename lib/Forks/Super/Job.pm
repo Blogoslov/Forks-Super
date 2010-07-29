@@ -6,7 +6,7 @@
 
 package Forks::Super::Job;
 use Forks::Super::Debug qw(debug);
-use Forks::Super::Util qw(is_number qualify_sub_name);
+use Forks::Super::Util qw(is_number qualify_sub_name IS_WIN32 is_pipe);
 use Forks::Super::Config qw(:all);
 use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
 use Forks::Super::Queue qw(queue_job);
@@ -22,7 +22,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 sub new {
   my ($class, $opts) = @_;
@@ -378,7 +378,7 @@ sub launch {
     $job->config_parent;
     $job->run_callback('start');
     Forks::Super::Sigchld::handle_CHLD(-1);
-    return $pid;
+    return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($pid,$job) : $pid;
   } elsif ($pid != 0) {
     Carp::confess "Forks::Super::launch(): ",
 	"Somehow we got pid=$pid from fork call.";
@@ -391,7 +391,7 @@ sub launch {
 
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
     my $c1;
-    if ($^O eq 'MSWin32') {
+    if (&IS_WIN32) {
       local $ENV{_FORK_PPID} = $$;
       local $ENV{_FORK_PID} = $$;
 
@@ -425,7 +425,7 @@ sub launch {
     deinit_child();
     exit 0;
   }
-  return 0;
+  return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? (0) : 0;
 }
 
 sub _launch_from_child {
@@ -450,9 +450,9 @@ sub _launch_from_child {
       } else {
 	init_child();
       }
-      return $pid;
+      return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($pid) : $pid;
     }
-    return $pid;
+    return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($pid) : $pid;
   }
   return;
 }
@@ -802,9 +802,9 @@ sub init_child {
 
 sub deinit_child {
   Forks::Super::Job::Ipc::deinit_child();
-  close STDOUT if -p STDOUT;
-  close STDERR if -p STDERR;
-  close STDIN if *STDIN->opened && -p STDIN;
+  close STDOUT if is_pipe(*STDOUT);
+  close STDERR if is_pipe(*STDERR);
+  close STDIN if *STDIN->opened && is_pipe(*STDIN);
 }
 
 1;
@@ -817,7 +817,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.32
+0.33
 
 =head1 SYNOPSIS
 
@@ -826,6 +826,7 @@ Forks::Super::Job - object representing a background task
     $pid = Forks::Super::fork( \%options );  # see Forks::Super
     $job = Forks::Super::Job::get($pid);
     $job = Forks::Super::Job::getByName($name);
+
     print "Current job state is $job->{state}\n";
     print "Job was created at ", scalar localtime($job->{created}), "\n";
 

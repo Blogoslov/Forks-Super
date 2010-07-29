@@ -14,8 +14,9 @@ our @EXPORT = qw(bg_eval bg_qx);
 
 sub bg_eval (&;@) {
   my $useYAML = CONFIG('YAML');
-  my $useJSON = CONFIG('JSON');
-  if (!($useYAML || $useJSON)) {
+  my $useJSON2 = CONFIG('JSON') && $JSON::VERSION >= 2.0;
+  my $useJSON1 = CONFIG('JSON') && $JSON::VERSION < 2.0;
+  if (!($useYAML || $useJSON2 || $useJSON1)) {
     croak "Forks::Super: bg_eval call requires either YAML or JSON\n";
   }
   my ($code, @other_options) = @_;
@@ -28,14 +29,20 @@ sub bg_eval (&;@) {
     require Forks::Super::Tie::BackgroundArray;
     tie @result, 'Forks::Super::Tie::BackgroundArray',
       'eval', $code, 
-      use_YAML => $useYAML, use_JSON => $useJSON, 
+      use_YAML => $useYAML, 
+      use_JSON => $useJSON2, 
+      use_JSON2 => $useJSON2,
+      use_JSON1 => $useJSON1,
       @other_options;
     return @result;
   } else {
     require Forks::Super::Tie::BackgroundScalar;
     tie $result, 'Forks::Super::Tie::BackgroundScalar',
       'eval', $code, 
-      use_YAML => $useYAML, use_JSON => $useJSON,
+      use_YAML => $useYAML, 
+      use_JSON => $useJSON2,
+      use_JSON2 => $useJSON2,
+      use_JSON1 => $useJSON1,
       @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows

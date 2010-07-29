@@ -1,5 +1,11 @@
 Revision history for Forks-Super
 
+0.33    2010-07-29
+        Added open2 and open3 convenience methods.
+        Support for JSON v1 in Forks::Super::LazyEval package.
+        If $Forks::Super::SUPPORT_LIST_CONTEXT is non-zero, then
+        fork() in list context returns Forks::Super::Job object to parent.
+
 0.32    2010-05-18
         New system dependent Forks::Super::SysInfo package.
         Changes to Ipc.pm for robustness and to ease testing/debugging.

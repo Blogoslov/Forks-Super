@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 17;
+use Test::More tests => 21;
 use strict;
 use warnings;
 
@@ -75,6 +75,21 @@ ok(isValidPid($pid), "fork to external command");
 $p = wait;
 ok($p == $pid, "wait reaped correct pid");
 ok($? == 0, "captured correct zero status");
+
+#############################################################################
+
+# list context
+
+$Forks::Super::SUPPORT_LIST_CONTEXT = 1;
+($pid, my $j) = fork { cmd => [ $^X, "t/external-command.pl", "-x=14" ] };
+ok(isValidPid($pid), "fork to external command, list context");
+ok(defined($j) && ref $j eq 'Forks::Super::Job', 
+   "fork gets job in list context");
+ok($j->{pid} == $pid && $j->{real_pid} == $pid, "pid saved in list context");
+$p = wait;
+ok($j->{status} == 14 << 8, "correct job status avail in list context");
+
+#############################################################################
 
 unlink $output;
 

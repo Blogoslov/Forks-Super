@@ -3,12 +3,6 @@ Feel free to share your thoughts with me at  mob@cpan.org .
 
 Possible TODOs:
 
-    ___ fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
-
-		open input and output filehandles in the child with the given 
-		names, accessible in the parent at something like 
-		$Forks::Super::CHILD_FH{$pid}{X}
-
     ___ incorporate free memory into system busy-ness calc 
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
 		"non functional")
@@ -29,46 +23,8 @@ Possible TODOs:
 	if return value > 0, then suspended job is resumed
 	if return value == 0, then stay in current state
 
-    _x_ What should  wait  and  waitall  do when only suspended jobs
-        are left?
-
-	When only deferred jobs are left, that is ok. We will wait
-	indefinitely until something triggers the jobs.
-
-	Some possibilities:
-
-	1. carp and return  constant ONLY_SUSPENDED_JOBS_LEFT => -1.75
-
-        2. resume one job. Repeat as necessary.
-
-        3. wait indefinitely. Statistics show that civilizations will
-	   rise again. There will once again be lemon soaked paper napkins.
-
-	_X_ by default we'll go with option 3. An undocumented feature is
-	    to set $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS
-	    to change the default behavior.
-
-	___ change this feature to documented?
-
     ___ Support for launching tasks on remote hosts (maybe that's beyond
         the scope of this module) See Paralell::PVM?
-
-    _x_ fork { retries => $ntries }
-
-		like Proc::Fork. Call CORE::fork() several times if
-		it's not creating child processes.
-		_X_ implement
-		___ test (mock? 
-		_X_ document - failed CORE::fork calls usually indicate
-                    some bad system condition (too many processes, out
-                    of memory/swap space), so expectations of recovery
-                    shouldn't be too high
-
-    _X_	configure during build. discover the number of processors and
-	the maximum number of simultaneous processes that can be spawned 
-	and set MAX_PROC, DEFAULT_MAX_PROC.
-	Could also be good to know the max number of open filehandles
-	and plan around it.
 
     ___	Forks::Super::Uninterruptable package for "uninterruptable" versions
 	of Perl system calls like  sleep , connect , select($$$$). Well,
@@ -84,14 +40,17 @@ Possible TODOs:
 	especially when there are lots of short tasks. See what
 	can be done to tighten up performance.
 
+	Also document tips and tricks for tuning performance.
+	Things like "Set $Forks::Super::Util::DEFAULT_PAUSE to
+	a small value when you have lots of short tasks, and
+	longer for longer tasks".
+
     ___ Tests for tied scalar behavior of
 	___ $Forks::Super::Queue::QUEUE_MONITOR_FREQ
 	___ $Forks::Super::Queue::QUEUE_INHIBIT_MONITOR
 	___ $Forks::Super::Queue::QUEUE_INTERRUPT
 
     ___ Test needed, Win32+cmd, See Job.pm:344
-
-    ___ Investigate apparent incompatibility with Win32::API, perl 5.12.0
 
     _x_ $Forks::Super::OPEN_FH to track the number of open filehandles
         (opened by Forks::Super::XXX modules, not the total number)
@@ -109,8 +68,7 @@ Possible TODOs:
 
     ___ fork { run => [ \@cmd, ... ] }
 	to invoke or emulate IPC::Run's rich feature set
-
-    ___ What else can I learn by studying IPC::Run?
+	___ What else can I learn by studying IPC::Run?
 
     ___ Refactor fork return value to a tied scalar that 'fetch'es the
 	pid but has the methods of the Forks::Super::Job object.
@@ -121,13 +79,11 @@ Possible TODOs:
 		$pid->state;
 		$pid->status;
 
-	This might not be possible.
+	This might not be possible. Or it might require
+	*shudder* overloading.
 
-    ___ More information to Forks::Super::SysInfo.
-	___ e.g. "has Unixy signal framework"
-	___ "is Windows"
-	___ "is Windows/Cygwin"
-	___ we can spoof this information for some tests ...
+	But it IS possible to return ($pid,$job) from fork() in list context
+	where $job is a Forks::Super::Job object.
 
     ___ More tests from a child process and see what breaks.
 		use Forks::Super;
@@ -137,3 +93,46 @@ Possible TODOs:
 		do_something_and_see_if_it_works();
 
     _o_ Investigate "filehandle leaks" in t/forked_harness.pl.
+
+    ___ Tie scalar in parent to read end of a pipe? As child
+	writes to the pipe, the scalar can be updated in
+	the parent?
+
+	Use case is  fork { stdout => $output }, and to be able
+	to read/use intermediate $output values without having to
+	wait for the child to finish.
+
+	Prototype in spike-pipe-tie2.pl
+
+	___ scalar is associated with a read handle and the job
+	___ add scalar to a global list/set of pipes to read from
+	___ on FETCH and during productive pauses, pull the most recent output
+	___ on close in the parent, optionally kill the child process,
+		close both the read and write ends of the filehandle
+
+    ___ Tie all filehandles from _safeopen for improved debugging
+	in Forks::Super::Job::IPC. 
+
+    _X_ open2, open3 convenience methods [so.com/questions/3087263]
+	that return filehandles, pid, and F::S::Job object.
+
+    ___ block attribute or block value in child_fh attribute to
+	indicate whether blocking I/O is desired.
+
+    ___ fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
+
+		open input and output filehandles in the child with the given 
+		names, accessible in the parent at something like 
+		$Forks::Super::CHILD_FH{$pid}{X}
+
+    ___ test  fork { retries ==> max_retries } option. May need to mock it.
+
+    ___ what else to configure at build time?
+	___ e.g. "has Unixy signal framework"
+	___ "is Windows"
+	___ "is Windows/Cygwin"
+	___ we can spoof this information for some tests ...
+
+    ___ What should wait/waitall do when only suspended jobs are left?
+	___ Currently we wait indefinitely. Document this.
+	___ Document $Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS override.

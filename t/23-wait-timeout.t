@@ -38,7 +38,7 @@ ok($p == &Forks::Super::Wait::TIMEOUT, "wait timeout returns TIMEOUT");
 $t2 = Time();
 $p = wait 8;
 $t2 = Time() - $t2;
-ok($t2 >= 1.5 && $t2 <= 4.5,           ### 8 ### was 2.85, obs 3.08,3.18,4.37
+ok($t2 >= 1.25 && $t2 <= 4.5,           ### 8 ### was 2.85, obs 3.08,3.18,4.37
    "subsequent wait with long timeout returned when job finished "
    . "in ${t2}s, expected ~2s");
 ok($p == $pid, 

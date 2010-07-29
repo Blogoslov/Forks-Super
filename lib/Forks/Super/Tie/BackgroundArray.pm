@@ -26,22 +26,33 @@ sub TIEARRAY {
 				    my @Result = $command_or_code->();
 				    print STDOUT YAML::Dump(@Result);
 				  }, _is_bg => 2, _useYAML => 1 };
-    } elsif ($other_options{'use_JSON'}) {
+    } elsif ($other_options{'use_JSON2'}) {
       require JSON;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
-				  sub => sub {
-				    my @Result = $command_or_code->();
-				    print STDOUT JSON::encode_json([@Result]);
-				  }, _is_bg => 2, _useJSON => 1 };
+      $self->{job_id} = Forks::Super::fork {
+	%other_options, child_fh => 'out',
+	  sub => sub {
+	    my @Result = $command_or_code->();
+	    print STDOUT JSON::encode_json([@Result]);
+	  }, _is_bg => 2, _useJSON => 1, _useJSON2 => 1 };
+    } elsif ($other_options{'use_JSON1'}) {
+      require JSON;
+      $self->{job_id} = Forks::Super::fork { 
+	%other_options, child_fh => 'out',
+	  sub => sub {
+	    my @Result = $command_or_code->();
+	    my $js = new JSON;
+	    print STDOUT $js->objToJson([@Result]);
+	  }, _is_bg => 2, _useJSON => 1, _useJSON1 => 1 };
     }
   } elsif ($style eq 'qx') {
     $self->{command} = $command_or_code;
     $self->{delimiter} = $/;
     $self->{stdout} = '';
-    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
-					     cmd => $command_or_code,
-					     stdout => \$self->{stdout},
-					     _is_bg => 2};
+    $self->{job_id} = Forks::Super::fork {
+      %other_options, child_fh => 'out',
+	cmd => $command_or_code,
+	stdout => \$self->{stdout},
+	_is_bg => 2};
   }
   $self->{job} = Forks::Super::Job::get($self->{job_id});
   Forks::Super::_set_last_job($self->{job}, $self->{job_id});
@@ -66,13 +77,24 @@ sub _retrieve_value {
       my @result = YAML::Load( $stdout );
       $self->{value} = [ @result ];
       $self->{value_set} = 1;
-    } elsif ($self->{job}->{_useJSON}) {
+    } elsif ($self->{job}->{_useJSON2}) {
       if (!defined $stdout or $stdout eq "") {
 	$self->{value_set} = 1;
 	$self->{value} = [];
       } else {
 	require JSON;
 	my $result = JSON::decode_json( $stdout );
+	$self->{value} = [ @$result ];
+	$self->{value_set} = 1;
+      }
+    } elsif ($self->{job}->{_useJSON1}) {
+      if (!defined $stdout or $stdout eq "") {
+	$self->{value_set} = 1;
+	$self->{value} = [];
+      } else {
+	require JSON;
+	my $js = new JSON;
+	my $result = $js->jsonToObj( $stdout );
 	$self->{value} = [ @$result ];
 	$self->{value_set} = 1;
       }

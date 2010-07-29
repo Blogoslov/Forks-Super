@@ -22,11 +22,11 @@ $| = 1;
   $Carp::Internal{ (__PACKAGE__) }++;
 }
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
-			bg_eval bg_qx);
+			bg_eval bg_qx open2 open3);
 my @export_ok_vars = qw(%CHILD_STDOUT %CHILD_STDERR %CHILD_STDIN);
 our @EXPORT_OK = (@export_ok_func, @export_ok_vars);
 our %EXPORT_TAGS = 
@@ -39,7 +39,7 @@ our %EXPORT_TAGS =
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC);
 our ($DONT_CLEANUP, $CHILD_FORK_OK, $QUEUE_INTERRUPT, $PKG_INITIALIZED);
-our (%IMPORT, $LAST_JOB, $LAST_JOB_ID, %BASTARD_DATA);
+our (%IMPORT, $LAST_JOB, $LAST_JOB_ID, %BASTARD_DATA, $SUPPORT_LIST_CONTEXT);
 
 sub import {
   my ($class,@args) = @_;
@@ -95,7 +95,7 @@ sub import {
 sub _init {
   return if $PKG_INITIALIZED;
   $PKG_INITIALIZED++;
-  $MAIN_PID = $$;
+  # $MAIN_PID = $$;     # set on first use
 
   Forks::Super::Debug::init();
   Forks::Super::Config::init();
@@ -104,6 +104,7 @@ sub _init {
   $DEFAULT_MAX_PROC = $Forks::Super::SysInfo::MAX_FORK - 1;
   $MAX_PROC = $DEFAULT_MAX_PROC;
   $MAX_LOAD = -1;
+  $SUPPORT_LIST_CONTEXT = 0;
 
   # OK for child process to call Forks::Super::fork()? That could be a bad idea
   $CHILD_FORK_OK = 0;
@@ -127,7 +128,7 @@ sub _init {
   };
 
   Forks::Super::Wait::set_productive_waitpid_code {
-    if ($^O eq 'MSWin32') {
+    if (&IS_WIN32) {
       handle_CHLD(-1);
     }
   };
@@ -147,10 +148,11 @@ sub fork {
     $opts = { @_ };
   }
 
+  $MAIN_PID ||= $$;
   my $job = Forks::Super::Job->new($opts);
   $job->preconfig;
   if (defined $job->{__test}) {
-    return $job->{__test};
+    return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($job->{__test}, $job) : $job->{__test};
   }
 
   debug('fork(): ', $job->toString(), ' initialized.')
@@ -169,11 +171,11 @@ sub fork {
 
       $job->{status} = -1;
       $job->mark_reaped;
-      return -1;
+      return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? (-1) : -1;
     } elsif ($job->{_on_busy} eq 'QUEUE') {
       $job->run_callback('queue');
       $job->queue_job;
-      return $job->{pid};
+      return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($job->{pid},$job) : $job->{pid};
     } else {
       pause();
     }
@@ -185,11 +187,10 @@ sub fork {
   return $job->launch;
 }
 
-#
 # called from a child process immediately after it
-# is created. Erases all the global state that only needs
-# to be available to the parent.
-#
+# is created. Mostly this subroutine is about DE-initializing
+# the child; removing all the global state that only the
+# parent process needs to know about.
 sub init_child {
   if ($$ == $MAIN_PID) {
     carp "Forks::Super::init_child() ",
@@ -250,7 +251,60 @@ sub _read_socket {
       "read on undefined filehandle for ",$job->toString(),"\n";
   }
 
-  if ($sh->blocking() || $^O eq 'MSWin32') {
+  # is socket is blocking, then we need to test whether
+  # there is input to be read before we read on the socket
+  if ($sh->blocking() || &IS_WIN32) {
+    my $fileno = fileno($sh);
+    if (not defined $fileno) {
+      $fileno = Forks::Super::Job::Ipc::fileno($sh);
+      Carp::cluck "Cannot determine FILENO for socket handle $sh!";
+    }
+
+    my ($rin,$rout,$ein,$eout);
+    my $timeout = $SOCKET_READ_TIMEOUT || 1.0;
+
+    $rin = '';
+    vec($rin, $fileno, 1) = 1;
+    $ein = $rin;
+
+    # perldoc select: warns against mixing select4
+    # (unbuffered input) with readline (buffered input).
+    # Do I have to do my own buffering? That would be weak.
+    # Or can we declare the socket as unbuffered when
+    # we create it?
+
+    local $! = undef;
+    my ($nfound,$timeleft) = select $rout=$rin,undef,$eout=$ein, $timeout;
+    if (!$nfound) {
+      if ($DEBUG) {
+	debug("no input found on $sh/$fileno");
+      }
+      return;
+    }
+    if ($rin ne $rout) {
+      if ($DEBUG) {
+	debug("No input found on $sh/$fileno");
+      }
+      return;
+    }
+
+    if ($nfound == -1) {
+      warn "Forks::Super:_read_socket: ",
+	"Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
+    }
+  }
+  return readline($sh);
+}
+
+sub _read_socket_XXX {
+  my ($job, $sh, $wantarray) = @_;
+
+  if (!defined $sh) {
+    carp "Forks::Super::_read_socket: ",
+      "read on undefined filehandle for ",$job->toString(),"\n";
+  }
+
+  if ($sh->blocking() || &IS_WIN32) {
     my $fileno = fileno($sh);
     if (not defined $fileno) {
       $fileno = Forks::Super::Job::Ipc::fileno($sh);
@@ -388,9 +442,9 @@ sub read_stdout {
     return () if wantarray;
     return;
   }
-  if (defined getsockname($fh)) {
+  if (is_socket($fh)) {
     return _read_socket($job, $fh, wantarray);
-  } elsif (-p $fh) {
+  } elsif (is_pipe($fh)) {
     return _read_pipe($job, $fh, wantarray);
   }
 
@@ -469,9 +523,9 @@ sub read_stderr {
     return () if wantarray;
     return;
   }
-  if (defined getsockname($fh)) {
+  if (is_socket($fh)) {
     return _read_socket($job, $fh, wantarray);
-  } elsif (-p $fh) {
+  } elsif (is_pipe($fh)) {
     return _read_pipe($job, $fh, wantarray);
   }
 
@@ -588,7 +642,7 @@ sub kill {
 
   if (@pids > 0) {
 
-    if ($^O eq 'MSWin32') {
+    if (&IS_WIN32) {
 
       # preferred way to kill a MSWin32 pseudo-process
       # is with the Win32 API "TerminateThread". Using Perl's kill
@@ -693,6 +747,55 @@ sub kill_all {
   Forks::Super::kill $signal, @all_jobs;
 }
 
+#############################################################################
+
+# convenience methods
+
+sub open2 {
+  my (@cmd) = @_;
+  my $options = {};
+  if (ref $cmd[-1] eq 'HASH') {
+    $options = pop @cmd;
+  }
+  $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
+  $options->{'child_fh'} = "in,out";
+  my $pid = Forks::Super::fork( $options );
+  if (!defined $pid) {
+    return;
+  }
+  my $input = $Forks::Super::CHILD_STDIN{$pid};
+  my $output = $Forks::Super::CHILD_STDOUT{$pid};
+  my $job = Forks::Super::Job::get($pid);
+  return ($job->{child_stdin},
+	  $job->{child_stdout},
+	  $pid, $job);
+}
+
+sub open3 {
+  my (@cmd) = @_;
+  my $options = {};
+  if (ref $cmd[-1] eq 'HASH') {
+    $options = pop @cmd;
+  }
+  $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
+  $options->{'child_fh'} = "in,out,err";
+  my $pid = Forks::Super::fork( $options );
+  if (!defined $pid) {
+    return;
+  }
+  my $input = $Forks::Super::CHILD_STDIN{$pid};
+  my $output = $Forks::Super::CHILD_STDOUT{$pid};
+  my $error = $Forks::Super::CHILD_STDERR{$pid};
+  my $job = Forks::Super::Job::get($pid);
+  return ($job->{child_stdin},
+	  $job->{child_stdout},
+	  $job->{child_stderr},
+	  $pid, $job);
+}
+
+
+#############################################################################
+
 sub _you_bastard {
   my ($pid, $status) = @_;
   $BASTARD_DATA{$pid} = [ Forks::Super::Util::Time(), $status ];
@@ -723,7 +826,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.32
+Version 0.33
 
 =head1 SYNOPSIS
 
@@ -851,6 +954,10 @@ Version 0.32
     @result = bg_qx( "./long_running_command" );
     # ... do something else for a while and when you need the output ...
     print "output of long running command was: @result\n";
+
+    # --- convenience methods, compare to IPC::Open2, IPC::Open3
+    my ($fh_in, $fh_out, $pid, $job) = Forks::Super::open2(@command);
+    my ($fh_in, $fh_out, $fh_err, $pid, $job) = Forks::Super::open3(@command, { timeout => 60 });
 
 =head1 DESCRIPTION
 
@@ -1147,10 +1254,10 @@ socket operations.
 
 =item *
 
-The test C<defined getsockname($handle)> can determine
+The test C<Forks::Super::Util::is_socket($handle)> can determine
 whether C<$handle> is a socket handle or a regular filehandle.
-The test C<-p $handle> can determine whether C<$handle> is
-reading from or writing to a pipe.
+The test C<Forks::Super::Util::is_pipe($handle)> 
+can determine whether C<$handle> is reading from or writing to a pipe.
 
 =item *
 
@@ -1158,6 +1265,12 @@ The following idiom is safe to use on both socket handles, pipes,
 and regular filehandles:
 
     shutdown($handle,2) || close $handle;
+
+=cut
+
+Is this true?  shutdown  "is a more insistent form of close
+because it also disables the file descriptor in any forked
+copies in other processes." 
 
 =item *
 
@@ -1771,6 +1884,27 @@ on the number of filehandles that can be opened in a process simultaneously,
 so you should use this function when you are finished communicating with
 a child process so that you don't run into that limit.
 
+=item C< ($in,$out,$pid,$job) = Forks::Super::open2( @command [, \%options ] )>
+
+=item C< ($in,$out,$err,$pid,$job) = Forks::Super::open3( @command [, \%options] )>
+
+Starts a background process and returns filehandles to the process's
+standard input and standard output (and standard error in the case
+of the C<open3> call). Also returns the process id and the
+L<Forks::Super::Job> object associated with the background process.
+
+Compare these methods to the main functions of the L<IPC::Open2> and L<IPC::Open3>
+modules.
+
+Many of the options that can be passed to C<Forks::Super::fork> can also
+be passed to C<Forks::Super::open2> and C<Forks::Super::open3>:
+
+    # run a command but kill it after 30 seconds
+    ($in,$out,$pid) = Forks::Super::open2("ssh me\@mycomputer ./runCommand.sh", { timeout => 30 });
+
+    # invoke a callback when command ends
+    ($in,$out,$err,$pid,$job) = Forks::Super::open3(@cmd, {callback => sub { print "\@cmd finished!\n" }});
+
 =back
 
 =head3 Obtaining job information
@@ -2233,9 +2367,9 @@ something else.
 
 =head1 DEPENDENCIES
 
-The C<bg_eval> function requires either L<YAML> or L<JSON>. If neither
-module is available, then using C<bg_eval> will result in the script
-C<croak>'ing.
+The C<bg_eval> function requires either L<YAML> or L<JSON>.
+If neither module is available, then using C<bg_eval> will result in
+a fatal error.
 
 Otherwise, there are no hard dependencies
 on non-core modules. Some features, especially operating-system

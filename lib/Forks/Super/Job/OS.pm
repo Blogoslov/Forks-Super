@@ -8,16 +8,16 @@
 package Forks::Super::Job::OS;
 use Forks::Super::Config ':all';
 use Forks::Super::Debug qw(:all);
-use Forks::Super::Util qw(isValidPid);
+use Forks::Super::Util qw(isValidPid :IS_OS);
 use Carp;
 use strict;
 use warnings;
 
 # $Carp::Internal{ (__PACKAGE__) }++;
-our $VERSION = $Forks::Super::Debug::VERSION;
+our $VERSION = $Forks::Super::Util::VERSION;
 
 {
-  require Forks::Super::Job::OS::Win32 if $^O eq 'MSWin32' || $^O =~ /cygwin/i;
+  require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 }
 
 our $CPU_AFFINITY_CALLS = 0;
@@ -49,7 +49,7 @@ sub config_os_child {
     $job->{name} = $$;
   }
 
-  $ENV{_FORK_PPID} = $$ if $^O eq 'MSWin32';
+  $ENV{_FORK_PPID} = $$ if &IS_WIN32;
   if (defined $job->{os_priority}) {
     set_os_priority($job);
   }
@@ -71,7 +71,7 @@ sub set_os_priority {
   };
   return 1 unless $@;
 
-  if ($^O eq 'MSWin32') {
+  if (&IS_WIN32) {
     if (!CONFIG('Win32::API')) {
       if ($job->{os_priority_call} == 1) {
 	carp "Forks::Super::Job::config_os_child(): ",

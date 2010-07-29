@@ -13,12 +13,13 @@
 package Forks::Super::Job::OS::Win32;
 use Forks::Super::Config qw(:all);
 use Forks::Super::Debug qw(:all);
+use Forks::Super::Util ':IS_OS';
 use Carp;
 use base 'Exporter';
 use strict;
 use warnings;
 
-if ($^O ne 'MSWin32' && $^O !~ /cygwin/i) {
+if (!&IS_WIN32 && !&IS_CYGWIN) {
   Carp::confess "Loaded Win32-only module into \$^O=$^O!\n";
 }
 

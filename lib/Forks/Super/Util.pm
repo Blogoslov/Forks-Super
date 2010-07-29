@@ -11,9 +11,14 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.32';
-our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name);
-our %EXPORT_TAGS = (all => \@EXPORT_OK);
+use constant IS_WIN32 => $^O =~ /os2|Win32/i;
+use constant IS_CYGWIN => $^O =~ /cygwin/i;
+
+our $VERSION = '0.33';
+our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name 
+		    is_socket is_pipe
+		    IS_WIN32 IS_CYGWIN);
+our %EXPORT_TAGS = (all => \@EXPORT_OK, IS_OS => [ qw(IS_WIN32 IS_CYGWIN) ]);
 
 our $DEFAULT_PAUSE = 0.10;
 our ($Time_HiRes_avail, $something_productive, $something_else_productive);
@@ -54,7 +59,7 @@ sub is_number {
 sub isValidPid {
   my ($pid) = @_;
   return 0 if !defined $pid || !is_number($pid);
-  return $^O eq 'MSWin32' ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
+  return &IS_WIN32 ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
 }
 
 sub set_productive_pause_code (&) {
@@ -171,6 +176,25 @@ sub _load_signal_data {
   @SIG_NAME = split / /, $Config{sig_name};
   my $i = 0;
   %SIG_NO = map { $_ => $i++ } @SIG_NAME;
+}
+
+sub is_socket {
+  my $handle = shift;
+  if (ref tied $handle eq 'Forks::Super::Tie::IPCFileHandle') {
+    return 0;
+  }
+  if (defined $$handle->{is_socket}) {
+    return $$handle->{is_socket};
+  }
+  return defined getsockname($handle);
+}
+
+sub is_pipe {
+  my $handle = shift;
+  if (defined $$handle->{is_pipe}) {
+    return $$handle->{is_pipe};
+  }
+  return -p $handle;
 }
 
 1;
