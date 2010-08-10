@@ -156,7 +156,7 @@ sub _reap {
     my ($nactive1, $nalive, $nactive2)
       = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
     debug("Forks::Super::_reap():  $nalive remain.") if $DEBUG;
-    $job->mark_reaped;
+    $job->_mark_reaped;
     return ($real_pid, $nactive1, $nalive, $nactive2);
   }
 
@@ -242,7 +242,7 @@ sub _waitpid_target {
     return -1;
   }
   if ($job->{state} eq 'COMPLETE') {
-    $job->mark_reaped;
+    $job->_mark_reaped;
     return $job->{real_pid};
   } elsif ($no_hang  or
 	   $job->{state} eq 'REAPED') {
@@ -256,7 +256,7 @@ sub _waitpid_target {
       pause();
       Forks::Super::Queue::run_queue() if $job->{state} eq 'DEFERRED';
     }
-    $job->mark_reaped;
+    $job->_mark_reaped;
     return $job->{real_pid};
   }
 }
@@ -271,7 +271,7 @@ sub _waitpid_name {
   my @jobs_to_wait_for = ();
   foreach my $job (@jobs) {
     if ($job->{state} eq 'COMPLETE') {
-      $job->mark_reaped;
+      $job->_mark_reaped;
       return $job->{real_pid};
     } elsif ($job->{state} ne 'REAPED' && $job->{state} ne 'DEFERRED') {
       push @jobs_to_wait_for, $job;
@@ -294,7 +294,7 @@ sub _waitpid_name {
 	if grep {$_->{state} eq 'DEFERRED'} @jobs_to_wait_for;
     @jobs = grep { $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED'} @jobs_to_wait_for;
   }
-  $jobs[0]->mark_reaped;
+  $jobs[0]->_mark_reaped;
   return $jobs[0]->{real_pid};
 }
 
@@ -326,7 +326,7 @@ sub _handle_bastards {
   foreach my $pid (keys %Forks::Super::BASTARD_DATA) {
     my $job = $ALL_JOBS{$pid};
     if (defined $job) {
-      $job->mark_complete;
+      $job->_mark_complete;
       ($job->{end}, $job->{status}) =
 	\@{delete $Forks::Super::BASTARD_DATA{$pid}};
 

@@ -14,7 +14,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe
 		    IS_WIN32 IS_CYGWIN);

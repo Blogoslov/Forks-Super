@@ -22,7 +22,7 @@ $| = 1;
   $Carp::Internal{ (__PACKAGE__) }++;
 }
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -67,6 +67,8 @@ sub import {
       } else {
 	carp "Forks::Super: Invalid FH_DIR value \"$dir\": $!\n";
       }
+    } elsif (uc $args[$i] eq 'OVERLOAD') {
+      Forks::Super::Job::enable_overload();
     } else {
       push @tags, $args[$i];
       if ($args[$i] =~ /^:test/) {
@@ -166,16 +168,26 @@ sub fork {
     if ($job->{_on_busy} eq 'FAIL') {
       $job->run_callback('fail');
 
-      #$job->mark_complete;
+      #$job->_mark_complete;
       $job->{end} = Forks::Super::Util::Time();
 
       $job->{status} = -1;
-      $job->mark_reaped;
+      $job->_mark_reaped;
       return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? (-1) : -1;
     } elsif ($job->{_on_busy} eq 'QUEUE') {
       $job->run_callback('queue');
       $job->queue_job;
-      return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($job->{pid},$job) : $job->{pid};
+      if ($Forks::Super::Job::OVERLOAD_ENABLED) {
+	if ($Forks::Super::SUPPORT_LIST_CONTEXT && wantarray) {
+	  return ($job,$job);
+	} else {
+	  return $job;
+	}
+      } elsif ($Forks::Super::SUPPORT_LIST_CONTEXT && wantarray) {
+	return ($job->{pid}, $job);
+      } else {
+	return $job->{pid};
+      }
     } else {
       pause();
     }
@@ -238,7 +250,7 @@ sub write_stdin {
   } else {
     carp "Forks::Super::write_stdin(): ",
       "Attempted write on child $job->{pid} ",
-	"with no STDIN filehandle\n";
+  	"with no STDIN filehandle\n";
   }
   return;
 }
@@ -610,9 +622,9 @@ sub kill {
   if (@deferred_jobs > 0) {
     foreach my $j (@deferred_jobs) {
       if (Forks::Super::Util::is_kill_signal($signal)) {
-	$j->mark_complete;
+	$j->_mark_complete;
 	$j->{status} = Forks::Super::Util::signal_number($signal) || -1;
-	$j->mark_reaped;
+	$j->_mark_reaped;
 	$num_signalled++;
       } elsif ($signal eq 'STOP') {
 	$j->{state} = 'SUSPENDED-DEFERRED';
@@ -826,7 +838,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.33
+Version 0.34
 
 =head1 SYNOPSIS
 
@@ -965,7 +977,7 @@ This package provides new definitions for the Perl functions
 C<fork>, C<wait>, and C<waitpid> with richer functionality.
 The new features are designed to make it more convenient to
 spawn background processes and more convenient to manage them
-and to get the most out of your system's resources.
+to get the most out of your system's resources.
 
 =head1 C<$pid = fork( \%options )>
 
@@ -1000,7 +1012,7 @@ returning C<undef> if the fork call was unsuccessful
 The C<fork> call supports three options, C<cmd>, C<exec>,
 and C<sub> (or C<sub>/C<args>)
 that will instruct the child process to carry out a specific task.
-Using either of these options causes the child process not to
+Using any of these options causes the child process not to
 return from the C<fork> call.
 
 =over 4
@@ -1047,7 +1059,8 @@ L<"Options for simple job management">).
 
 On successful launch of the child process, C<fork> invokes the
 specified Perl subroutine with the specified set of method arguments
-(if provided). If the subroutine completes normally, the child
+(if provided) in the child process. 
+If the subroutine completes normally, the child
 process exits with a status of zero. If the subroutine exits
 abnormally (i.e., if it C<die>'s, or if the subroutine invokes
 C<exit> with a non-zero argument), the child process exits with
@@ -1058,10 +1071,20 @@ Does not return from the child process, so you do not need to
 check the fork() return value to determine whether code is running
 in the parent or child process.
 
-If neither the C<cmd> or the C<sub> option is provided to the fork
-call, then the fork() call behaves like a Perl C<fork()> call,
-returning the child PID to the parent and also returning zero to
-the child.
+If neither the C<cmd>, C<exec>, nor the C<sub> option is provided 
+to the fork call, then the fork() call behaves like a standard
+Perl C<fork()> call, returning the child PID to the parent and also 
+returning zero to a new child process.
+
+As of v0.34, the C<fork> function can return an overloaded
+L<Forks::Super::Job> object to the parent process instead of
+a simple scalar representing the job ID. When this feature is
+enabled, the return value will behave like the simple scalar
+in any numerical context but the attributes and methods of
+C<Forks::Super::Job> will also be available. B<This feature
+is not enabled by default in v0.34>. See 
+L<Forks::Super::Job/"OVERLOADING"> for more details including
+how to enable this feature.
 
 =back
 
@@ -1800,14 +1823,15 @@ to suspending, resuming, and terminating processes through
 other Windows API calls. It is highly recommended that you
 install the L<Win32::API> module for this purpose.
 
-See also the L<Forks::Super::Job::suspend|Forks::Super::Job/"suspend">
-and L<resume|Forks::Super::Job/"resume"> methods. It is
+See also the L<< 
+Forks::Super::Job::suspend|Forks::Super::Job/"$job->suspend" >>
+and L<< resume|Forks::Super::Job/"$job->resume" >> methods. It is
 preferable (out of portability concerns) to use these methods
 
     $job->suspend;
     $job->resume;
 
-rather than C<Forks::Super::kill>
+rather than C<Forks::Super::kill>.
 
     Forks::Super::kill 'STOP', $job;
     Forks::Super::kill 'CONT', $job;

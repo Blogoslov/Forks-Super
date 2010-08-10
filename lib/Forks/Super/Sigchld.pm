@@ -78,7 +78,7 @@ sub handle_CHLD {
       $Forks::Super::Queue::_REAP = 1;
       my $j = $Forks::Super::ALL_JOBS{$pid};
       $j->{status} = $status;
-      $j->mark_complete;
+      $j->_mark_complete;
     } else {
       # There are (at least) two reasons that we get to this code branch:
       #

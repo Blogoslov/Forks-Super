@@ -45,10 +45,10 @@ Possible TODOs:
 	a small value when you have lots of short tasks, and
 	longer for longer tasks".
 
-    ___ Tests for tied scalar behavior of
-	___ $Forks::Super::Queue::QUEUE_MONITOR_FREQ
-	___ $Forks::Super::Queue::QUEUE_INHIBIT_MONITOR
-	___ $Forks::Super::Queue::QUEUE_INTERRUPT
+    _X_ Tests for tied scalar behavior of
+	_X_ $Forks::Super::Queue::QUEUE_MONITOR_FREQ
+	_X_ $Forks::Super::Queue::QUEUE_INHIBIT_MONITOR
+	_X_ $Forks::Super::QUEUE_INTERRUPT
 
     ___ Test needed, Win32+cmd, See Job.pm:344
 
@@ -70,20 +70,22 @@ Possible TODOs:
 	to invoke or emulate IPC::Run's rich feature set
 	___ What else can I learn by studying IPC::Run?
 
-    ___ Refactor fork return value to a tied scalar that 'fetch'es the
-	pid but has the methods of the Forks::Super::Job object.
+    _X_ <strike>Refactor fork return value to a tied scalar that 'fetch'es the
+	pid but has the methods of the Forks::Super::Job object.</strike>
+
+	Overload the Forks::Super::Job object to return the pid in
+	a numerical context.
 
 	Use cases:
-		$pid = fork { ... }
-		returns tied var to parent, scalar 0 to child, undef on error
-		$pid->state;
-		$pid->status;
+	    _X_ $pid = fork { ... }
+	    _X_ returns tied var to parent, scalar 0 to child, undef on error
+	    _X_	$pid->state
+	    _X_	$pid->status
+            _X_ $pid->wait($timeout)
+            _X_ $pid->kill($signal)
+	    _X_ $pid->suspend, $pid->resume
 
-	This might not be possible. Or it might require
-	*shudder* overloading.
-
-	But it IS possible to return ($pid,$job) from fork() in list context
-	where $job is a Forks::Super::Job object.
+	_X_ Document return value of fork, new methods on Forks::Super::Job
 
     ___ More tests from a child process and see what breaks.
 		use Forks::Super;
@@ -125,7 +127,7 @@ Possible TODOs:
 		names, accessible in the parent at something like 
 		$Forks::Super::CHILD_FH{$pid}{X}
 
-    ___ test  fork { retries ==> max_retries } option. May need to mock it.
+    _X_ test  fork { retries ==> max_retries } option. May need to mock it.
 
     ___ what else to configure at build time?
 	___ e.g. "has Unixy signal framework"
@@ -136,3 +138,44 @@ Possible TODOs:
     ___ What should wait/waitall do when only suspended jobs are left?
 	___ Currently we wait indefinitely. Document this.
 	___ Document $Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS override.
+
+    ___ Now that it is more convenient to get a Forks::Super::Job object,
+	what are some other useful methods for it?
+	_x_ ->waitpid($flags[,$timeout])
+	_x_ ->wait([$timeout])
+	_x_ ->kill($signal)
+	___ ->the_reason_that_the_job_aint_started_yet()
+	___ ->close()
+	___ ->write_stdin(@msg)
+	___ ->read_stdout(\%options)
+	___ ->read_stderr(\%options)
+	___ "privatize" the more internal functions
+	___ Document
+
+    ___ In Forks::Super::Job 'overload' mode, should
+	wait/waitpid also return overloaded Forks::Super::Job objects ?
+
+    ___ Natural language extension to timeout, expiration, delay, 
+	start_after options:
+
+	___ fork { timeout => "10 minutes" }
+ 	___ fork { expiration => "8:00" }
+ 	___ fork { start_after => "midnight" }
+	___ fork { expiration => "3:00 am Tuesday" }
+
+    ___ Reimplement gensym() in Forks::Super::Job::Ipc to use
+	safer 'Forks::Super::Symbol' package ?
+
+    ___ Rework Forks::Super::LazyEval to use overloading rather
+        than tied scalars. Use case is to be able to use
+        $output rather than $$output.
+
+v 0.35 task list
+
+    Implement in Forks::Super::Job::Ipc:
+	write_stdin
+	read_stdout
+	read_stderr
+        Refactor in Forks::Super
+	Forks::Super::Job::_resolve function.
+    Refactor Forks::Super::Job::Ipc::close, close_fh
