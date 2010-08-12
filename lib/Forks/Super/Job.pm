@@ -22,7 +22,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.34';
+our $VERSION = '0.35';
 our ($WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
 enable_overload() if $ENV{"FORKS_SUPER_JOB_OVERLOAD"};
@@ -307,8 +307,8 @@ sub launch {
   if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK < 1) {
     return _launch_from_child($job);
   }
-  $job->preconfig_fh;
-  $job->preconfig2;
+  $job->_preconfig_fh;
+  $job->_preconfig2;
 
 
 
@@ -366,7 +366,7 @@ sub launch {
     $job->{pid} = $pid unless defined $job->{pid};
     $job->{start} = Forks::Super::Util::Time();
 
-    $job->config_parent;
+    $job->_config_parent;
     $job->run_callback('start');
     Forks::Super::Sigchld::handle_CHLD(-1);
 
@@ -388,7 +388,7 @@ sub launch {
 
   # child
   Forks::Super::init_child() if defined &Forks::Super::init_child;
-  $job->config_child;
+  $job->_config_child;
   if ($job->{style} eq 'cmd') {
 
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
@@ -523,27 +523,27 @@ sub resume {
 # do further initialization of a Forks::Super::Job object,
 # mainly setting derived fields
 #
-sub preconfig {
+sub _preconfig {
   my $job = shift;
 
-  $job->preconfig_style;
-  $job->preconfig_busy_action;
-  $job->preconfig_start_time;
-  $job->preconfig_dependencies;
-  Forks::Super::Job::Callback::preconfig_callbacks($job);
-  Forks::Super::Job::OS::preconfig_os($job);
+  $job->_preconfig_style;
+  $job->_preconfig_busy_action;
+  $job->_preconfig_start_time;
+  $job->_preconfig_dependencies;
+  Forks::Super::Job::Callback::_preconfig_callbacks($job);
+  Forks::Super::Job::OS::_preconfig_os($job);
   return;
 }
 
 # some final initialization just before launch
-sub preconfig2 {
+sub _preconfig2 {
   my $job = shift;
   if (!defined $job->{debug}) {
     $job->{debug} = $Forks::Super::Debug::DEBUG;
   }
 }
 
-sub preconfig_style {
+sub _preconfig_style {
   my $job = shift;
 
   ###################
@@ -575,7 +575,7 @@ sub preconfig_style {
   return;
 }
 
-sub preconfig_busy_action {
+sub _preconfig_busy_action {
   my $job = shift;
 
   ######################
@@ -598,7 +598,7 @@ sub preconfig_busy_action {
   return;
 }
 
-sub preconfig_start_time {
+sub _preconfig_start_time {
   my $job = shift;
 
   ###########################
@@ -617,7 +617,7 @@ sub preconfig_start_time {
   return;
 }
 
-sub preconfig_dependencies {
+sub _preconfig_dependencies {
   my $job = shift;
 
   ##########################
@@ -672,9 +672,9 @@ sub _resolve_names {
 # set some additional attributes of a Forks::Super::Job after the
 # child is successfully launched.
 #
-sub config_parent {
+sub _config_parent {
   my $job = shift;
-  $job->config_fh_parent;
+  $job->_config_fh_parent;
   if (Forks::Super::Config::CONFIG('getpgrp')) {
     $job->{pgid} = getpgrp($job->{real_pid});
 
@@ -689,18 +689,18 @@ sub config_parent {
   return;
 }
 
-sub config_child {
+sub _config_child {
   my $job = shift;
   $Forks::Super::Job::self = $job;
-  Forks::Super::Job::Callback::config_callback_child($job);
-  $job->config_debug_child;
-  Forks::Super::Job::Timeout::config_timeout_child($job);
-  Forks::Super::Job::OS::config_os_child($job);
-  $job->config_fh_child;
+  $job->_config_callback_child;
+  $job->_config_debug_child;
+  $job->_config_timeout_child;
+  $job->_config_os_child;
+  $job->_config_fh_child;
   return;
 }
 
-sub config_debug_child {
+sub _config_debug_child {
   my $job = shift;
   if ($job->{debug} && $job->{undebug}) {
     if (Forks::Super::_is_test()) {
@@ -798,9 +798,11 @@ sub _resolve {
   if (ref $_[0] ne 'Forks::Super::Job') {
     my $job = get($_[0]);
     if (defined $job) {
-      $_[0] = $job;
+      return $_[0] = $job;
     }
+    return $job;
   }
+  return $_[0];
 }
 
 #
@@ -920,7 +922,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.34
+0.35
 
 =head1 SYNOPSIS
 
@@ -935,7 +937,7 @@ Forks::Super::Job - object representing a background task
 
 =head2 with overloading
 
-See L<"OVERLOADING">.
+See L</"OVERLOADING">.
 
     use Forks::Super 'overload';
     $job = Forks::Super::fork( \%options );
@@ -1148,41 +1150,76 @@ output and standard error from the child process, respectively.
 
 =over 4
 
+=head3 get
+
 =item C< $job = Forks::Super::Job::get($pidOrName) >
 
+Looks up a C<Forks::Super::Job> object by a process ID/job ID
+or L<name|Forks::Super/"name"> attribute and returns the
+job object. Returns C<undef> for an unrecognized pid or
+job name.
+
 =item C< $n = Forks::Super::Job::count_active_processes() >
+
+Returns the current number of active background processes.
+This includes only
+
+=over 4
+
+=item 1. First generation processes. Not the children and
+grandchildren of child processes.
+
+=item 2. Processes spawned by the C<Forks::Super> module,
+and not processes that may have been created outside the
+C<Forks::Super> framework, say, by an explicit call to
+C<CORE::fork()>, a call like C<system("./myTask.sh &")>,
+or a form of Perl's C<open> function that launches an
+external command.
+
+=back
 
 =back
 
 =head1 METHODS
 
-The following methods may be called on a C<Forks::Super::Job> object.
+A C<Forks::Super::Job> object recognizes the following methods.
+In general, these methods should only be used from the foreground
+process (the process that spawned the background job).
 
 =over 4
+
+=head3 waitpid
 
 =item C<< $job->wait( [$timeout] ) >>
 
 =item C<< $job->waitpid( $flags [,$timeout] ) >>
 
 Convenience method to wait until or test whether the specified
-job has completed. See 
-L<Forks::Super::waitpid|Forks::Super/"$reaped_pid_=_waitpid_$pid,_$flags_[,_$timeout]_">
+job has completed. See L<Forks::Super::waitpid|Forks::Super/"waitpid">.
+
+=head3 kill
 
 =item C<< $job->kill($signal) >>
 
 Convenience method to send a signal to a background job.
-See L<Forks::Super::kill|Forks::Super/"$num_signalled_=_Forks::Super::kill_$signal,_@jobsOrPids">.
+See L<Forks::Super::kill|Forks::Super/"kill">.
+
+=head3 suspend
 
 =item C<< $job->suspend >>
 
 When called on an active job, suspends the background process with 
 C<SIGSTOP> or other mechanism appropriate for the operating system.
 
+=head3 resume
+
 =item C<< $job->resume >>
 
 When called on a suspended job (see L<< suspend|"$job->suspend" >>,
 above), resumes the background process with C<SIGCONT> or other mechanism 
 appropriate for the operating system.
+
+=head3 is_E<lt>stateE<gt>
 
 =item C<< $job->is_complete >>
 
@@ -1203,11 +1240,64 @@ a background process.
 Indicates whether the specified job has started but is currently
 in a suspended state.
 
+=head3 toString
+
 =item C<< $job->toString() >>
 
 =item C<< $job->toShortString() >>
 
 Outputs a string description of the important features of the job.
+
+=head3 write_stdin
+
+=item C<< $job->write_stdin(@msg) >>
+
+Writes the specified message to the child process's standard input
+stream, if the child process has been configured to receive
+input from interprocess communication. Writing to a closed 
+handle or writing to a process that is not configured for IPC
+will result in a warning.
+
+=head3 read_stdXXX
+
+=item C<< $line = $job->read_stdout() >>
+
+=item C<< @lines = $job->read_stdout() >>
+
+=item C<< $line = $job->read_stderr() >>
+
+=item C<< @lines = $job->read_stderr() >>
+
+In scalar context, attempts to read a single line, and in list
+context, attempts to read all available lines from a child
+process's standard output or standard error stream. 
+
+If there is no available input, and if the C<Forks::Super> module
+detects that the background job has completed (such that no more
+input will be created), then the file handle will automatically be
+closed. In scalar context, these methods will return C<undef>
+if there is no input currently available on an inactive process,
+and C<""> (empty string) if there is no input available on
+an active process.
+
+Reading from a closed handle, or calling these methods on a
+process that has not been configured for IPC will result in
+a warning.
+
+=head3 close_fh
+
+=item C<< $job->close_fh([@handle_id]) >>
+
+Closes IPC filehandles for the specified job. Optional input
+is one or more values from the set C<stdin>, C<stdout>, C<stderr>,
+and C<all> to specify which filehandles to close. If no
+parameters are provided, the default behavior is to close all
+configured file handles.
+
+On most systems, open filehandles are a scarce resource and it
+is a very good practice to close filehandles when the jobs that
+created them are finished running and you are finished processing
+input and output on those filehandles.
 
 =back
 
@@ -1241,6 +1331,13 @@ still returns a simple scalar value of 0 to the child process
 B<Overloading is not enabled by default in this version
 of C<Forks::Super> >. There are two ways you can enable this
 feature:
+
+When this feature is enabled, the return value of
+L<Forks::Super::wait()|Forks::Super/"wait"> and
+L<Forks::Super::waitpid()|Forks::Super/"waitpid"> might also
+be an overload C<Forks::Super::Job> object. (But if C<wait>/C<waitpid>
+is returning an indicator value like C<0> or C<-1>, then those
+return values are just simple scalars.)
 
 =over 4
 

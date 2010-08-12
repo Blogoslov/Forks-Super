@@ -103,7 +103,7 @@ sub handle_CHLD {
     push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
   $_SIGCHLD--;
-  Forks::Super::Queue::run_queue() if $nhandled > 0;
+  Forks::Super::Queue::check_queue() if $nhandled > 0;
   return;
 }
 

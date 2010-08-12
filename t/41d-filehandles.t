@@ -56,7 +56,7 @@ ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref"
 
 
 use Carp;$SIG{SEGV} = sub { 
-    Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" 
+  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" 
 };
 
 

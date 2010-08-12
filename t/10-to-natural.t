@@ -42,7 +42,8 @@ ok($? == $job->{status}, "captured correct job status");
 
 # list context
 $Forks::Super::SUPPORT_LIST_CONTEXT = 1;
-($p,my $j) = fork;
+my $j;
+($p,$j) = fork;
 if ($p == 0) {
 
   # XXX - in child, $j should be undefined.

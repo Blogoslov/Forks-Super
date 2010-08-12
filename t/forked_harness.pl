@@ -95,7 +95,7 @@ $Forks::Super::Util::DEFAULT_PAUSE = 0.10;
 
 my $glob_required = 0;
 if (@ARGV == 0) {
-  # XXX - read  $(TEST_FILES) from Makefile
+  # read  $(TEST_FILES) from Makefile
   open(MFILE, '<', 'Makefile') 
     or open(MFILE, '<', '../Makefile')
     or die "No test files specified, can't read defaults from Makefile!\n";
@@ -369,7 +369,7 @@ sub process {
   } elsif ($status != 0 && $not_ok == 0) {
     $fail{$test_file}{'unknown'} += $status >> 8;
   }
-  # XXX elsif ($quiet && $use_harness) { should summarize test results }
+  # elsif ($quiet && $use_harness) { should summarize test results }
 
   if ($redo) {
 

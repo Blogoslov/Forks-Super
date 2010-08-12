@@ -47,17 +47,18 @@ ok($output eq "brown\ndog\nfox\njumps\nlazy\nover\nquick\nthe\nthe\n",
 ok(!$error || $error !~ /overwrite/, "error ref was overwritten");
 ok($error !~ /overwrite/, "error ref was overwritten/\$error=$error");
 
-my @input = ("tree 1\n","bike 2\n","camera 3\n","car 4\n","hand 5\n","gun 6\n");
+my @input = ("tree 1\n","bike 2\n","camera 3\n",
+	     "car 4\n","hand 5\n","gun 6\n");
 my $orig_output = $output;
-$pid = fork { stdin => \@input , stdout => \$output, exec => \@cmd, delay => 2 };
+$pid = fork { stdin => \@input , stdout => \$output, 
+	      exec => \@cmd, delay => 2 };
 ok($output eq $orig_output, "output not updated until child is complete.");
 waitpid $pid, 0;
 my @output = split /\n/, $output;
 ok($output[0] eq "bike 2" && $output[2] eq "car 4" && $output[3] eq "gun 6",
 "read input from ARRAY ref");
 
-use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
+use Carp;$SIG{SEGV} = sub {
+  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
+};
 
-__END__
-
-# XXX - test Forks::Super::Job::close_fh($pid)

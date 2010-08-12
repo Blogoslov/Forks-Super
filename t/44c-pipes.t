@@ -7,6 +7,11 @@ use warnings;
 $SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
 eval { alarm 150 };
 
+sub _read_socket {
+  my $handle = shift;
+  return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+}
+
 #
 # test whether a parent process can have access to the
 # STDIN, STDOUT, and STDERR filehandles of a child
@@ -29,7 +34,8 @@ sub repeater {
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
     # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while ($_ = Forks::Super::Util::is_socket(*STDIN) ? Forks::Super::_read_socket(undef,*STDIN,0) : <STDIN>) {
+    while ($_ = Forks::Super::Util::is_socket(*STDIN) 
+		? _read_socket(*STDIN) : <STDIN>) {
     # while (<STDIN>) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);

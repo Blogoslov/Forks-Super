@@ -5,7 +5,7 @@ use warnings;
 
 if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG("Win32::API")) {
  SKIP: {
-    skip "suspend/resume not supported on MSWin32", 4;
+    skip "suspend/resume not supported on MSWin32", 13;
   }
   exit 0;
 }

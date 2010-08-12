@@ -151,13 +151,20 @@ sub _reap {
     if ($job->{debug}) {
       debug("Forks::Super::_reap(): reaping $pid/$real_pid.");
     }
-    return $real_pid if not wantarray;
+    if (not wantarray) {
+      return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $real_pid;
+    }
+    # return $real_pid if not wantarray;
 
     my ($nactive1, $nalive, $nactive2)
       = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
     debug("Forks::Super::_reap():  $nalive remain.") if $DEBUG;
     $job->_mark_reaped;
-    return ($real_pid, $nactive1, $nalive, $nactive2);
+    if ($Forks::Super::Job::OVERLOAD_ENABLED) {
+      return ($job, $nactive1, $nalive, $nactive2);
+    } else {
+      return ($real_pid, $nactive1, $nalive, $nactive2);
+    }
   }
 
 
@@ -243,7 +250,7 @@ sub _waitpid_target {
   }
   if ($job->{state} eq 'COMPLETE') {
     $job->_mark_reaped;
-    return $job->{real_pid};
+    return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $job->{real_pid};
   } elsif ($no_hang  or
 	   $job->{state} eq 'REAPED') {
     return -1;
@@ -254,10 +261,10 @@ sub _waitpid_target {
 	return TIMEOUT;
       }
       pause();
-      Forks::Super::Queue::run_queue() if $job->{state} eq 'DEFERRED';
+      Forks::Super::Queue::check_queue() if $job->{state} =~ /DEFER|SUSPEND/;
     }
     $job->_mark_reaped;
-    return $job->{real_pid};
+    return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $job->{real_pid};
   }
 }
 
@@ -272,7 +279,7 @@ sub _waitpid_name {
   foreach my $job (@jobs) {
     if ($job->{state} eq 'COMPLETE') {
       $job->_mark_reaped;
-      return $job->{real_pid};
+      return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $job->{real_pid};
     } elsif ($job->{state} ne 'REAPED' && $job->{state} ne 'DEFERRED') {
       push @jobs_to_wait_for, $job;
     }
@@ -295,7 +302,7 @@ sub _waitpid_name {
     @jobs = grep { $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED'} @jobs_to_wait_for;
   }
   $jobs[0]->_mark_reaped;
-  return $jobs[0]->{real_pid};
+  return $Forks::Super::Job::OVERLOAD_ENABLED ? $jobs[0] : $jobs[0]->{real_pid};
 }
 
 # wait on any process from a specific process group

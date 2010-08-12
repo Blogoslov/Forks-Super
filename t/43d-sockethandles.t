@@ -65,51 +65,8 @@ ok($pc_equal, "parent/child agree on output");
 
 # ok(1, "stdin/stdout/stderr test with socket not ready");
 
-if (0) {
-
-#
-# XXX - needs work
-# 
-
-my $input = "Hello world\n";
-my $output = "";
-my $error = "overwrite me!";
-my $pid = fork { 
-  stdin => $input, stdout => \$output, stderrx => \$error, child_fh => "sock",
-    sub => sub {
-      sleep 1;
-      while(<STDIN>) {
-	print STDERR "Got input: $_";
-	chomp;
-	my $a = reverse $_;
-	print $a, "\n";
-      }
-    }, debug => 1 };
-ok($output eq "" && $error =~ /overwrite/, 
-   "output/error not updated until child is complete");
-waitpid $pid, 0;
-ok($output eq "dlrow olleH\n", "updated output from stdout");
-ok($error !~ /overwrite/, "error ref was overwritten");
-ok($error eq "Got input: $input");
-
-my @input = ("Hello world\n", "How ", "is ", "it ", "going?\n");
-my $orig_output = $output;
-$pid = fork { stdin => \@input , stdout => \$output, child_fh => "sock",
-		sub => sub {
-		  sleep 1;
-		  while (<STDIN>) {
-		    chomp;
-		    my $a = reverse $_;
-		    print length($_), $a, "\n";
-		  }
-		} };
-ok($output eq $orig_output, "output not updated until child is complete");
-waitpid $pid, 0;
-ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", 
-   "read input from ARRAY ref");
-
-}
-
-use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
+use Carp;$SIG{SEGV} = sub {
+  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
+};
 
 eval { alarm 0 };

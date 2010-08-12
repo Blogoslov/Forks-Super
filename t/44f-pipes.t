@@ -1,4 +1,4 @@
-use Forks::Super ':test';
+use Forks::Super qw(:test overload);
 use Forks::Super::Util qw(is_pipe IS_WIN32);
 use Test::More tests => 12;
 use strict;
@@ -70,35 +70,36 @@ my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ],
 		 child_fh => "in,out,err,pipe" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $Forks::Super::CHILD_STDIN{$pid} 
-   && defined fileno($Forks::Super::CHILD_STDIN{$pid}),
+ok(defined $pid->{child_stdin} 
+   && defined fileno($pid->{child_stdin}),
    "found stdin fh");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid} 
-   && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),
+ok(defined $pid->{child_stdout} 
+   && defined fileno($pid->{child_stdout}),
    "found stdout fh");
-ok(defined $Forks::Super::CHILD_STDERR{$pid} 
-   && defined fileno($Forks::Super::CHILD_STDERR{$pid}),
+ok(defined $pid->{child_stderr} 
+   && defined fileno($pid->{child_stderr}),
    "found stderr fh");
 SKIP: {
   if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
     skip "using sockets instead of pipes on Win32", 1;
   }
-  ok(is_pipe($Forks::Super::CHILD_STDIN{$pid}) &&
-     is_pipe($Forks::Super::CHILD_STDOUT{$pid}) &&
-     is_pipe($Forks::Super::CHILD_STDERR{$pid}),
+  ok(is_pipe($pid->{child_stdin}) &&
+     is_pipe($pid->{child_stdout}) &&
+     is_pipe($pid->{child_stderr}),
      "STDxxx handles are pipes");
 }
 my $msg = sprintf "%x", rand() * 99999999;
-my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
-my $z = print $fh_in "$msg\n";
+#my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
+#my $z = print $fh_in "$msg\n";
+my $z = $pid->write_stdin("$msg\n");
 ok($z > 0, "print to child stdin successful");
 my $t = time;
-my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
-my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
+#my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
+#my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
 while (time < $t+8) {
-  push @out, Forks::Super::read_stdout($pid);
-  push @err, Forks::Super::read_stderr($pid);
+  push @out, $pid->read_stdout($pid); # Forks::Super::read_stdout($pid);
+  push @err, $pid->read_stderr($pid); # Forks::Super::read_stderr($pid);
   sleep 1;
 }
 Forks::Super::close_fh($pid);

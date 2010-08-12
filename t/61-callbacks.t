@@ -83,4 +83,6 @@ ok($w == 38, "fail callback runs");
 waitall;
 ok($w == 38, "no other callbacks after fail");
 
-use Carp;$SIG{SEGV} = sub { Carp::cluck "XXXXXXX Caught SIGSEGV during cleanup of $0 ...\n" };
+use Carp;$SIG{SEGV} = sub { 
+  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
+};

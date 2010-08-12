@@ -52,8 +52,8 @@ sub init {
     'Forks::Super::Queue::QueueInterrupt', ('', keys %SIG);
 
   tie $INHIBIT_QUEUE_MONITOR, 
-    'Forks::Super::Queue::InhibitQueueMonitor', 
-    &IS_WIN32; # XXX - or any other $^O with crippled signal framework
+    'Forks::Super::Queue::InhibitQueueMonitor', &IS_WIN32;
+    # !Forks::Super::Util::_has_POSIX_signal_framework();
 
   if (grep {/USR1/} keys %SIG) {
     $Forks::Super::QUEUE_INTERRUPT = 'USR1';
@@ -74,10 +74,10 @@ sub init_child {
 
 #
 # once there are jobs in the queue, we'll need to call
-# run_queue() every once in a while to make sure those
+# check_queue() every once in a while to make sure those
 # jobs get started when they are eligible. Certain
 # events (the CHLD handler being invoked, the
-# waitall method) call run_queue but that still doesn't
+# waitall method) call check_queue but that still doesn't
 # guarantee that it will be called frequently enough.
 #
 # This method sets up a background process (using
@@ -234,7 +234,9 @@ sub run_queue {
     return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
   }
   queue_job();
+
   return if @QUEUE <= 0;
+
   if ($_LOCK++ > 0) {
     $_LOCK--;
     return;
@@ -298,21 +300,38 @@ sub run_queue {
     }
   } while ($job_was_launched);
 
-  if (0) {   # suspend/resume callback under development
-    my @suspended_jobs = grep { $_->{state} eq 'SUSPENDED'
-			      } @Forks::Super::ALL_JOBS;
-    my @active_and_suspendable_jobs 
-      = grep { $_->{state} eq 'ACTIVE' 
-		 && defined $_->{suspend} } @Forks::Super::ALL_JOBS;
+  $_LOCK--;
+  return;
+}
 
-    foreach my $j (@active_and_suspendable_jobs) {
-      if ($j->{suspend}->() < 0) {
-	$j->suspend;
+sub suspend_resume_jobs {
+  my @jobs = grep {
+    defined $_->{suspend} &&
+      ($_->{state} eq 'ACTIVE' || $_->{state} eq 'SUSPENDED')
+    } @Forks::Super::ALL_JOBS;
+  return if @jobs <= 0;
+
+  if ($_LOCK++ > 0) {
+    $_LOCK--;
+    return;
+  }
+
+  debug('suspend_resume_jobs(): examining jobs') if $DEBUG || $QUEUE_DEBUG;
+
+  foreach my $job (@jobs) {
+    no strict 'refs';
+    my $action = $job->{suspend}->();
+    if ($action > 0) {
+      if ($job->{state} =~ /SUSPEND/) {
+	debug("Forks::Super::Queue: suspend callback value $action for ",
+	      "job ", $job->{pid}, " ... resuming") if $job->{debug};
+	$job->resume;
       }
-    }
-    foreach my $j (@suspended_jobs) {
-      if ($j->{suspend}->() > 0) {
-	$j->resume;
+    } elsif ($action < 0) {
+      if ($job->{state} eq 'ACTIVE') {
+	debug("Forks::Super::Queue: suspend callback value $action for ",
+	      "job ", $job->{pid}, " ... suspending") if $job->{debug};
+	$job->suspend;
       }
     }
   }
@@ -333,6 +352,7 @@ sub run_queue {
 #
 sub check_queue {
   run_queue() if !$_LOCK;
+  suspend_resume_jobs() if !$_LOCK;
   return;
 }
 
@@ -372,7 +392,7 @@ sub Forks::Super::Queue::QueueMonitorFreq::STORE {
   }
   $$self = $new_value;
   _kill_queue_monitor();
-  run_queue();
+  check_queue();
   _launch_queue_monitor() if @QUEUE > 0;
 }
 

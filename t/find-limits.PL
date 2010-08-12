@@ -143,7 +143,6 @@ sub find_max_open_sockets {
 # installed code.
 #
 sub count_number_of_cpus {
-  # XXX - TODO
-  # XXX - Maybe wait for Sys::CpuAffinity
+  # Maybe wait for Sys::CpuAffinity
 }
 

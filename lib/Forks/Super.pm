@@ -22,7 +22,7 @@ $| = 1;
   $Carp::Internal{ (__PACKAGE__) }++;
 }
 
-our $VERSION = '0.34';
+our $VERSION = '0.35';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -125,7 +125,7 @@ sub _init {
   *handle_CHLD = *Forks::Super::Sigchld::handle_CHLD;
 
   Forks::Super::Util::set_productive_pause_code {
-    Forks::Super::Queue::run_queue() if !$Forks::Super::Queue::_LOCK;
+    Forks::Super::Queue::check_queue() if !$Forks::Super::Queue::_LOCK;
     handle_CHLD(-1);
   };
 
@@ -152,7 +152,7 @@ sub fork {
 
   $MAIN_PID ||= $$;
   my $job = Forks::Super::Job->new($opts);
-  $job->preconfig;
+  $job->_preconfig;
   if (defined $job->{__test}) {
     return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($job->{__test}, $job) : $job->{__test};
   }
@@ -241,179 +241,7 @@ sub state {
 
 sub write_stdin {
   my ($job, @msg) = @_;
-  if (ref $job ne 'Forks::Super::Job') {
-    $job = $ALL_JOBS{$job} || return;
-  }
-  my $fh = $job->{child_stdin};
-  if (defined $fh) {
-    return print $fh @msg;
-  } else {
-    carp "Forks::Super::write_stdin(): ",
-      "Attempted write on child $job->{pid} ",
-  	"with no STDIN filehandle\n";
-  }
-  return;
-}
-
-sub _read_socket {
-  my ($job, $sh, $wantarray) = @_;
-
-  if (!defined $sh) {
-    carp "Forks::Super::_read_socket: ",
-      "read on undefined filehandle for ",$job->toString(),"\n";
-  }
-
-  # is socket is blocking, then we need to test whether
-  # there is input to be read before we read on the socket
-  if ($sh->blocking() || &IS_WIN32) {
-    my $fileno = fileno($sh);
-    if (not defined $fileno) {
-      $fileno = Forks::Super::Job::Ipc::fileno($sh);
-      Carp::cluck "Cannot determine FILENO for socket handle $sh!";
-    }
-
-    my ($rin,$rout,$ein,$eout);
-    my $timeout = $SOCKET_READ_TIMEOUT || 1.0;
-
-    $rin = '';
-    vec($rin, $fileno, 1) = 1;
-    $ein = $rin;
-
-    # perldoc select: warns against mixing select4
-    # (unbuffered input) with readline (buffered input).
-    # Do I have to do my own buffering? That would be weak.
-    # Or can we declare the socket as unbuffered when
-    # we create it?
-
-    local $! = undef;
-    my ($nfound,$timeleft) = select $rout=$rin,undef,$eout=$ein, $timeout;
-    if (!$nfound) {
-      if ($DEBUG) {
-	debug("no input found on $sh/$fileno");
-      }
-      return;
-    }
-    if ($rin ne $rout) {
-      if ($DEBUG) {
-	debug("No input found on $sh/$fileno");
-      }
-      return;
-    }
-
-    if ($nfound == -1) {
-      warn "Forks::Super:_read_socket: ",
-	"Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
-    }
-  }
-  return readline($sh);
-}
-
-sub _read_socket_XXX {
-  my ($job, $sh, $wantarray) = @_;
-
-  if (!defined $sh) {
-    carp "Forks::Super::_read_socket: ",
-      "read on undefined filehandle for ",$job->toString(),"\n";
-  }
-
-  if ($sh->blocking() || &IS_WIN32) {
-    my $fileno = fileno($sh);
-    if (not defined $fileno) {
-      $fileno = Forks::Super::Job::Ipc::fileno($sh);
-      Carp::cluck "Cannot determine FILENO for socket handle $sh!";
-    }
-
-    my ($rin,$rout,$ein,$eout);
-    my $timeout = $SOCKET_READ_TIMEOUT || 1.0;
-    $rin = '';
-    vec($rin, $fileno, 1) = 1;
-
-    # perldoc select: warns against mixing select4
-    # (unbuffered input) with readline (buffered input).
-    # Do I have to do my own buffering? That would be weak.
-
-    local $! = undef;
-    my ($nfound,$timeleft) = select $rout=$rin,undef,undef, $timeout;
-    if (!$nfound) {
-      if ($DEBUG) {
-	debug("no input found on $sh/$fileno");
-      }
-      return;
-    }
-
-    if ($nfound == -1) {
-      warn "Forks::Super:_read_socket: ",
-	"Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
-    }
-  }
-  return readline($sh);
-}
-
-sub _read_pipe {
-  my ($job, $sh, $wantarray) = @_;
-
-  if (!defined $sh) {
-    carp "Forks::Super::_read_pipe: ",
-      "read on undefined filehandle for ",$job->toString(),"\n";
-  }
-
-  my $fileno = fileno($sh);
-  if (not defined $fileno) {
-    $fileno = Forks::Super::Job::Ipc::fileno($sh);
-    Carp::cluck "Cannot determine FILENO for pipe $sh!";
-  }
-
-  my ($rin,$rout,$ein,$eout);
-  my $timeout = $SOCKET_READ_TIMEOUT || 1.0;
-  $rin = '';
-  vec($rin, $fileno, 1) = 1;
-  local $! = undef;
-  my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
-
-  if ($nfound == 0) {
-    if ($DEBUG) {
-      debug("no input found on $sh/$fileno");
-    }
-    return () if $wantarray;
-    return;
-  }
-  if ($nfound < 0) {
-    # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
-    return () if $wantarray;
-    return;
-  }
-
-  # perldoc select: warns against mixing select4
-  # (unbuffered input) with readline (buffered input).
-  # Do I have to do my own buffering? Eek. Don't look.
-
-  if ($wantarray) {
-    my $input = '';
-
-    while ($nfound) {
-      my $buffer = '';
-      last if 0 == sysread $sh, $buffer, 4096;
-      $input .= $buffer;
-      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
-    }
-
-    my @return = ();
-    while ($input =~ m!$/!) {
-      push @return, substr $input, 0, $+[0];
-      substr($input, 0, $+[0]) = "";
-    }
-    return @return;
-  } else {
-    my $input = '';
-    while ($nfound) {
-      my $buffer = '';
-      last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
-      $input .= $buffer;
-      last if length($/) > 0 && substr($input,-length($/)) eq $/;
-      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
-    }
-    return $input;
-  }
+  return Forks::Super::Job::write_stdin($job, @msg);
 }
 
 #
@@ -433,80 +261,7 @@ sub _read_pipe {
 #
 sub read_stdout {
   my ($job, $block_NOT_IMPLEMENTED) = @_;
-  if (ref $job ne 'Forks::Super::Job') {
-    $job = $ALL_JOBS{$job} || return;
-  }
-  if ($job->{child_stdout_closed}) {
-    if ($job->{debug} && !$job->{_warned_stdout_closed}++) {
-      debug("Forks::Super::read_stdout(): ",
-	    "fh closed for $job->{pid}");
-    }
-    return () if wantarray; 
-    return;
-  }
-  my $fh = $job->{child_stdout};
-  if (not defined $fh) {
-    if ($job->{debug}) {
-      debug("Forks::Super::read_stdout(): ",
-	    "fh unavailable for $job->{pid}");
-    }
-    $job->{child_stdout_closed}++;
-    return () if wantarray;
-    return;
-  }
-  if (is_socket($fh)) {
-    return _read_socket($job, $fh, wantarray);
-  } elsif (is_pipe($fh)) {
-    return _read_pipe($job, $fh, wantarray);
-  }
-
-  local $! = undef;
-  if (wantarray) {
-    my @lines = readline($fh);
-    if (0 == @lines) {
-      if ($job->is_complete
-	  && Forks::Super::Time() - $job->{end} > 3) {
-
-	if ($job->{debug}) {
-	  debug("Forks::Super::read_stdout(): ",
-		"child $job->{pid} is complete. Closing $fh");
-	}
-	$job->{child_stdout_closed}++;
-	close $fh;
-	return ();
-
-      } else {
-
-	@lines = ();
-	seek $fh, 0, 1;
-	Forks::Super::pause();
-      }
-    }
-    return @lines;
-  } else {
-    my $line = readline($fh);
-    if (not defined $line) {
-      if ($job->is_complete
-	  && Forks::Super::Time() - $job->{end} > 3) {
-
-	if ($job->{debug}) {
-	  debug("Forks::Super::read_stdout(): :",
-		"child $job->{pid} is complete. Closing $fh");
-	}
-	$job->{child_stdout_closed}++;
-	close $fh;
-	return;
-
-      } else {
-
-	$line = '';
-	seek $fh, 0, 1;
-	Forks::Super::pause();
-
-      }
-    }
-    return $line;
-  }
+  return Forks::Super::Job::read_stdout($job);
 }
 
 #
@@ -514,85 +269,14 @@ sub read_stdout {
 #
 sub read_stderr {
   my ($job, $block_NOT_IMPLEMENTED) = @_;
-  if (ref $job ne 'Forks::Super::Job') {
-    $job = $ALL_JOBS{$job} || return;
-  }
-  if ($job->{child_stderr_closed}) {
-    if ($job->{debug} && !$job->{_warned_stderr_closed}++) {
-      debug("Forks::Super::read_stderr(): ",
-	    "fh closed for $job->{pid}");
-    }
-    return () if wantarray;
-    return;
-  }
-  my $fh = $job->{child_stderr};
-  if (not defined $fh) {
-    if ($job->{debug}) {
-      debug("Forks::Super::read_stderr(): ",
-	    "fh unavailable for $job->{pid}");
-    }
-    $job->{child_stderr_closed}++;
-    return () if wantarray;
-    return;
-  }
-  if (is_socket($fh)) {
-    return _read_socket($job, $fh, wantarray);
-  } elsif (is_pipe($fh)) {
-    return _read_pipe($job, $fh, wantarray);
-  }
-
-  local $! = undef;
-  if (wantarray) {
-    my @lines = readline($fh);
-    if (0 == @lines) {
-      if ($job->is_complete
-	  && Forks::Super::Time() - $job->{end} > 3) {
-
-	if ($job->{debug}) {
-	  debug("Forks::Super::read_stderr(): ",
-		"child $job->{pid} is complete. Closing $fh");
-	}
-	$job->{child_stderr_closed}++;
-	close $fh;
-	return ();
-
-      } else {
-	@lines = ();
-	seek $fh, 0, 1;
-	Forks::Super::pause();
-      }
-    }
-    return @lines;
-  } else {
-    my $line = readline($fh);
-    if (not defined $line) {
-      if ($job->is_complete
-	  && Forks::Super::Time() - $job->{end} > 3) {
-
-	if ($job->{debug}) {
-	  debug("Forks::Super::read_stderr(): ",
-		"child $job->{pid} is complete. Closing $fh");
-	}
-	$job->{child_stderr_closed}++;
-	close $fh;
-	return;
-
-      } else {
-	$line = '';
-	seek $fh, 0, 1;
-	Forks::Super::pause();
-      }
-    }
-    return $line;
-  }
+  return Forks::Super::Job::read_stderr($job);
 }
 
 sub close_fh {
   my $pid_or_job = shift;
-  if (ref $pid_or_job ne 'Forks::Super::Job') {
-    $pid_or_job = Forks::Super::Job::get($pid_or_job);
+  if (Forks::Super::Job::_resolve($pid_or_job)) {
+    $pid_or_job->close_fh;
   }
-  $pid_or_job->close_fh;
 }
 
 ######################################################################
@@ -740,7 +424,7 @@ sub kill {
   }
 
   if ($run_queue_needed) {
-    Forks::Super::Queue::run_queue();
+    Forks::Super::Queue::check_queue();
   }
   return $num_signalled;
 }
@@ -838,7 +522,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.34
+Version 0.35
 
 =head1 SYNOPSIS
 
@@ -1361,6 +1045,8 @@ are features to control how many, how, and when your jobs will run.
 
 =over 4
 
+=head3 name
+
 =item C<< fork { name => $name } >>
 
 Attaches a string identifier to the job. The identifier can be used
@@ -1601,6 +1287,46 @@ for your signal handlers. Sometimes callbacks are invoked from the
 signal handler, and the processing of other signals could be
 delayed if the callback functions take too long to run.
 
+=head3 suspend
+
+=item C<< fork { suspend => 'subroutineName' } } >>
+
+=item C<< fork { suspend => \&subroutineName } } >>
+
+=item C<< fork { suspend => sub { ... anonymous sub ... } } >>
+
+Registers a callback function that can indicate when a background
+process should be suspended and when it should be resumed.
+The callback function will receive one argument -- the
+L<Forks::Super::Job> object that owns the callback -- and is
+expected to return a numerical value. The callback function
+will be evaluated periodically (for example, during the
+productive downtime of a C<wait>/C<waitpid> call or
+C<Forks::Super::Util::pause()> call).
+
+When the callback function returns a negative value 
+and the process is active, the process will be suspended.
+
+When the callback function returns a positive value
+while the process is suspended, the process will be resumed.
+
+When the callback function returns 0, the job will
+remain in its current state.
+
+    my $pid = fork { exec => "run-the-heater",
+                     suspend => sub {
+                       my $t = get_temperature();
+                       if ($t < 68) {
+                           return +1;  # too cold, make sure heater is on
+                       } elsif ($t > 72) {
+                           return -1;  # too warm, suspend the heater process
+                       } else {
+                           return 0;   # leave it on or off
+                       }
+                    } };
+
+
+
 =item C<< fork { os_priority => $priority } >>
 
 On supported operating systems, and after the successful creation
@@ -1647,8 +1373,9 @@ Whenever some condition exists that prevents a C<fork()> call from
 immediately starting a new child process, an option is to B<defer>
 the job. Deferred jobs are placed on a queue. At periodic intervals,
 in response to periodic events, or whenever you invoke the
-C<Forks::Super::run_queue> method in your code, the queue will be examined
-to see if any deferred jobs are eligible to be launched.
+C<Forks::Super::Queue::check_queue> method in your code, 
+the queue will be examined to see if any deferred jobs are 
+eligible to be launched.
 
 =head3 Job ID
 
@@ -1692,7 +1419,7 @@ eligible jobs. But this configuration does not guarantee
 that the queue will be examined in a timely or frequent
 enough basis. The user may invoke the
 
-    Forks::Super::Queue::run_queue()
+    Forks::Super::Queue:check_queue()
 
 method at any time to force the queue to be examined.
 
@@ -1734,6 +1461,8 @@ call.
 
 =over 4
 
+=head3 wait
+
 =item C<$reaped_pid = wait [$timeout] >
 
 Like the Perl L<< wait|perlfunc/wait >> system call,
@@ -1750,6 +1479,15 @@ timeout expires, then the C<wait> function returns the
 value C<-1.5> (you can also test if the return value of the
 function is the same as C<Forks::Super::TIMEOUT>, which
 is a constant to indicate that a wait call timed out).
+
+If C<wait> (or C<waitpid> or C<waitall>) is called when
+all jobs are either complete or suspended, and there is
+at least one suspended job, then the behavior is
+governed by the setting of the L<<
+$Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS|/"WAIT_ACTION_ON_SUSPENDED_JOBS"
+>> variable.
+
+=head3 waitpid
 
 =item C<$reaped_pid = waitpid $pid, $flags [, $timeout] >
 
@@ -1791,6 +1529,8 @@ process is not reaped in that time.
 
 =cut
 
+=head3 waitall
+
 =item C<$count = waitall [$timeout] >
 
 Blocking wait for all child processes, including deferred
@@ -1801,6 +1541,8 @@ waited on.
 If the optional C<$timeout> argument is supplied, the
 function will block for at most C<$timeout> seconds before
 returning.
+
+=head3 kill
 
 =item C<$num_signalled = Forks::Super::kill $signal, @jobsOrPids>
 
@@ -1836,11 +1578,15 @@ rather than C<Forks::Super::kill>.
     Forks::Super::kill 'STOP', $job;
     Forks::Super::kill 'CONT', $job;
 
+=head3 kill_all
+
 =item C<$num_signalled = Forks::Super::kill_all $signal>
 
 Sends a "signal" (see expanded meaning of "signal" in
 L</"kill">, above). to all relevant processes spawned from the
 C<Forks::Super> module. 
+
+=head3 isValidPid
 
 =item C<Forks::Super::isValidPid( $pid )>
 
@@ -1848,6 +1594,8 @@ Tests whether the return value of a C<fork> call indicates that
 a background process was successfully created or not. On POSIX
 systems it is sufficient to check whether C<$pid> is a
 positive integer, but C<isValidPid> is a more
+
+=head3 pause
 
 =item C<Forks::Super::pause($delay)>
 
@@ -1860,7 +1608,9 @@ and attempt to dispatch jobs on the queue.
 
 On other systems, using C<Forks::Super::pause> is less vulnerable
 than C<sleep> to interruptions from this module (See
-L<"BUGS AND LIMITATIONS"> below).
+L</"BUGS AND LIMITATIONS"> below).
+
+=head3 status
 
 =item C<$status = Forks::Super::status($pid)>
 
@@ -1872,6 +1622,10 @@ status than checking C<$?> after a C<wait> or C<waitpid> call,
 because it is possible for this module's C<SIGCHLD> handler
 to temporarily corrupt the C<$?> value while it is checking
 for deceased processes.
+
+=head3 read_stdout
+
+=head3 read_stderr
 
 =item C<$line = Forks::Super::read_stdout($pid)>
 
@@ -1900,6 +1654,8 @@ put more data on the filehandle, these functions return  ""  in scalar
 and list context. If there is no more data on the filehandle and the
 child process is finished, the functions return C<undef>.
 
+=head3 close_fh
+
 =item C<Forks::Super::close_fh($pid)>
 
 Closes all open file handles and socket handles for interprocess communication
@@ -1908,7 +1664,11 @@ on the number of filehandles that can be opened in a process simultaneously,
 so you should use this function when you are finished communicating with
 a child process so that you don't run into that limit.
 
+=head3 open2
+
 =item C< ($in,$out,$pid,$job) = Forks::Super::open2( @command [, \%options ] )>
+
+=head3 open3
 
 =item C< ($in,$out,$err,$pid,$job) = Forks::Super::open3( @command [, \%options] )>
 
@@ -1947,16 +1707,22 @@ Returns zero of more C<Forks::Super::Job> objects with the specified
 job names. A job receives a name if a C<name> parameter was provided
 in the C<Forks::Super::fork> call.
 
+=head3 state
+
 =item C<$state = Forks::Super::state($pid)>
 
 Returns the state of the job specified by the given process ID,
 job ID, or job name. See L<Forks::Super::Job/"state">.
+
+=head3 status
 
 =item C<$status = Forks::Super::status($pid)>
 
 Returns the exit status of the job specified by the given
 process ID, job ID, or job name. See L<Forks::Super::Job/"status">.
 This value will be undefined until the job is complete.
+
+=head3 bg_eval
 
 =item C<< $reference = bg_eval { BLOCK } >>
 
@@ -2033,6 +1799,8 @@ C<child_fh>.
 
 A call to C<bg_eval> will set the variables C<$Forks::Super::LAST_JOB>
 and C<$Forks::Super::LAST_JOB_ID>. See L</"MODULE VARIABLES"> below.
+
+=head3 bg_qx
 
 =item C<< $reference = bg_qx $command >>
 
@@ -2118,6 +1886,8 @@ Module variables that may be of interest include:
 
 =over 4
 
+=head3 MAX_PROC
+
 =item C<$Forks::Super::MAX_PROC>
 
 The maximum number of simultaneous background processes that can
@@ -2132,6 +1902,8 @@ option is passed to C<fork> with a non-zero value. The value might also
 not be respected if the user supplies a code reference in the
 C<can_launch> option and the user-supplied code does not test
 whether there are already too many active proceeses.
+
+=head3 ON_BUSY
 
 =item C<$Forks::Super::ON_BUSY = 'block' | 'fail' | 'queue'>
 
@@ -2159,6 +1931,8 @@ job ID.
 This value will be ignored in favor of an C<on_busy> option
 supplied to the C<fork> call.
 
+=head3 CHILD_FORK_OK
+
 =item C<$Forks::Super::CHILD_FORK_OK = -1 | 0 | +1>
 
 Spawning a child process from another child process with this
@@ -2177,6 +1951,8 @@ disable the functionality of this module but will
 reenable the classic Perl C<fork()> system call from child
 processes.
 
+=head3 DEBUG
+
 =item C<$Forks::Super::DEBUG, Forks::Super::DEBUG>
 
 To see the internal workings of the C<Forks::Super> module, set
@@ -2187,6 +1963,8 @@ by the module user at any time.
 
 Debugging behavior may be overridden for specific jobs
 if the C<debug> or C<undebug> option is provided to C<fork>.
+
+=head3 %CHILD_STDxxx
 
 =item C<%Forks::Super::CHILD_STDIN>
 
@@ -2224,6 +2002,8 @@ different processes. A scheme like this works on most systems:
         seek $Forks::Super::CHILD_STDOUT{$pid}, 0, 1;
     }
 
+=head3 ALL_JOBS
+
 =item C<@Forks::Super::ALL_JOBS>
 
 =item C<%Forks::Super::ALL_JOBS>
@@ -2233,6 +2013,8 @@ from C<fork()> calls, including deferred and failed jobs.
 Both process IDs and job IDs for jobs that were deferred at
 one time) can be used to look up Job objects in the
 C<%Forks::Super::ALL_JOBS> table.
+
+=head3 QUEUE_INTERRUPT
 
 =item C<$Forks::Super::QUEUE_INTERRUPT>
 
@@ -2250,6 +2032,8 @@ You would only worry about resetting this variable
 if you (including other modules that you import) are
 making use of an existing C<SIGUSR1> handler.
 
+=head3 TIMEOUT
+
 =item C<Forks::Super::TIMEOUT>
 
 A possible return value from C<wait> and C<waitpid>
@@ -2257,6 +2041,8 @@ functions when a timeout argument is supplied.
 The value indicating a timeout should not collide with any other
 possible value from those functions, and should be recognizable
 as not an actual process ID.
+
+=head3 LAST_JOB
 
 =item C<$Forks::Super::LAST_JOB_ID>
 
@@ -2272,6 +2058,40 @@ to query that state of the jobs launched by these functions.
 Some C<bash> users will immediately recognize the parallels
 between these variables and the bash C<$!> variable, which
 captures the process id of the last job to be run in the background.
+
+=head3 WAIT_ACTION_ON_SUSPENDED_JOBS
+
+=item C<$Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS>
+
+Governs the action of a call to C<wait>, C<waitpid>, or
+C<waitall> in the case when all remaining jobs are in the
+C<SUSPENDED> or C<DEFERRED-SUSPENDED> state (see
+L<Forks::Super::Job/"state">). Allowable values for this variable
+are
+
+=over 4
+
+=item C<wait>
+
+Causes the call to C<wait>/C<waitpid> to block indefinitely 
+until those jobs start and one or more of them is completed. 
+In this case it is presumed that the queue monitor is running periodically
+and conditions that allow those jobs to get started will occur.
+This is the default setting for this variable.
+
+=item C<fail>
+
+Causes the C<wait>/C<waitpid> call to return with the special
+(negative) value C<Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT>.
+
+=item C<resume>
+
+Causes one of the suspended jobs to be resumed. It is presumed
+that this job will complete and allow the C<wait>/C<waitpid>
+function to return.
+
+
+=back
 
 =back
 
@@ -2320,7 +2140,7 @@ overloading yet another Perl system call.
 When the package variable C<$Forks::Super::CHILD_FORK_OK> is zero,
 this package does not allow the C<fork()> method to be called from
 a child process. Set
-L<C<< $Forks::Super::CHILD_FORK_OK >>|/"MODULE VARIABLES">
+L<C<< $Forks::Super::CHILD_FORK_OK >>|/"CHILD_FORK_OK">
 to change this behavior.
 
 =item C<quick timeout>
@@ -2461,7 +2281,7 @@ using the C<Forks::Super> module may run normally, but might
 produce a segmentation fault or other error during cleanup.
 This will cause the application to exit with a non-zero exit
 code, even when the code accomplished everything it was 
-supposed to. The cause and solution of these errors is an
+supposed to. The cause and resolution of these errors is an
 area of ongoing research.
 
 =cut
@@ -2489,11 +2309,3 @@ at your option, any later version of Perl 5 you may have available.
 =cut
 
 TODO in future releases: See TODO file.
-
-Undocumented:
-$Forks::Super::Job::self              available in child process. Reference to the job object that launched the process.
-
-$SOCKET_READ_TIMEOUT    in _read_socket, length of time to wait for input on the sockethandle being read
-                                      before returning  undef
-
-fork { retries => $n }                if CORE::fork() fails, retry up to $n times

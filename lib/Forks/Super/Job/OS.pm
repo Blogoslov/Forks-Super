@@ -23,7 +23,7 @@ our $VERSION = $Forks::Super::Util::VERSION;
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
 
-sub preconfig_os {
+sub _preconfig_os {
   my $job = shift;
   if (defined $job->{cpu_affinity}) {
     $job->{cpu_affinity_call} = ++$CPU_AFFINITY_CALLS;
@@ -40,7 +40,7 @@ sub preconfig_os {
 # Should only be run from a child process
 # immediately after the fork.
 #
-sub config_os_child {
+sub Forks::Super::Job::_config_os_child {
   my $job = shift;
 
   if (defined $job->{name}) {
@@ -74,7 +74,7 @@ sub set_os_priority {
   if (&IS_WIN32) {
     if (!CONFIG('Win32::API')) {
       if ($job->{os_priority_call} == 1) {
-	carp "Forks::Super::Job::config_os_child(): ",
+	carp "Forks::Super::Job::_config_os_child(): ",
 	  "cannot set child process priority on MSWin32.\n",
 	  "Install the Win32::API module to enable this feature.\n";
       }
@@ -86,7 +86,7 @@ sub set_os_priority {
   }
 
   if ($job->{os_priority_call} == 1) {
-    carp "Forks::Super::Job::config_os_child(): ",
+    carp "Forks::Super::Job::_config_os_child(): ",
       "failed to set child process priority on $^O\n";
   }
   return;
@@ -97,14 +97,14 @@ sub set_cpu_affinity {
   my $n = $job->{cpu_affinity};
 
   if ($n == 0) {
-    carp "Forks::Super::Job::config_os_child(): ",
+    carp "Forks::Super::Job::_config_os_child(): ",
       "desired cpu affinity set to zero. Is that what you really want?\n";
   }
 
   if (CONFIG('Sys::CpuAffinity')) {
     return Sys::CpuAffinity::setAffinity($$, $n);
   } elsif ($job->{cpu_affinity_call} == 1) {
-    carp_once "Forks::Super::config_os_child(): ",
+    carp_once "Forks::Super::_config_os_child(): ",
       "cannot set child process's cpu affinity.\n",
       "Install the Sys::CpuAffinity module to enable this feature.\n";
   }
@@ -121,7 +121,7 @@ sub validate_cpu_affinity {
     $job->{cpu_affinity} = $bitmask;
   }
   if ($bitmask <= 0) {
-    carp "Forks::Super::Job::config_os_child: ",
+    carp "Forks::Super::Job::_config_os_child: ",
       "desired cpu affinity $bitmask does not specify any of the ",
       "valid $np processors that seem to be available on your system.\n";
     return 0;

@@ -48,8 +48,12 @@ sub run_callback {
   }
 }
 
-sub preconfig_callbacks {
+sub _preconfig_callbacks {
   my $job = shift;
+
+  if (defined $job->{suspend}) {
+    $job->{suspend} = qualify_sub_name $job->{suspend};
+  }
   if (!defined $job->{callback}) {
     return;
   }
@@ -67,7 +71,7 @@ sub preconfig_callbacks {
   }
 }
 
-sub config_callback_child {
+sub Forks::Super::Job::_config_callback_child {
   my $job = shift;
   for my $callback (grep { /^callback/ || /^_callback/ } keys %$job) {
     # this looks odd, but it clears up a SIGSEGV that was happening here

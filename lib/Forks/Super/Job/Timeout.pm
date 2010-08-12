@@ -25,7 +25,7 @@ our ($ORIG_PGRP, $NEW_PGRP, $NEW_SETSID, $NEWNEW_PGRP);
 # to kill the child.
 # Should only run from a child process immediately after the fork.
 #
-sub config_timeout_child {
+sub Forks::Super::Job::_config_timeout_child {
   my $job = shift;
   my $timeout = 9E9;
   if (defined $job->{timeout}) {
@@ -66,7 +66,7 @@ sub config_timeout_child {
     $NEW_SETSID = 0;
     if ($NEW_PGRP ne $ORIG_PGRP) {
       if ($job->{debug}) {
-	debug("Forks::Super::Job::config_timeout_child: ",
+	debug("Forks::Super::Job::_config_timeout_child: ",
 	     "Child process group changed to $job->{pgid}");
       }
     } else {
@@ -74,7 +74,7 @@ sub config_timeout_child {
       $NEW_SETSID = POSIX::setsid();
       $job->{pgid} = $NEW_PGRP = getpgrp(0);
       if ($job->{debug}) {
-	debug("Forks::Super::Job::config_timeout_child: ",
+	debug("Forks::Super::Job::_config_timeout_child: ",
 	       "Child process started new session $NEW_SETSID, ",
 	       "process group $NEW_PGRP");
       }
@@ -85,7 +85,7 @@ sub config_timeout_child {
     if (Forks::Super::_is_test()) {
       die "Forks::Super: quick timeout\n";
     }
-    croak "Forks::Super::Job::config_timeout_child(): quick timeout";
+    croak "Forks::Super::Job::_config_timeout_child(): quick timeout";
   }
 
   $SIG{ALRM} = sub {
@@ -146,7 +146,7 @@ sub config_timeout_child {
   };
   if (Forks::Super::Config::CONFIG('alarm')) {
     alarm $timeout;
-    debug("Forks::Super::Job::config_timeout_child(): ",
+    debug("Forks::Super::Job::_config_timeout_child(): ",
 	  "alarm set for ${timeout}s in child process $$")
       if $job->{debug};
   } else {

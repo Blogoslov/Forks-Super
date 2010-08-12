@@ -24,8 +24,9 @@ use base 'Exporter';
 use strict;
 use warnings;
 
-our @EXPORT = qw(close_fh preconfig_fh config_fh_parent
-		 config_fh_child config_cmd_fh_child);
+#our @EXPORT = qw(close_fh preconfig_fh config_fh_parent
+#		 config_fh_child config_cmd_fh_child);
+our @EXPORT = qw(close_fh);
 our $VERSION = $Forks::Super::Util::VERSION;
 our (%FILENO, %SIG_OLD, $FH_COUNT, $FH_DIR_DEDICATED, @FH_FILES, %FH_FILES);
 our $SIGNALS_TRAPPED = 0;
@@ -93,7 +94,7 @@ sub _safeopen (*$$;$) {
       $$fh->{is_socket} = 0;
       $$fh->{is_pipe} = 0;
       $$fh->{mode} = $mode;
-      $$fh->{expr} = $expr;
+      $$fh->{glob} = "" . *$fh;
       my $fileno = $$fh->{fileno} = CORE::fileno($_[0]);
       $FILENO{$_[0]} = $fileno;
       if ($mode =~ />/) {
@@ -104,11 +105,12 @@ sub _safeopen (*$$;$) {
       #       or pipe, then shouldn't this handle also be a socket?
       if ($mode =~ /&/) {
 
+	$$fh->{dup_glob} = "" . *$expr;
 	$$fh->{dup} = $$expr;
+	$$expr->{duped_by} .= " " . *$fh;
 	$$fh->{is_regular} = $$expr->{is_regular};
 	$$fh->{is_socket} = $$expr->{is_socket};
 	$$fh->{is_pipe} = $$expr->{is_pipe};
-
       }
 
       last;
@@ -131,7 +133,7 @@ sub _safeopen (*$$;$) {
   return $result;
 }
 
-sub preconfig_fh {
+sub Forks::Super::Job::_preconfig_fh {
   my $job = shift;
   
   my $config = {};
@@ -168,7 +170,7 @@ sub preconfig_fh {
 
       if ($] < 5.007) {
 	if ($fh_spec =~ s/socke?t?//i + $fh_spec =~ s/pipe//i) {
-	  carp_once "Forks::Super::preconfig_fh: socket/pipe not allowed on Win32 v<5.7\n";
+	  carp_once "Forks::Super::_preconfig_fh: socket/pipe not allowed on Win32 v<5.7\n";
 	}
       }
     }
@@ -198,7 +200,7 @@ sub preconfig_fh {
 
   if (defined $job->{stdout}) {
     if (ref $job->{stdout} ne 'SCALAR') {
-      carp "Forks::Super::preconfig_fh: ",
+      carp "Forks::Super::_preconfig_fh: ",
 	"'stdout' option must be a SCALAR ref\n";
     } else {
       $config->{stdout} = $job->{stdout};
@@ -208,7 +210,7 @@ sub preconfig_fh {
   }
   if (defined $job->{stderr}) {
     if (ref $job->{stderr} ne 'SCALAR') {
-      carp "Forks::Super::preconfig_fh: ",
+      carp "Forks::Super::_preconfig_fh: ",
 	"'stderr' option must be a SCALAR ref\n";
     } else {
       $config->{stderr} = $job->{stderr};
@@ -227,9 +229,9 @@ sub preconfig_fh {
     if ($config->{stdin}) {
       if (_safeopen my $fh, '>', $config->{f_in}) {
 	print $fh $config->{stdin};
-	close $fh;
+	_close($fh);
       } else {
-	carp "Forks::Super::Job::preconfig_fh: ",
+	carp "Forks::Super::Job::_preconfig_fh: ",
 	  "scalar standard input not available in child: $!\n";
       }
     }
@@ -249,10 +251,10 @@ sub preconfig_fh {
   }
   
   if ($config->{sockets}) {
-    preconfig_fh_sockets($job,$config);
+    _preconfig_fh_sockets($job,$config);
   }
   if ($config->{pipes}) {
-    preconfig_fh_pipes($job,$config);
+    _preconfig_fh_pipes($job,$config);
   }
   
   if (0 < scalar keys %$config) {
@@ -280,7 +282,7 @@ sub collect_output {
       local $/ = undef;
       if (_safeopen my $fh, '<', $fh_config->{f_out}) {
 	($$stdout) = <$fh>;
-	close $fh;
+	_close($fh);
       } else {
 	carp "Forks::Super::Job::Ipc::collect_output(): ",
 	  "Failed to retrieve stdout from child $pid: $!\n";
@@ -301,7 +303,7 @@ sub collect_output {
       local $/ = undef;
       if (_safeopen(my $fh, '<', $fh_config->{f_err})) {
 	$$stderr = '' . <$fh>;
-	close $fh;
+	_close($fh);
       } else {
 	carp "Forks::Super::Job::Ipc::collect_output(): ",
 	  "Failed to retrieve stderr from child $pid: $!\n";
@@ -314,14 +316,14 @@ sub collect_output {
 	    " bytes from stderr into $stderr");
     }
   }
-  $job->close_fh;
+  $job->close_fh('all');
   return;
 }
 
-sub preconfig_fh_sockets {
+sub _preconfig_fh_sockets {
   my ($job,$config) = @_;
   if (!Forks::Super::Config::CONFIG('Socket')) {
-    carp "Forks::Super::Job::preconfig_fh_sockets(): ",
+    carp "Forks::Super::Job::_preconfig_fh_sockets(): ",
       "Socket unavailable. ",
 	"Will try to use regular filehandles for child ipc.\n";
     delete $config->{sockets};
@@ -352,10 +354,10 @@ sub preconfig_fh_sockets {
   }
 }
 
-sub preconfig_fh_pipes {
+sub _preconfig_fh_pipes {
   my ($job,$config) = @_;
   if (!Forks::Super::Config::CONFIG('pipe')) {
-    carp "Forks::Super::Job::preconfig_fh_pipes(): ",
+    carp "Forks::Super::Job::_preconfig_fh_pipes(): ",
       "Pipes unavailable. ",
 	"Will try to use regular filehandles for child ipc.\n";
     delete $config->{pipes};
@@ -418,14 +420,16 @@ sub _create_socket_pair {
   $$s_child->{fileno} = $FILENO{$s_child} = CORE::fileno($s_child);
   $$s_parent->{fileno} = $FILENO{$s_parent} = CORE::fileno($s_parent);
 
-  $$s_child->{is_socket} = $$s_parent->{is_socket} = 1;
-  $$s_child->{is_pipe} = $$s_parent->{is_pipe} = 0;
+  $$s_child->{glob}       = "" . *$s_child;
+  $$s_parent->{glob}      = "" . *$s_parent;
+  $$s_child->{is_socket}  = $$s_parent->{is_socket}  = 1;
+  $$s_child->{is_pipe}    = $$s_parent->{is_pipe}    = 0;
   $$s_child->{is_regular} = $$s_parent->{is_regular} = 0;
-  $$s_child->{is_child} = $$s_parent->{is_parent} = 1;
-  $$s_child->{is_parent} = $$s_parent->{is_child} = 0;
-  $$s_child->{opened} = $$s_parent->{opened} = Time::HiRes::gettimeofday();
-  my ($pkg,$file,$line) = caller(2);
-  $$s_child->{caller} = $$s_parent->{caller} = "$pkg;$file:$line";
+  $$s_child->{is_child}   = $$s_parent->{is_parent}  = 1;
+  $$s_child->{is_parent}  = $$s_parent->{is_child}   = 0;
+  $$s_child->{opened}     = $$s_parent->{opened}     = Time::HiRes::gettimeofday();
+  my ($pkg,$file,$line)   = caller(2);
+  $$s_child->{caller}     = $$s_parent->{caller}     = "$pkg;$file:$line";
 
   return ($s_child,$s_parent);
 }
@@ -674,12 +678,13 @@ sub END_cleanup {
   }
 
   foreach my $job (@Forks::Super::ALL_JOBS) {
-    $job->close_fh();
+    $job->close_fh('all');
   }
   foreach my $fh (values %Forks::Super::CHILD_STDIN,
 		  values %Forks::Super::CHILD_STDOUT,
 		  values %Forks::Super::CHILD_STDERR) {
-    $__OPEN_FH -= close $fh;
+    _close($fh);
+    # $__OPEN_FH -= close $fh;
   }
 
   # daemonize is there is anything to clean up
@@ -791,10 +796,11 @@ sub END_cleanup_MSWin32 {
   return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
   return if $_CLEANUP++;  
 
-  $_->close_fh foreach @Forks::Super::ALL_JOBS;
-  $__OPEN_FH -= close $_ for (values %Forks::Super::CHILD_STDIN, 
-			      values %Forks::Super::CHILD_STDOUT,
-			      values %Forks::Super::CHILD_STDERR);
+  $_->close_fh('all') foreach @Forks::Super::ALL_JOBS;
+  #$__OPEN_FH -= close $_ for (values %Forks::Super::CHILD_STDIN, 
+  _close($_) for (values %Forks::Super::CHILD_STDIN, 
+		  values %Forks::Super::CHILD_STDOUT,
+		  values %Forks::Super::CHILD_STDERR);
 
   my @G = grep { -e $_ } keys %FH_FILES;
   FILE_TRY: for my $try (1 .. 3) {
@@ -831,7 +837,7 @@ sub END_cleanup_MSWin32 {
   return;
 }
 
-sub config_fh_parent_stdin {
+sub _config_fh_parent_stdin {
   my $job = shift;
   my $fh_config = $job->{fh_config};
   return if defined $fh_config->{stdin}; # took care of this in preconfig_fh
@@ -892,7 +898,7 @@ sub config_fh_parent_stdin {
   return;
 }
 
-sub config_fh_parent_stdout {
+sub _config_fh_parent_stdout {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
@@ -966,7 +972,7 @@ sub config_fh_parent_stdout {
   return;
 }
 
-sub config_fh_parent_stderr {
+sub _config_fh_parent_stderr {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
@@ -1040,7 +1046,7 @@ sub config_fh_parent_stderr {
 # to be used by the parent. Presumably the child process is opening
 # the same files at about the same time.
 #
-sub config_fh_parent {
+sub Forks::Super::Job::_config_fh_parent {
   my $job = shift;
   return if not defined $job->{fh_config};
 
@@ -1048,9 +1054,9 @@ sub config_fh_parent {
   my $fh_config = $job->{fh_config};
 
   # set up stdin first.
-  config_fh_parent_stdin($job);
-  config_fh_parent_stdout($job);
-  config_fh_parent_stderr($job);
+  _config_fh_parent_stdin($job);
+  _config_fh_parent_stdout($job);
+  _config_fh_parent_stderr($job);
   if ($job->{fh_config}->{sockets}) {
     my $s1 = $job->{fh_config}->{csock};
     my $s2 = $job->{fh_config}->{csock2};
@@ -1060,7 +1066,8 @@ sub config_fh_parent {
   if ($job->{fh_config}->{pipes}) {
     foreach my $pipeattr (qw(p_in p_to_out p_to_err)) {
       if (defined $job->{fh_config}->{$pipeattr}) {
-	$__OPEN_FH -= close $job->{fh_config}->{$pipeattr};
+	_close( $job->{fh_config}->{$pipeattr} );
+	# $__OPEN_FH -= close $job->{fh_config}->{$pipeattr};
 	delete $job->{fh_config}->{$pipeattr};
       }
     }
@@ -1069,7 +1076,7 @@ sub config_fh_parent {
   return;
 }
 
-sub config_fh_child_stdin {
+sub _config_fh_child_stdin {
   my $job = shift;
   local $! = undef;
   my $fh_config = $job->{fh_config};
@@ -1082,28 +1089,28 @@ sub config_fh_child_stdin {
 
     my $fh;
     if (!(_safeopen($fh, '<', $fh_config->{f_in}))) {
-      carp "Forks::Super::Job::Ipc::config_fh_child_stdin(): ",
+      carp "Forks::Super::Job::Ipc::_config_fh_child_stdin(): ",
 	"Error initializing scalar STDIN in child $$: $!\n";
     } elsif (!(_safeopen(*STDIN, '<&', $fh))) {
-      carp "Forks::Super::Job::Ipc::config_fh_child_stdin(): ",
+      carp "Forks::Super::Job::Ipc::_config_fh_child_stdin(): ",
 	"Error initializing scalar STDIN in child $$: $!\n";
     }
 
   } elsif ($fh_config->{sockets} && !defined $fh_config->{stdin}) {
     close STDIN;
     if (!(_safeopen( *STDIN, '<&', $fh_config->{csock}))) {
-      warn "Forks::Super::Job::config_fh_child_stdin(): ",
+      warn "Forks::Super::Job::_config_fh_child_stdin(): ",
 	"could not attach child STDIN to input sockethandle: $!\n";
     }
-    debug("Opening ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
+    debug("Opening socket ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
       if $job->{debug};
   } elsif ($fh_config->{pipes} && !defined $fh_config->{stdin}) {
     close STDIN;
     if (!(_safeopen(*STDIN, '<&', $fh_config->{p_in}))) {
-      warn "Forks::Super::Job::config_fh_child_stdin(): ",
+      warn "Forks::Super::Job::_config_fh_child_stdin(): ",
 	"could not attach child STDIN to input pipe: $!\n";
     }
-    debug("Opening ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
+    debug("Opening pipe ",*STDIN,"/",CORE::fileno(STDIN), " in child STDIN")
       if $job->{debug};
   } elsif ($fh_config->{f_in}) {
     # creation of $fh_config->{f_in} may be delayed.
@@ -1135,7 +1142,7 @@ sub config_fh_child_stdin {
   return;
 }
 
-sub config_fh_child_stdout {
+sub _config_fh_child_stdout {
   my $job = shift;
   local $! = undef;
   my $fh_config = $job->{fh_config};
@@ -1144,7 +1151,7 @@ sub config_fh_child_stdout {
   if ($fh_config->{sockets}) {
     close STDOUT;
     _safeopen(*STDOUT, '>&', $fh_config->{csock})
-      or warn "Forks::Super::Job::config_fh_child_stdout(): ",
+      or warn "Forks::Super::Job::_config_fh_child_stdout(): ",
 	"could not attach child STDOUT to output sockethandle: $!\n";
 
     debug("Opening ",*STDOUT,"/",CORE::fileno(STDOUT)," in child STDOUT")
@@ -1154,7 +1161,7 @@ sub config_fh_child_stdout {
       delete $fh_config->{err};
       close STDERR;
       _safeopen(*STDERR, ">&", $fh_config->{csock})
-        or warn "Forks::Super::Job::config_fh_child_stdout(): ",
+        or warn "Forks::Super::Job::_config_fh_child_stdout(): ",
           "could not join child STDERR to STDOUT sockethandle: $!\n";
 
       debug("Joining ",*STDERR,"/",CORE::fileno(STDERR),
@@ -1164,7 +1171,7 @@ sub config_fh_child_stdout {
   } elsif ($fh_config->{pipes}) {
     close STDOUT;
     _safeopen(*STDOUT, ">&", $fh_config->{p_to_out})
-      or warn "Forks::Super::Job::config_fh_child_stdout(): ",
+      or warn "Forks::Super::Job::_config_fh_child_stdout(): ",
 	"could not attach child STDOUT to output pipe: $!\n";
     select STDOUT;
     debug("Opening ",*STDOUT,"/",CORE::fileno(STDOUT)," in child STDOUT")
@@ -1174,7 +1181,7 @@ sub config_fh_child_stdout {
       delete $fh_config->{err};
       close STDERR;
       _safeopen(*STDERR, ">&", $fh_config->{p_to_out})
-	or warn "Forks::Super::Job::config_fh_child_stdout(): ",
+	or warn "Forks::Super::Job::_config_fh_child_stdout(): ",
 	  "could not join child STDERR to STDOUT sockethandle: $!\n";
     }
 
@@ -1207,7 +1214,7 @@ sub config_fh_child_stdout {
   return;
 }
 
-sub config_fh_child_stderr {
+sub _config_fh_child_stderr {
   my $job = shift;
   my $fh_config = $job->{fh_config};
   return unless $fh_config->{err};
@@ -1219,7 +1226,7 @@ sub config_fh_child_stderr {
       debug("Opening ",*STDERR,"/",CORE::fileno(STDERR),
 	    " in child STDERR") if $job->{debug};
     } else {
-      warn "Forks::Super::Job::config_fh_child_stderr(): ",
+      warn "Forks::Super::Job::_config_fh_child_stderr(): ",
 	"could not attach STDERR to child error sockethandle: $!\n";
     }
   } elsif ($fh_config->{pipes}) {
@@ -1228,7 +1235,7 @@ sub config_fh_child_stderr {
       debug("Opening ",*STDERR,"/",CORE::fileno(STDERR),
 	    " in child STDERR") if $job->{debug};
     } else {
-      warn "Forks::Super::Job::config_fh_child_stderr(): ",
+      warn "Forks::Super::Job::_config_fh_child_stderr(): ",
 	"could not attach STDERR to child error pipe: $!\n";
     }
   } elsif ($fh_config->{f_err}) {
@@ -1238,10 +1245,10 @@ sub config_fh_child_stderr {
     if (_safeopen($fh, '>', $fh_config->{f_err})) {
       close STDERR if &IS_WIN32;
       _safeopen(*STDERR, '>&', $fh)
-	or warn "Forks::Super::Job::config_fh_child_stderr(): ",
+	or warn "Forks::Super::Job::_config_fh_child_stderr(): ",
 	  "could not attach STDERR to child error filehandle: $!\n";
     } else {
-      warn "Forks::Super::Job::config_fh_child_stderr(): ",
+      warn "Forks::Super::Job::_config_fh_child_stderr(): ",
 	"could not open filehandle to provide child STDERR: $!\n";
     }
   } else {
@@ -1256,32 +1263,35 @@ sub config_fh_child_stderr {
 # have access to, and assign them to the local STDIN, STDOUT,
 # and STDERR filehandles.
 #
-sub config_fh_child {
+sub Forks::Super::Job::_config_fh_child {
   my $job = shift;
   return if not defined $job->{fh_config};
   if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
     if (&IS_WIN32) {
-      return config_cmd_fh_child($job);
+      return _config_cmd_fh_child($job);
     }
   }
 
-  config_fh_child_stdout($job);
-  config_fh_child_stderr($job);
-  config_fh_child_stdin($job);
+  _config_fh_child_stdout($job);
+  _config_fh_child_stderr($job);
+  _config_fh_child_stdin($job);
   if ($job->{fh_config} && $job->{fh_config}->{sockets}) {
     my $s1 = $job->{fh_config}->{psock};
     my $s2 = $job->{fh_config}->{psock2};
     if (defined $s1) {
-      $__OPEN_FH -= close $s1;
+      _close($s1);
+      # $__OPEN_FH -= close $s1;
     }
     if (defined $s2) {
-      $__OPEN_FH -= close $s2;
+      _close($s2);
+      # $__OPEN_FH -= close $s2;
     }
   }
   if ($job->{fh_config} && $job->{fh_config}->{pipes}) {
     foreach my $pipeattr (qw(p_to_in p_out p_err)) {
       if (defined $job->{fh_config}->{$pipeattr}) {
-	$__OPEN_FH -= close $job->{fh_config}->{$pipeattr};
+	_close( $job->{fh_config}->{$pipeattr} );
+	# $__OPEN_FH -= close $job->{fh_config}->{$pipeattr};
       }
     }
   }
@@ -1313,7 +1323,7 @@ sub _collapse_command {
 }
 
 # MSWin32 has trouble using the open '>&' and open '<&' syntax.
-sub config_cmd_fh_child {
+sub _config_cmd_fh_child {
   my $job = shift;
   my $fh_config = $job->{fh_config};
   my $cmd_or_exec = $job->{exec} ? 'exec' : 'cmd';
@@ -1349,7 +1359,7 @@ sub config_cmd_fh_child {
       my $fhx;
       if (_safeopen($fhx, '>', $fh_config->{f_in})) {
 	print $fhx $fh_config->{stdin};
-	close $fhx;
+	_close($fhx);
 	if ($job->{debug}) {
 	  debug("Wrote ", length($fh_config->{stdin}), " bytes to ",
 		$fh_config->{f_in}, " as standard input to new job");
@@ -1388,43 +1398,59 @@ sub _close {
   no warnings;
   return 0 if !defined $handle;
   return 0 if $$handle->{closed};
+  if (!defined $$handle->{opened}) {
+    if (1 || $DEBUG) {
+      Carp::cluck "Forks::Super::Job::Ipc::_close ",
+	  "called on unrecognized filehandle $handle\n";
+    }
+  }
+
+  if (is_socket($handle)) {
+    return _close_socket($handle,0) + _close_socket($handle,1);
+    #my $z = close $handle;
+    #$__OPEN_FH-- if $z;
+    #return $z;
+  }
   $$handle->{closed} ||= Time::HiRes::gettimeofday();
   $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
-  if (is_socket($handle)) {
-    my $z = close $handle;
-    $__OPEN_FH-- if $z;
-    return $z;
-  } else {
-    my $z = close $handle;
-    $__OPEN_FH-- if $z;
+  my $z = close $handle;
+  $__OPEN_FH-- if $z;
+  return $z;
+}
+
+# close down one-half of a socket. If the other half is already closed,
+# then call close on the socket.
+sub _close_socket {
+  my ($handle, $is_write) = @_;
+  no warnings;
+  return 0 if !defined $handle;
+  return 0 if $$handle->{closed};
+  return 0 if $$handle->{shutdown} >= 3;
+
+  $is_write++;    #  0 => 1, 1 => 2, 2 => 3
+  if (0 == ($$handle->{shutdown} & $is_write)) {
+    my $z = $$handle->{shutdown} |= $is_write;
+    if ($$handle->{shutdown} >= 3) {
+      $$handle->{closed} ||= Time::HiRes::gettimeofday();
+      $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
+      $z = close $handle;
+      $__OPEN_FH--;
+    }
     return $z;
   }
 }
 
-sub close_fh {
+sub _close_fh_stdin {
   my $job = shift;
   if (defined $job->{child_stdin} && !defined $job->{child_stdin_closed}) {
-    if (_close $job->{child_stdin}) {
-      $__OPEN_FH -= $job->{child_stdin_closed} = 1;
-      debug("closed child stdin for $job->{pid}") if $job->{debug};
-    }
-  }
-  if (defined $job->{child_stdout} && !defined $job->{child_stdout_closed}) {
-    if (_close $job->{child_stdout}) {
-      $__OPEN_FH -= $job->{child_stdout_closed} = 1;
-      debug("closed child stdout for $job->{pid}") if $job->{debug};
-    }
-    if ($job->{fh_config}->{join}) {
-      if (_close($job->{child_stderr}) || $job->{child_stdout_closed}) {
-	$__OPEN_FH -= $job->{child_stderr_closed} = 1;
-	debug("closed joined child stderr for $job->{pid}") if $job->{debug};
+    if (is_socket($job->{child_stdin})) {
+      if (_close_socket($job->{child_stdin}, 1)) {
+	$job->{child_stdin_closed} = 1;
+	debug("closed child stdin for $job->{pid}") if $job->{debug};
       }
-    }
-  }
-  if (defined $job->{child_stderr} && !defined $job->{child_stderr_closed}) {
-    if (_close $job->{child_stderr}) {
-      $__OPEN_FH -= $job->{child_stderr_closed} = 1;
-      debug("closed child stderr for $job->{pid}") if $job->{debug};
+    } elsif (_close($job->{child_stdin})) {
+      $job->{child_stdin_closed} = 1;
+      debug("closed child stdin for $job->{pid}") if $job->{debug};
     }
   }
   foreach my $p ($job->{real_pid}, $job->{pid}, $job->{name}) {
@@ -1432,14 +1458,311 @@ sub close_fh {
     if (defined $Forks::Super::CHILD_STDIN{$p}) {
       delete $Forks::Super::CHILD_STDIN{$p}
     }
-    if (defined $Forks::Super::CHILD_STDOUT{$p}) {
-      delete $Forks::Super::CHILD_STDOUT{$p}
+  }
+}
+
+sub _close_fh_stdout {
+  my $job = shift;
+  if (defined $job->{child_stdout} && !defined $job->{child_stdout_closed}) {
+    if (is_socket($job->{child_stdout})) {
+      if (_close_socket($job->{child_stdout}, 0)) {
+	$job->{child_stdout_closed} = 1;
+	debug("closed child stdout for $job->{pid}") if $job->{debug};
+      }
+    } elsif (_close($job->{child_stdout})) {
+      $job->{child_stdout_closed} = 1;
+      debug("closed child stdout for $job->{pid}") if $job->{debug};
     }
+    if ($job->{fh_config}->{join}) {
+      $job->{child_stderr_closed} = $job->{child_stdout_closed};
+      debug("closed joined child stderr for $job->{pid}") if $job->{debug};
+    }
+  }
+  foreach my $p ($job->{real_pid}, $job->{pid}, $job->{name}) {
+    next if !defined $p;
+    if (defined $Forks::Super::CHILD_STDOUT{$p}) {
+      delete $Forks::Super::CHILD_STDOUT{$p};
+      if ($job->{fh_config}->{join} &&
+	      defined $Forks::Super::CHILD_STDERR{$p}) {
+	delete $Forks::Super::CHILD_STDERR{$p};
+      }
+    }
+  }
+}
+
+sub _close_fh_stderr {
+  my $job = shift;
+  if (defined $job->{child_stderr} && !defined $job->{child_stderr_closed}) {
+    if (is_socket($job->{child_stderr})) {
+      if (_close_socket($job->{child_stderr}, 0)) {
+	$job->{child_stderr_closed} = 1;
+	debug("closed child stderr for $job->{pid}") if $job->{debug};
+      }
+    } elsif (_close($job->{child_stderr})) {
+      $job->{child_stderr_closed} = 1;
+      debug("closed child stderr for $job->{pid}") if $job->{debug};
+    }
+  }
+  foreach my $p ($job->{real_pid}, $job->{pid}, $job->{name}) {
+    next if !defined $p;
     if (defined $Forks::Super::CHILD_STDERR{$p}) {
       delete $Forks::Super::CHILD_STDERR{$p}
     }
   }
 }
+
+sub close_fh {
+  my ($job,@modes) = @_;
+  local $" = " ";
+  my $modes = "@modes" || "all";
+  $modes =~ s/all/stdin stdout stderr/i;
+
+  _close_fh_stdin($job) if $modes =~ /stdin/i;
+  _close_fh_stdout($job) if $modes =~ /stdout/i;
+  _close_fh_stderr($job) if $modes =~ /stderr/i;
+  return;
+}
+
+sub Forks::Super::Job::write_stdin {
+  my ($job, @msg) = @_;
+  Forks::Super::Job::_resolve($job);
+  my $fh = $job->{child_stdin};
+  if (defined $fh) {
+    if ($job->{child_stdin_closed}) {
+      carp "Forks::Super::Job::write_stdin: ",
+	"write on closed stdin handle for job $job->{pid}\n";
+    } else {
+      local $!;
+      my $z = print $fh @msg;
+      if ($!) {
+	carp "Forks::Super::Job::write_stdin: ",
+	  "warning on write to job $job->{pid} stdin: $!\n";
+      }
+      return $z;
+    }
+  } else {
+    carp "Forks::Super::Job::write_stdin: ",
+      "stdin handle for job $job->{pid} was not configured\n";
+  }
+}
+
+sub _read_socket {
+  my ($sh, $job, $wantarray) = @_;
+
+  if (!defined $sh) {
+    carp "Forks::Super::_read_socket: ",
+      "read on undefined filehandle for ",$job->toString(),"\n";
+  }
+
+  # is socket is blocking, then we need to test whether
+  # there is input to be read before we read on the socket
+  if ($sh->blocking() || &IS_WIN32) {
+    my $fileno = fileno($sh);
+    if (not defined $fileno) {
+      $fileno = Forks::Super::Job::Ipc::fileno($sh);
+      Carp::cluck "Cannot determine FILENO for socket handle $sh!";
+    }
+
+    my ($rin,$rout,$ein,$eout);
+    my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+
+    $rin = '';
+    vec($rin, $fileno, 1) = 1;
+    $ein = $rin;
+
+    # perldoc select: warns against mixing select4
+    # (unbuffered input) with readline (buffered input).
+    # Do I have to do my own buffering? That would be weak.
+    # Or can we declare the socket as unbuffered when
+    # we create it?
+
+    local $! = undef;
+    my ($nfound,$timeleft) = select $rout=$rin,undef,$eout=$ein, $timeout;
+    if (!$nfound) {
+      if ($DEBUG) {
+	debug("no input found on $sh/$fileno");
+      }
+      return;
+    }
+    if ($rin ne $rout) {
+      if ($DEBUG) {
+	debug("No input found on $sh/$fileno");
+      }
+      return;
+    }
+
+    if ($nfound == -1) {
+      warn "Forks::Super:_read_socket: ",
+	"Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
+    }
+  }
+  return readline($sh);
+}
+
+sub _read_pipe {
+  my ($sh, $job, $wantarray) = @_;
+
+  if (!defined $sh) {
+    carp "Forks::Super::_read_pipe: ",
+      "read on undefined filehandle for ",$job->toString(),"\n";
+  }
+
+  my $fileno = fileno($sh);
+  if (not defined $fileno) {
+    $fileno = Forks::Super::Job::Ipc::fileno($sh);
+    Carp::cluck "Cannot determine FILENO for pipe $sh!";
+  }
+
+  my ($rin,$rout,$ein,$eout);
+  my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+  $rin = '';
+  vec($rin, $fileno, 1) = 1;
+  local $! = undef;
+  my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+
+  if ($nfound == 0) {
+    if ($DEBUG) {
+      debug("no input found on $sh/$fileno");
+    }
+    return () if $wantarray;
+    return;
+  }
+  if ($nfound < 0) {
+    # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
+    return () if $wantarray;
+    return;
+  }
+
+  # perldoc select: warns against mixing select4
+  # (unbuffered input) with readline (buffered input).
+  # Do I have to do my own buffering? Eek. Don't look.
+
+  if ($wantarray) {
+    my $input = '';
+
+    while ($nfound) {
+      my $buffer = '';
+      last if 0 == sysread $sh, $buffer, 4096;
+      $input .= $buffer;
+      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+    }
+
+    my @return = ();
+    while ($input =~ m!$/!) {
+      push @return, substr $input, 0, $+[0];
+      substr($input, 0, $+[0]) = "";
+    }
+    return @return;
+  } else {
+    my $input = '';
+    while ($nfound) {
+      my $buffer = '';
+      last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
+      $input .= $buffer;
+      last if length($/) > 0 && substr($input,-length($/)) eq $/;
+      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+    }
+    return $input;
+  }
+}
+
+sub Forks::Super::Job::read_stdout {
+  my ($job) = @_;  # my ($job, @options) = @_;
+  Forks::Super::Job::_resolve($job);
+  return _readline($job->{child_stdout}, $job, wantarray);
+}
+
+sub Forks::Super::Job::read_stderr {
+  my ($job) = @_;  # my ($job, @options) = @_;
+  Forks::Super::Job::_resolve($job);
+  return _readline($job->{child_stderr}, $job, wantarray);
+}
+
+#
+# called from the parent process,
+# attempts to read a line from standard output filehandle
+# of the specified child.
+#
+# returns "" if the process is running but there is no
+# output waiting on the filehandle
+#
+# returns undef if the process has completed and there is
+# no output waiting on the filehandle
+#
+# performs trivial seek on filehandle before reading.
+# this will reduce performance but will always clear
+# error condition and eof condition on handle
+#
+sub _readline {
+  my ($fh,$job,$wantarray) = @_;  # my ($fh, $job, $wantarray, @options) = @_;
+  if (!defined $fh) {
+    if ($job->{debug}) {
+      carp "Forks::Super::_readline(): ",
+	"read on unconfigured handle for job $job->{pid}\n";
+    }
+    return;
+  }
+  if ($$fh->{closed}) {
+    carp_once "Forks::Super::_readline(): ",
+      "read on closed handle for job $job->{pid}\n";
+    return;
+  }
+
+  if ($$fh->{is_socket}) {
+    return _read_socket(@_);
+  } elsif ($$fh->{is_pipe}) {
+    return _read_pipe(@_);
+  }
+
+  local $! = undef;
+  if ($wantarray) {
+    my @lines = readline($fh);
+    if (0 == @lines) {
+      if ($job->is_complete && Forks::Super::Util::Time() - $job->{end} > 3) {
+	if ($job->{debug}) {
+	  debug("Forks::Super::_readline(): ",
+		"job $job->{pid} is complete. Closing $fh");
+	  if ($fh eq $job->{child_stdout}) {
+	    $job->{child_stdout_closed}++;
+	  }
+	  if ($fh eq $job->{child_stderr}) {
+	    $job->{child_stderr_closed}++;
+	  }
+	  _close($fh);
+	  return ();
+	}
+      } else {
+	@lines = ();
+	seek $fh, 0, 1;
+	Forks::Super::pause();
+      }
+    }
+    return @lines;
+  } else {   # !$wantarray
+    my $line = readline($fh);
+    if (!defined $line) {
+      if ($job->is_complete && Forks::Super::Util::Time() - $job->{end} > 3) {
+	debug("Forks::Super::_readline(): ",
+	      "job $job->{pid} is complete. Closing $fh");
+	if ($fh eq $job->{child_stdout}) {
+	  $job->{child_stdout_closed} = 1;
+	}
+	if ($fh eq $job->{child_stderr}) {
+	  $job->{child_stderr_closed} = 1;
+	}
+	_close($fh);
+	return;
+      } else {
+	$line = '';
+	seek $fh, 0, 1;
+	Forks::Super::pause();
+      }
+    }
+    return $line;
+  }
+}
+
+
 
 sub init_child {
   $FH_DIR_DEDICATED = 0;

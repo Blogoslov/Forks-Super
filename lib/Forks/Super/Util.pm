@@ -14,10 +14,9 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.34';
+our $VERSION = '0.35';
 our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name 
-		    is_socket is_pipe
-		    IS_WIN32 IS_CYGWIN);
+		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK, IS_OS => [ qw(IS_WIN32 IS_CYGWIN) ]);
 
 our $DEFAULT_PAUSE = 0.10;
@@ -176,6 +175,10 @@ sub _load_signal_data {
   @SIG_NAME = split / /, $Config{sig_name};
   my $i = 0;
   %SIG_NO = map { $_ => $i++ } @SIG_NAME;
+}
+
+sub _has_POSIX_signal_framework {
+  return !&IS_WIN32; # XXX - incomplete, but covers the most important case
 }
 
 sub is_socket {

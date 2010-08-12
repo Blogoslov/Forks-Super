@@ -8,6 +8,7 @@ our $VERSION = '0.96';
 eval { bootstrap Sys::CpuAffinity $VERSION };
 
 sub import {
+  #reserved for future use
 }
 
 sub _maskToArray {

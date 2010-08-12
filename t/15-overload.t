@@ -1,5 +1,5 @@
 use Forks::Super ':test', 'overload';
-use Test::More tests => 45;
+use Test::More tests => 46;
 use strict;
 use warnings;
 
@@ -99,6 +99,8 @@ ok(!$@ && defined($state), "->state() method");
 
 my $pid2 = waitpid $job_pid, 0;
 ok($pid2 == $pid, "waitpid on job object ok");
+ok(ref $pid2 eq 'Forks::Super::Job',
+   "waitpid return value is also overloaded");
 
 my $status = eval { $job_pid->status };
 ok(!$@ && $status eq "0", "->status() method");
