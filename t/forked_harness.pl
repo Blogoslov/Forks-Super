@@ -1,20 +1,31 @@
 ##! /usr/bin/perl -w
 # forked_harness.pl [options] tests
 #
-# Forks::Super proof-of-concept to run unit tests in parallel
+# Forks::Super proof-of-concept to run unit tests in parallel.
 #
 # good for
 #     fast testing
 #       * if you have lots of tests and your framework is mature
 #         enough that you expect the vast majority to pass
 #       * if you have an intermittent failure and you might
-#         need to run a test several times to reproduce
-#         the problem
+#         need to run a test many many times to reproduce
+#         a problem
 #     stress testing
 #       * run your tests under a heavier CPU load
-#       * can expose issues caused by multiple instances of
-#         your script running at once
+#       * expose issues caused by multiple instances of
+#         a test script running at once
 #
+# The Makefile for the Forks::Super module includes additional targets:
+#
+#     # fasttest -- run all tests once, in "parallel" (using
+#     #    Forks::Super to manage and throttle the tests)
+#     fasttest :: pm_to_blib
+#           $(PERLRUN) t/forked_harness.pl $(TEST_FILES) -h
+#
+#     # stresstest -- run all tests 100 times, in parallel
+#     stresstest :: pm_to_blib
+#           $(PERLRUN) t/forked_harness.pl $(TEST_FILES) -r 20 -x 5 -s -q
+
 # options:
 #
 #  --harness|-h:         wrap tests in the ExtUtils::Command::MM::test_harness
@@ -34,6 +45,7 @@
 #  --debug|-d:           produce output about what forked_harness.pl is doing
 #  --abort-on-fail|-a:   stop after the first test failure
 #  --grep pattern:       grab test output matching <pattern>, print all at end
+
 
 use lib qw(blib/lib);
 use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
@@ -172,6 +184,8 @@ if (scalar keys %fail > 0) {
   print "================\n";
 }
 
+# handle some signals that might be generated in a test or by the
+# operating system if this script tries to do too much
 sub handle_SIG {
   use Carp;
   my $name = shift;
@@ -318,17 +332,19 @@ sub process {
   my $count = $j{"$pp:count"};
   my $iter = $j{"$test_file:iteration"};
   my $dashes = "-" x (40 + length($test_file));
-    
+
   # print "\n$dashes\n";
-  print "------------------- $test_file -------------------\n";
+  if ($quiet == 0 || $status > 0) {
+    print "------------------- $test_file -------------------\n";
+  }
   print "|= TEST=$iter.$count/$repeat.$ntests; ",
     "STATUS[$test_file]: $status \[ $total_status + $::fail35584 \] ",
     "TIME=$test_time\n";
 
   if ($status > 0 || $quiet == 0) {
     print map{"|- $_"}@stdout;
-    print "$dashes\n";
-    print map{"|- $_"}@stderr;
+    print "|= $dashes\n";
+    print map{"|: $_"}@stderr;
   }
 
   my @s = @stdout;
@@ -338,7 +354,7 @@ sub process {
       $fail{$test_file}{$1}++;
       $not_ok++;
     }
-    if ($s =~ /Failed tests:\s+(.+)/  # ExtUtils::Command::MM::test_harness
+    if ($s =~ /Failed tests?:\s+(.+)/  # ExtUtils::Command::MM::test_harness
        || $s =~ /DIED. FAILED tests (.+)/) {
       my @failed_tests = split /\s*,\s*/, $1;
       foreach my $failed_test (@failed_tests) {

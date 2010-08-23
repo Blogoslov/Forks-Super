@@ -22,7 +22,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.35';
+our $VERSION = '0.36';
 our ($WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
 enable_overload() if $ENV{"FORKS_SUPER_JOB_OVERLOAD"};
@@ -302,6 +302,11 @@ sub launch {
   if ($job->is_started) {
     Carp::confess "Forks::Super::Job::launch() ",
 	"called on a job in state $job->{state}!\n";
+  }
+
+  if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK > 0) {
+    $Forks::Super::MAIN_PID = $$;
+    $Forks::Super::CHILD_FORK_OK--;
   }
 
   if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK < 1) {
@@ -922,7 +927,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.35
+0.36
 
 =head1 SYNOPSIS
 

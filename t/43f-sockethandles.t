@@ -86,7 +86,6 @@ my $msg = sprintf "%x", rand() * 99999999;
 #my $z = print $fh_in "$msg\n";
 my $z = $pid->write_stdin("$msg\n");
 $pid->close_fh('stdin');
-# shutdown($fh_in, 1) || close $fh_in;
 ok($z > 0, "print to child stdin successful");
 my $t = time;
 #my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
@@ -100,8 +99,6 @@ while (time < $t+10) {
 						 scalar @err) }
   sleep 1;
 }
-#shutdown($fh_out, 2) || close $fh_out;
-#shutdown($fh_err, 2) || close $fh_err;
 $pid->close_fh('stdout','stderr');
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");

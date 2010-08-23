@@ -1,8 +1,5 @@
-use lib q(lib);
-use strict;
-use warnings;
-
 ###############################################################
+# system-limits.PL
 #
 # probe the limitations of this system including the maximum
 # number of simultaneous child processes and the maximum number
@@ -19,19 +16,23 @@ use warnings;
 # fail to signal the child process to wake up. The child will
 # wake up by itself in five minutes, but without valid data it
 # will trigger the above WFSO error. I don't think this 
-# affects the testing of the module except to create a few
+# affects the testing of the module except to create some
 # zombie processes for a few minutes.
 #
 ###############################################################
 
+use lib q(lib);
+use strict;
+use warnings;
+
 if ($^O eq 'cygwin') {
-  print STDERR<<'';
+  print STDERR qq!
 *************************************************
 * On Cygwin systems, if you see error messages  *
 * that say "WFSO timed out after longjmp" five  *
 * minutes from now, they came from this script  *
 *              and they are normal.             *
-*************************************************
+*************************************************\n!;
 
 }
 
@@ -218,7 +219,7 @@ sub _get_capacity {
 # the idea is to keep writing bytes to the handle until it blocks.
 # Windows is pretty cantankerous and it is hard to recover from the
 # deadlock when a write operation blocks: the 4-arg select won't
-# work with pipes (and it doesn't work all that well with sockets,
+# work with pipes (and it doesn't work that well with sockets,
 # anyway), and alarm() won't interrupt an I/O operation.
 # The portable solution is overkill on non-Windows systems but
 # gets the job done -- test the socket in a separate process
@@ -270,12 +271,9 @@ __END_SLAVE_CODE__
   close SLAVE;
   sleep 1;
   open(CAP, '<', $output_file);
-  while (<CAP>) {
-#    print $_;
-    $capacity = $_ + 0;
-  }
+  $capacity = (<CAP>)[-1];
   close CAP;
   unlink $output_file;
-  return $capacity;
+  return $capacity + 0;
 }
 

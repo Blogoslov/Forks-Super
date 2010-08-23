@@ -447,7 +447,7 @@ sub _create_pipe_pair {
   my ($p_read, $p_write) = (gensym(), gensym());
   local $! = undef;
 
-  pipe $p_read, $p_write;
+  pipe $p_read, $p_write or croak "Forks::Super::Job: create pipe failed $!\n";
   $p_write->autoflush(1);
 
   $$p_read->{fileno} = $FILENO{$p_read} = CORE::fileno($p_read);
@@ -1058,10 +1058,15 @@ sub Forks::Super::Job::_config_fh_parent {
   _config_fh_parent_stdout($job);
   _config_fh_parent_stderr($job);
   if ($job->{fh_config}->{sockets}) {
+
+    # is it helpful or necessary for the parent to close the
+    # "child" sockets? Yes, apparently, for MSWin32.
+
     my $s1 = $job->{fh_config}->{csock};
     my $s2 = $job->{fh_config}->{csock2};
     _close($s1,1);
     _close($s2,1);
+
   }
   if ($job->{fh_config}->{pipes}) {
     foreach my $pipeattr (qw(p_in p_to_out p_to_err)) {

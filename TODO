@@ -16,13 +16,6 @@ Possible TODOs:
 	_X_ for Unixy systems
 	___ for MSWin32
 
-    _X_ suspend/resume callback function
-
-	run periodically on all active AND suspended jobs
-	if return value < 0, then active job is suspended
-	if return value > 0, then suspended job is resumed
-	if return value == 0, then stay in current state
-
     ___ Support for launching tasks on remote hosts (maybe that's beyond
         the scope of this module) See Paralell::PVM?
 
@@ -45,7 +38,8 @@ Possible TODOs:
 	a small value when you have lots of short tasks, and
 	longer for longer tasks".
 
-    ___ Test needed, Win32+cmd, See Job.pm:344 (404?) (FSJO::Win32::openX_win32_process?)
+    ___ Test needed, Win32+cmd, See Job.pm:344 (404?) 
+        (FSJO::Win32::openX_win32_process?)
 
     _x_ With cmd and child_fh => "in" where cmd has pipes (cmd1 | cmd2),
 	'<.fhfork/.fh_xxx' needs to go _before_ the first pipe
@@ -98,34 +92,11 @@ Possible TODOs:
 		names, accessible in the parent at something like 
 		$Forks::Super::CHILD_FH{$pid}{X}
 
-    _X_ test  fork { retries ==> max_retries } option. May need to mock it.
-
     ___ what else to configure at build time?
 	___ e.g. "has Unixy signal framework"
 	___ "is Windows"
 	___ "is Windows/Cygwin"
 	___ we can spoof this information for some tests ...
-
-    _X_ What should wait/waitall do when only suspended jobs are left?
-	_X_ Currently we wait indefinitely. Document this.
-	_X_ Document $Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS override.
-
-    ___ Now that it is more convenient to get a Forks::Super::Job object,
-	what are some other useful methods for it?
-	_X_ ->waitpid($flags[,$timeout])
-	_X_ ->wait([$timeout])
-	_X_ ->kill($signal)
-	___ ->the_reason_that_the_job_aint_started_yet()
-        ___ ->a_full_history_of_this_job()
-	_X_ ->close_fh(), ->close_fh(stdin), ...
-	_X_ ->write_stdin(@msg)
-	_X_ ->read_stdout(\%options)
-	_X_ ->read_stderr(\%options)
-	_X_ "privatize" the more internal functions
-	_X_ Document
-
-    X__ In Forks::Super::Job 'overload' mode, should
-	wait/waitpid also return overloaded Forks::Super::Job objects ?
 
     ___ Natural language extension to timeout, expiration, delay, 
 	start_after options:
@@ -143,4 +114,7 @@ Possible TODOs:
     ___ Rework Forks::Super::LazyEval to use overloading rather
         than tied scalars. Use case is to be able to use
         $output rather than $$output.
+
+    ___ Forks::Super::Util::Time() is redundant. Replace with
+	Time::HiRes::gettimeofday().
 

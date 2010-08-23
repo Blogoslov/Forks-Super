@@ -86,12 +86,8 @@ while (time < $t+12) {
     push @out, $line;
   }
 }
-shutdown($Forks::Super::CHILD_STDIN{$pid},2)
-	 || close $Forks::Super::CHILD_STDIN{$pid};
-shutdown($Forks::Super::CHILD_STDOUT{$pid},2)
-	 || close $Forks::Super::CHILD_STDOUT{$pid};
-shutdown($Forks::Super::CHILD_STDERR{$pid},2)
-	 || close $Forks::Super::CHILD_STDERR{$pid};
+
+Forks::Super::close_fh($pid);
 
 # perhaps some warning message was getting into the output stream
 if (@out != 3) {

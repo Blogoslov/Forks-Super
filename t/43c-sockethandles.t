@@ -81,42 +81,53 @@ sub repeater {
 # the usual error is that @err contains one line instead of two
 # let's retest with debugging if we detect that this test is going to fail ...
 
+my $read_stderr_calls = 0;
 sub read_stderr_test {
 
   my $pid = fork { sub => \&repeater , args => [ 3, 1 ] , timeout => 10,
 		  child_fh => "in,err,socket" };
 
   my $z = 0;
-  if (isValidPid($pid)) {
-    my $msg = sprintf "the message is %x", rand() * 99999999;
-    my $pid_stdin_fh = $Forks::Super::CHILD_STDIN{$pid};
+  $read_stderr_calls++;
+  if ($read_stderr_calls == 1) {
+    ok(isValidPid($pid), "started job with stdin,stderr");
+  }
 
-    $z = print $pid_stdin_fh "$msg\n";
-    if ($Forks::Super::DEBUG) {
-      Forks::Super::debug("Printed \"$msg\\n\" to child stdin ($pid). ",
-			  "Result:$z");
-    }
-    sleep 1;
-    $z = print $pid_stdin_fh "That was a test\n";
-    if ($Forks::Super::DEBUG) {
-      Forks::Super::debug("Printed \"That was a test\\n\" ",
+  my $msg = sprintf "the message is %x", rand() * 99999999;
+  my $pid_stdin_fh = $Forks::Super::CHILD_STDIN{$pid};
+
+  $z = print $pid_stdin_fh "$msg\n";
+
+  if ($Forks::Super::DEBUG) {
+    Forks::Super::debug("Printed \"$msg\\n\" to child stdin ($pid). ",
+			"Result:$z");
+  }
+  sleep 1;
+  $z *= print $pid_stdin_fh "That was a test\n";
+  if ($read_stderr_calls == 1) {
+    ok($z > 0, "successful print to STDIN");
+    ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
+    ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
+       "CHILD_STDOUT value not defined pid $pid");
+    ok(defined $Forks::Super::CHILD_STDERR{$pid}, 
+       "CHILD_STDERR value defined");
+  }
+
+  if ($Forks::Super::DEBUG) {
+    Forks::Super::debug("Printed \"That was a test\\n\" ",
 			  "to child stdin ($pid). Result:$z");
-    }
-    shutdown($Forks::Super::CHILD_STDIN{$pid}, 1)
-      || close $Forks::Super::CHILD_STDIN{$pid};
-    if ($Forks::Super::DEBUG) {
+  }
+
+  Forks::Super::close_fh($pid, 'stdin');
+
+  if ($Forks::Super::DEBUG) {
       Forks::Super::debug("Closed filehandle to $pid STDIN");
-    }
   }
   return ($z,$pid);
 }
 
 my ($z,$pid) = &read_stderr_test;
-ok(isValidPid($pid), "started job with join");
-ok($z > 0, "successful print to child STDIN");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
-ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, "CHILD_STDOUT value not defined pid $pid");
-ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");
+
 my $t = time;
 my @out = ();
 my @err = ();

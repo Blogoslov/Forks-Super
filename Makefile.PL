@@ -86,6 +86,7 @@ WriteMakefile(
     clean               => { FILES => join (" ",'Forks-Super-*',
 					    'system-limits',
 					    'system-limits.lock',
+					    'lib/Forks/Super/SysInfo.pm',
 					    't/out/spawn*',
 					    't/out/sigchld.debug',
 					    't/out/test*',
@@ -114,6 +115,13 @@ sub MY::postamble {
     $stresstestargs = "-r 25 -x 4 -s -q";
   }
   my $postamble = <<"__END_POSTAMBLE__";
+
+
+#################################################
+#
+# Additional targets for Forks::Super module.
+#
+#
 
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 

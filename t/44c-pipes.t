@@ -114,8 +114,7 @@ SKIP: {
   ok((defined $Forks::Super::CHILD_STDERR{$pid})
      && is_pipe($Forks::Super::CHILD_STDERR{$pid}), "CHILD_STDERR is a pipe");
 }
-shutdown($Forks::Super::CHILD_STDIN{$pid},1) 
-	|| close $Forks::Super::CHILD_STDIN{$pid};
+Forks::Super::close_fh($pid, 'stdin');
 
 my $t = time;
 my @out = ();

@@ -1,3 +1,9 @@
+# SysInfo.pm.PL
+# Create the lib/Forks/Super/SysInfo.pm file
+# with information about the current system
+# and some of its capabilities.
+# See also: system-limits.PL
+
 use lib qw(lib);
 use Forks::Super::Util;
 use strict;
@@ -41,11 +47,7 @@ printF('MAX_OPEN_FH', $info{maxfilehandle}, '123.456');
 printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
 
-print F "
-
-1;
-";
-
+print F "\n\n1;\n";
 close F;
 
 

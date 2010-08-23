@@ -62,3 +62,12 @@ use Carp;$SIG{SEGV} = sub {
   Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
 };
 
+# Failure point in 0.35: all tests in this script pass,
+#       but the script still exits with code 2. Is there
+#       an uncaught SIGINT somewhere? This condition is
+#       harder for me to reproduce than it is for the
+#       CPAN testers :-(.
+#       Does this it happen more often on v >= 5.13.2? Not really.
+#       Does this happen more on threaded versions of Perl?
+
+

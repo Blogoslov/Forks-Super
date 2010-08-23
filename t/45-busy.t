@@ -91,6 +91,9 @@ SKIP: {
     last if $load > 0.1;
     sleep 1;
   }
+  if ($load == 0.0) {
+    skip "test could not generate a cpu load on this machine", 1;
+  }
   $pid2 = fork { sub => sub { sleep 4 } };
   ok(isValidPid($pid) && !isValidPid($pid2), "$pid2 fail while system is loaded");
 }

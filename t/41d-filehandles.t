@@ -55,9 +55,9 @@ waitpid $pid, 0;
 ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
 
 
-use Carp;$SIG{SEGV} = sub { 
-  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" 
-};
+# intermittent SIGSEGV occur during cleanup. Haven't been able to diagnose yet.
+use Carp;
+$SIG{SEGV} = sub { Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" };
 
 
 eval { alarm 0 };

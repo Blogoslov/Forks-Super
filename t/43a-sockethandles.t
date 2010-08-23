@@ -83,7 +83,7 @@ ok(is_socket($Forks::Super::CHILD_STDIN{$pid}) &&
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
-shutdown($fh_in, 1) || close $fh_in;
+Forks::Super::close_fh($pid, 'stdin');
 ok($z > 0, "print to child stdin successful");
 my $t = time;
 my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
@@ -97,9 +97,8 @@ while (time < $t+10) {
 						 scalar @err) }
   sleep 1;
 }
-shutdown($fh_out, 2) || close $fh_out;
-shutdown($fh_err, 2) || close $fh_err;
 
+Forks::Super::close_fh($pid, 'stdout', 'stderr');
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 
 @err = grep { !/alarm\(\) not available/ } @err; # exclude warn to child STDERR

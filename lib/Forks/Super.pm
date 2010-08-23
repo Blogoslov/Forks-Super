@@ -13,16 +13,13 @@ use Forks::Super::LazyEval;
 use base 'Exporter';
 use POSIX ':sys_wait_h';
 use Carp;
+$Carp::Internal{ (__PACKAGE__) }++;
+
 use strict;
 use warnings;
 $| = 1;
 
-{
-  no warnings 'once';
-  $Carp::Internal{ (__PACKAGE__) }++;
-}
-
-our $VERSION = '0.35';
+our $VERSION = '0.36';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -97,7 +94,6 @@ sub import {
 sub _init {
   return if $PKG_INITIALIZED;
   $PKG_INITIALIZED++;
-  # $MAIN_PID = $$;     # set on first use
 
   Forks::Super::Debug::init();
   Forks::Super::Config::init();
@@ -150,7 +146,7 @@ sub fork {
     $opts = { @_ };
   }
 
-  $MAIN_PID ||= $$;
+  $MAIN_PID ||= $$;                         # initialize on first use 
   my $job = Forks::Super::Job->new($opts);
   $job->_preconfig;
   if (defined $job->{__test}) {
@@ -275,7 +271,12 @@ sub read_stderr {
 sub close_fh {
   my $pid_or_job = shift;
   if (Forks::Super::Job::_resolve($pid_or_job)) {
-    $pid_or_job->close_fh;
+    $pid_or_job->close_fh(@_);
+  } elsif ($pid_or_job) {
+    carp "Forks::Super::close_fh: ",
+      "input $pid_or_job is not a recognized identifier of a background job\n";
+  } else {
+    carp "Forks::Super::close_fh: invalid empty input  $pid_or_job\n";
   }
 }
 
@@ -522,7 +523,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.35
+Version 0.36
 
 =head1 SYNOPSIS
 
@@ -959,25 +960,21 @@ The same socket handle can be used for both reading and writing.
 Don't close a handle when you are only done with one half of the
 socket operations.
 
+In general, the C<Forks::Super> module knows whether a filehandle
+is associated with a file, a socket, or a pipe, and the C<close_fh>
+function provides a safe way to close the file handles associated
+with a background task:
+
+    Forks::Super::close_fh($pid);          # close all STDxxx handles
+    Forks::Super::close_fh($pid, 'stdin'); # close STDIN only
+    Forks::Super::close_fh($pid, 'stdout', 'stderr'); # don't close STDIN
+
 =item *
 
 The test C<Forks::Super::Util::is_socket($handle)> can determine
 whether C<$handle> is a socket handle or a regular filehandle.
 The test C<Forks::Super::Util::is_pipe($handle)> 
 can determine whether C<$handle> is reading from or writing to a pipe.
-
-=item *
-
-The following idiom is safe to use on both socket handles, pipes,
-and regular filehandles:
-
-    shutdown($handle,2) || close $handle;
-
-=cut
-
-Is this true?  shutdown  "is a more insistent form of close
-because it also disables the file descriptor in any forked
-copies in other processes." 
 
 =item *
 
@@ -1950,6 +1947,45 @@ Setting C<$Forks::Super::CHILD_FORK_OK> to a negative value will
 disable the functionality of this module but will
 reenable the classic Perl C<fork()> system call from child
 processes.
+
+Note that this module will not have any preconceptions about which
+is the "parent process" until you make a call to C<Forks::Super::fork>.
+This means it is possible to use C<Forks::Super> functionality in
+processes that were I<not> spawned by C<Forks::Super>, say, by an
+explicit C<CORE::fork()> call:
+
+     1: use Forks::Super;
+     2: $Forks::Super::CHILD_FORK_OK = 0;
+     3: 
+     4: $child1 = CORE::fork();
+     5: if ($child1 == 0) {
+     6:    # OK -- child1 is still a valid "parent process"
+     7:    $grandchild1 = Forks::Super::fork { ... };
+     8:    ...;
+     9:    exit;
+    10: }
+    11: $child2 = Forks::Super::fork();
+    12: if ($child2 == 0) {
+    13:    # NOT OK - parent of child2 is now "the parent"
+    14:    $grandchild2 = Forks::Super::fork { ... };
+    15:    ...; 
+    16:    exit; 
+    17: }
+    18: $child3 = CORE::fork();
+    19: if ($child3 == 0) {
+    20:    # NOT OK - call in line 11 made parent of child3 "the parent"
+    21:    $grandchild3 = Forks::Super::fork { ... };
+    22:    ...; 
+    23:    exit; 
+    24: }
+
+More specifically, this means it is OK to use the C<Forks::Super>
+module in a daemon process:
+
+    use Forks::Super;
+    $Forks::Super::CHILD_FORK_OK = 0;
+    CORE::fork() && exit;
+    $daemon_child = Forks::Super::fork();   # ok
 
 =head3 DEBUG
 
