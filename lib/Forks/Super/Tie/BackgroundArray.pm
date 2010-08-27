@@ -7,6 +7,8 @@ package Forks::Super::Tie::BackgroundArray;
 use Forks::Super;
 use Forks::Super::Wait 'WREAP_BG_OK';
 use Carp;
+use strict;
+use warnings;
 
 # an array that is evaluated in a child process.
 # the first time an element of the array is dereferenced,

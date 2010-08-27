@@ -42,7 +42,14 @@ sub unconfig {
 
 sub config {
   my $module = shift;
+  if ($module eq 'filehandles') { Carp::cluck "Setting CONFIG(filehandles)\n" }
   $CONFIG{$module} = 1;
+}
+
+sub configif {
+  my $module = shift;
+  return $CONFIG{$module} if defined $CONFIG{$module};
+  return config($module);
 }
 
 sub deconfig {
@@ -71,6 +78,9 @@ sub CONFIG {
     return $CONFIG{$module} = _CONFIG_Perl_component($module);
   } elsif (substr($module,0,1) eq '/') {
     return $CONFIG{$module} = _CONFIG_external_program($module);
+  } elsif ($module eq 'filehandles') {
+#   print STDERR "XXXXXX CONFIG(fh) enabled\n";
+    return $CONFIG{$module} = 1; # available by default
   } else {
     return $CONFIG{$module} =
       _CONFIG_module($module,$warn,@settings);

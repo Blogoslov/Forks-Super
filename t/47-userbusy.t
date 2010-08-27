@@ -34,7 +34,7 @@ $t = Forks::Super::Util::Time();
 $pid4 = fork { sub => $sleepy , can_launch => $launch_after_nap };
 $t = Forks::Super::Util::Time() - $t;
 ok(isValidPid($pid4), "successful delayed fork");
-ok($t >= 10, "fork was delayed ${t}s expected >10s");
+ok($t >= 9.95, "fork was delayed ${t}s expected >10s");
 
 $Forks::Super::MAX_PROC = 50;
 $pid5 = fork { sub => $sleepy };

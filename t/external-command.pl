@@ -50,6 +50,7 @@ END {
   close OUT;
   close STDOUT;
   close STDERR;
+  1;
 }
 
 

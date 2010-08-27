@@ -1,14 +1,12 @@
 use Forks::Super ':test', 'overload';
-use Test::More tests => 46;
+use Test::More tests => 48;
 use strict;
 use warnings;
-
-# does overloading work in 5.8 ?
 
 # return value from Forks::Super::fork
 # can be an overloaded Forks::Super::Job object
 # that should behave like a numerical pid
-# but can also be used with the F::S::J methods
+# but can also invoke the F::S::J methods
 # like $job->status, etc.
 
 my $job_pid = fork();
@@ -55,6 +53,8 @@ ok($job_pid > $pid - 1, "> operation ok");
 ok($job_pid >= $pid - 1, ">= operation ok");
 ok($job_pid <= $pid, "<= operation ok");
 ok($job_pid < $pid + 3, "< operation ok");
+ok(~$job_pid, "~ operation ok");
+ok((~$job_pid ^ (~0)) == ~~(0+$job_pid), "~ operation ok");
 
 
 # string operations

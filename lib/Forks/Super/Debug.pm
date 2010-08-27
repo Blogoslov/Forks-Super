@@ -29,7 +29,7 @@ sub init {
 
 sub debug {
   my @msg = @_;
-  print $DEBUG_fh Forks::Super::Util::Ctime()," ",@msg,"\n";
+  print $DEBUG_fh $$," ",Forks::Super::Util::Ctime()," ",@msg,"\n";
   return;
 }
 

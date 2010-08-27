@@ -3,7 +3,8 @@ use warnings;
 use ExtUtils::MakeMaker;
 use 5.007003;   # needs "safe signals" - see perlipc
 
-# command-line argument  "bundle=1"
+# command-line arguments "bundle=1" or "reinstall=1"
+# or environment var     "BUNDLE_REINSTALL=1"
 # will force attempt to install bundled modules,
 # even if they are already installed
 
@@ -13,6 +14,7 @@ use 5.007003;   # needs "safe signals" - see perlipc
 # that were included with this distribution.
 #
 # run  perl Makefile.PL BUNDLE=1
+# or   BUNDLE_REINSTALL=1 perl Makefile.PL
 # to allow re-installation of bundled modules
 sub install_bundled_modules {
   if (-d 'bundle') {
@@ -38,10 +40,9 @@ sub install_bundled_modules {
 }
 
 sub probe_system {
-  print STDERR "Gathering information on current system\n";
+  print STDERR "Gathering information on current system $^O.$]\n";
   print STDERR "and creating Forks::Super::SysInfo package.\n";
-  system($^X, 'SysInfo.pm.PL',
-	 'lib/Forks/Super/SysInfo.pm');
+  system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
 }
 
 sub recommend_modules {
@@ -50,11 +51,15 @@ sub recommend_modules {
 		    "JSON" => '2.0',
 		    "Sys::CpuAffinity" => '0.9',
 		    "Sys::CpuLoadX" => '0.02',
+		    "DateTime::Format::Natural" => '0.80',
 		   );
 
   if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
     push @recommends, ("Win32::Process" => '0.11',
 		       "Win32::API" => '0.43');
+  }
+  if ($^O eq "MSWin32") {
+    push @recommends, ("Win32::Process::Kill" => '2.64');
   }
   return [ @recommends ];
 }
@@ -62,8 +67,10 @@ sub recommend_modules {
 ######################################################################
 
 probe_system();
-my @old_ARGV = @ARGV;
-@ARGV = grep { !/^bundle\b/i } @ARGV;
+if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {
+  $ENV{BUNDLE_REINSTALL} = 1;
+  @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
+}
 
 WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
@@ -96,8 +103,18 @@ WriteMakefile(
 					    '_Inline') },
 );
 
-@ARGV = @old_ARGV;
 install_bundled_modules();
+
+print STDERR q[
+
+"Makefile.PL" complete. After you run "make", you can run "make test"
+to run the Forks::Super unit tests in series, or "make fasttest" to use
+the Forks::Super framework to run the tests in parallel.
+
+
+];
+
+
 
 
 
@@ -126,7 +143,7 @@ sub MY::postamble {
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 
 fasttest :: pm_to_blib
-	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -h
+	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -h -q
 
 # ------ stress test: run all tests in parallel 100 times
 

@@ -16,15 +16,15 @@ ok($job->{state} eq 'ACTIVE', "open2: job is active " . $job->{state});
 
 my $msg = sprintf "%05x", rand() * 99999;
 my $z = print $fh_in "$msg\n";
-close $fh_in;
+Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open2: print to input handle ok = $z");
 sleep 3;
 my @out = <$fh_out>;
-close $fh_out;
+Forks::Super::close_fh($pid, 'stdout');
 ok(@out == 2, "open2: got right number of output lines");
 ok($out[0] eq "Hello $msg\n", "got right output");
 Forks::Super::pause();
-ok($job->{state} eq 'COMPLETE' || !print STDERR $job->toString(), "job complete");
+ok($job->{state} eq 'COMPLETE', "job complete");
 ok($pid == waitpid($pid,0), "job reaped");
 
 ######################################################
@@ -40,13 +40,13 @@ ok($job->{state} eq 'ACTIVE', "open3: job is active " . $job->{state});
 
 $msg = sprintf "%05x", rand() * 99999;
 $z = print $fh_in "$msg\n";
-close $fh_in;
+Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open3: print to input handle ok = $z");
 sleep 3;
 @out = <$fh_out>;
-close $fh_out;
+Forks::Super::close_fh($pid, 'stdout');
 my @err = <$fh_err>;
-close $fh_err;
+Forks::Super::close_fh($pid, 'stderr');
 ok(@out == 4, "open3: got right number of output lines");
 ok($out[0] eq "Hello $msg\n", "got right output (1)");
 ok($out[1] eq "$msg\n", "got right output (2)");
@@ -66,16 +66,16 @@ ok($job->{state} eq 'ACTIVE', "open3: respects additional options");
 sleep 1;
 $msg = sprintf "%05x", rand() * 99999;
 $z = print $fh_in "$msg\n";
-close $fh_in;
+Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open3: print to input handle ok = $z");
 sleep 3;
 @out = <$fh_out>;
-close $fh_out;
+Forks::Super::close_fh($pid, 'stdout');
 @err = <$fh_err>;
-close $fh_err;
+Forks::Super::close_fh($pid, 'stderr');
 
 ok(@out == 1 && $out[0] =~ /^Hello/, "open3: time out  \@out='@out'" . scalar @out);
-ok(@err == 0 || $err[0] =~ /timeout/ || !print STDERR "\@err=@err\n", "open3: job timed out");
+ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out");
 waitpid $pid,0;
 ok($job->{status} != 0, "open3: job timed out status $job->{status}!=0");
 

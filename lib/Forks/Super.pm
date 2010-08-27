@@ -19,7 +19,7 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.36';
+our $VERSION = '0.37';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -98,8 +98,15 @@ sub _init {
   Forks::Super::Debug::init();
   Forks::Super::Config::init();
 
+  # $Forks::Super::SysInfo::MAX_FORK is the point at which your program
+  # might crash from having too many forks.
+  #
+  # Another reasonable default when there are moderately CPU-intensive
+  # background tasks is  ~2*$Forks::Super::SysInfo::NUM_PROCESSORS.
+
   # Default value for $MAX_PROC should be tied to system properties
   $DEFAULT_MAX_PROC = $Forks::Super::SysInfo::MAX_FORK - 1;
+
   $MAX_PROC = $DEFAULT_MAX_PROC;
   $MAX_LOAD = -1;
   $SUPPORT_LIST_CONTEXT = 0;
@@ -257,7 +264,7 @@ sub write_stdin {
 #
 sub read_stdout {
   my ($job, $block_NOT_IMPLEMENTED) = @_;
-  return Forks::Super::Job::read_stdout($job);
+  return Forks::Super::Job::read_stdout(@_);
 }
 
 #
@@ -265,7 +272,7 @@ sub read_stdout {
 #
 sub read_stderr {
   my ($job, $block_NOT_IMPLEMENTED) = @_;
-  return Forks::Super::Job::read_stderr($job);
+  return Forks::Super::Job::read_stderr(@_);
 }
 
 sub close_fh {
@@ -523,7 +530,7 @@ for managing background processes.
 
 =head1 VERSION
 
-Version 0.36
+Version 0.37
 
 =head1 SYNOPSIS
 
@@ -777,6 +784,8 @@ how to enable this feature.
 
 =over 4
 
+=head3 timeout
+
 =item C<< fork { timeout => $delay_in_seconds } >>
 
 =item C<< fork { expiration => $timestamp_in_seconds_since_epoch_time } >>
@@ -807,6 +816,15 @@ The C<timeout> and C<expiration> options cannot be used with the
 C<exec> option, since the child process will not be able to
 generate a C<SIGALRM> after an C<exec> call.
 
+If you have installed the L<DateTime::Format::NaturalLanguage> module,
+then you may also specify the timeout and expiration options using
+natural language:
+
+    $pid = fork { timeout => "in 5 minutes", sub => ... };
+
+    $pid = fork { expiration => "next Wednesday", cmd => $long_running_cmd };
+
+
 =item C<< fork { delay => $delay_in_seconds } >>
 
 =item C<< fork { start_after => $timestamp_in_epoch_time } >>
@@ -827,6 +845,15 @@ C<start_after> options) and a maximum end time (through
 C<timeout> and C<expiration>). Jobs with inconsistent times
 (end time is not later than start time) will be killed of
 as soon as they are created.
+
+As with the C<timeout> and C<expiration> options, the
+C<delay> and C<start_after> options can be expressed in
+natural language if you have installed the
+L<DateTime::Format::NaturalLanguage> module.
+
+    $pid = fork { start_after => "12:25pm tomorrow",  sub => ... };
+
+    $pid = fork { delay => "in 7 minutes", cmd => ... };
 
 =item C<< fork { child_fh => $fh_spec } >>
 
@@ -1019,15 +1046,15 @@ the child's output.
 
 =item C<< fork { retries => $max_retries } >>
 
-If the underlying system C<fork> call fails (i.e., returns
-C<undef>), pauses for a short time and retries up to
+If the underlying system C<fork> call fails (returns
+C<undef>), pause for a short time and retry up to
 C<$max_retries> times.
 
-This feature is probably not that useful, as a failed
+This feature is probably not that useful. A failed
 C<fork> call usually indicates some bad system condition
 (too many processes, system out of memory or swap space,
-impending kernel panic, etc.). In such a case, your 
-expectations of recovery should not be too high.
+impending kernel panic, etc.) where your expectations
+of recovery should not be too high.
 
 =back
 
@@ -1134,20 +1161,20 @@ to launch the specified job for whatever reason.
 
 =item C<block>
 
-If the system cannot create a new child process for the specified job,
+If the module cannot create a new child process for the specified job,
 it will wait and periodically retry to create the child process until
 it is successful. Unless a system fork call is attempted and fails,
 C<fork> calls that use this behavior will return a positive PID.
 
 =item C<fail>
 
-If the system cannot create a new child process for the specified job,
-the C<fork> call will immediately return with a small negative
-value.
+If the module cannot immediately create a new child process 
+for the specified job, the C<fork> call will return with a 
+small negative value.
 
 =item C<queue>
 
-If the system cannot create a new child process for the specified job,
+If the module cannot create a new child process for the specified job,
 the job will be deferred, and an attempt will be made to launch the
 job at a later time. See L</"Deferred processes"> below. The return
 value will be a very negative number (job ID).
@@ -1624,13 +1651,13 @@ for deceased processes.
 
 =head3 read_stderr
 
-=item C<$line = Forks::Super::read_stdout($pid)>
+=item C<$line = Forks::Super::read_stdout($pid [,%options] )>
 
-=item C<@lines = Forks::Super::read_stdout($pid)>
+=item C<@lines = Forks::Super::read_stdout($pid [,%options] )>
 
-=item C<$line = Forks::Super::read_stderr($pid)>
+=item C<$line = Forks::Super::read_stderr($pid [, %options])>
 
-=item C<@lines = Forks::Super::read_stderr($pid)>
+=item C<@lines = Forks::Super::read_stderr($pid [, %options] )>
 
 For jobs that were started with the C<< child_fh => "out" >>
 and C<< child_fh => "err" >> options enabled, read data from
@@ -1650,6 +1677,31 @@ read on the filehandle, but the child process is still active and could
 put more data on the filehandle, these functions return  ""  in scalar
 and list context. If there is no more data on the filehandle and the
 child process is finished, the functions return C<undef>.
+
+These methods all take any number of arbitrary key-value
+pairs as additional arguments. There are currently two
+recognized options to these methods:
+
+=over 4
+
+=item * block => 0 | 1
+
+Determines whether blocking I/O is used on the file, socket,
+or pipe handle. If enabled, the C<read_stdXXX> function will
+hang until input is available or until the module can determine
+that the process creating input for that handle has completed.
+Blocking I/O can lead to deadlocks unless you are careful about
+managing the process creating input for the handle. The default
+mode is non-blocking.
+
+=item * warn => 0 | 1
+
+Enabled by default. If warnings on the C<read_stdXXX> function
+are disabled, then some warning messages (reading from a closed
+handle, reading from a non-existent/unconfigured handle) will
+be suppressed.
+
+=back
 
 =head3 close_fh
 
@@ -1768,7 +1820,8 @@ names, and callback. The only invalid options for C<bg_eval> are
 C<cmd>, C<sub>, C<exec>, and C<child_fh>.
 
 A call to C<bg_eval> will set the variables C<$Forks::Super::LAST_JOB>
-and C<$Forks::Super::LAST_JOB_ID>. See L</"MODULE VARIABLES"> below.
+and C<$Forks::Super::LAST_JOB_ID>. See L<MODULE VARIABLES/"LAST_JOB">
+below.
 
 =item C<< @result = bg_eval { BLOCK } >>
 
@@ -1795,7 +1848,8 @@ options for C<bg_eval>, except for C<exec>, C<cmd>, C<sub>, and
 C<child_fh>.
 
 A call to C<bg_eval> will set the variables C<$Forks::Super::LAST_JOB>
-and C<$Forks::Super::LAST_JOB_ID>. See L</"MODULE VARIABLES"> below.
+and C<$Forks::Super::LAST_JOB_ID>. See L<"MODULE VARIABLES"/"LAST_JOB">
+below.
 
 =head3 bg_qx
 
@@ -1949,10 +2003,10 @@ reenable the classic Perl C<fork()> system call from child
 processes.
 
 Note that this module will not have any preconceptions about which
-is the "parent process" until you make a call to C<Forks::Super::fork>.
-This means it is possible to use C<Forks::Super> functionality in
-processes that were I<not> spawned by C<Forks::Super>, say, by an
-explicit C<CORE::fork()> call:
+is the "parent process" until you the first 
+call to C<Forks::Super::fork>. This means it is possible to use 
+C<Forks::Super> functionality in processes that were I<not> 
+spawned by C<Forks::Super>, say, by an explicit C<CORE::fork()> call:
 
      1: use Forks::Super;
      2: $Forks::Super::CHILD_FORK_OK = 0;
@@ -2078,6 +2132,13 @@ The value indicating a timeout should not collide with any other
 possible value from those functions, and should be recognizable
 as not an actual process ID.
 
+    my $pid = wait 10.0;  # Forks::Super::wait with timeout
+    if ($pid == Forks::Super::TIMEOUT) {
+        # no tasks have finished in the last 10 seconds ...
+    } else {
+        # task has finished, process id in $pid.
+    }
+
 =head3 LAST_JOB
 
 =item C<$Forks::Super::LAST_JOB_ID>
@@ -2097,7 +2158,7 @@ captures the process id of the last job to be run in the background.
 
 =head3 WAIT_ACTION_ON_SUSPENDED_JOBS
 
-=item C<$Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS>
+=item C<$Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS>
 
 Governs the action of a call to C<wait>, C<waitpid>, or
 C<waitall> in the case when all remaining jobs are in the
@@ -2136,7 +2197,7 @@ function to return.
 This module always exports the C<fork>, C<wait>, C<waitpid>, 
 and C<waitall> functions, overloading the Perl system calls
 with the same names. Mixing C<Forks::Super> calls with the
-similarly-named Perl calls sis strongly discouraged, but you
+similarly-named Perl calls is strongly discouraged, but you
 can access the original system calls at C<CORE::fork>,
 C<CORE::wait>, etc.
 

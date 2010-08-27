@@ -163,6 +163,12 @@ sub Forks::Super::Job::_preconfig_fh {
       }
     }
 
+    if (!$Forks::Super::Config::CONFIG{'filehandles'}
+	&& $fh_spec !~ /pipe/i) {
+      $fh_spec .= ",socket";
+
+    }
+
     if (&IS_WIN32) {
       if (!$ENV{WIN32_PIPE_OK}) {
 	$fh_spec =~ s/pipe/socket/i;
@@ -170,11 +176,12 @@ sub Forks::Super::Job::_preconfig_fh {
 
       if ($] < 5.007) {
 	if ($fh_spec =~ s/socke?t?//i + $fh_spec =~ s/pipe//i) {
-	  carp_once "Forks::Super::_preconfig_fh: socket/pipe not allowed on Win32 v<5.7\n";
+	  carp_once "Forks::Super::_preconfig_fh: ",
+	    "socket/pipe not allowed on Win32 v<5.7\n";
 	}
       }
     }
-    
+
     if (($job->{style} ne 'cmd' && $job->{style} ne 'exec') 
 	|| !&IS_WIN32) {
 
@@ -225,7 +232,7 @@ sub Forks::Super::Job::_preconfig_fh {
     $config->{f_in} = _choose_fh_filename('', purpose => 'STDIN',
 					  job => $job);
     debug("Using $config->{f_in} as shared file for child STDIN")
-      if $job->{debug};
+      if $job->{debug} && $config->{f_in};
     if ($config->{stdin}) {
       if (_safeopen my $fh, '>', $config->{f_in}) {
 	print $fh $config->{stdin};
@@ -241,13 +248,13 @@ sub Forks::Super::Job::_preconfig_fh {
     $config->{f_out} = _choose_fh_filename('', purpose => 'STDOUT', 
 					   job => $job);
     debug("Using $config->{f_out} as shared file for child STDOUT")
-      if $job->{debug};
+      if $job->{debug} && $config->{f_out};
   }
   if ($config->{err}) {
     $config->{f_err} = _choose_fh_filename('',
 					   purpose => 'STDERR', job => $job);
     debug("Using $config->{f_err} as shared file for child STDERR")
-      if $job->{debug};
+      if $job->{debug} && $config->{f_err};
   }
   
   if ($config->{sockets}) {
@@ -259,8 +266,8 @@ sub Forks::Super::Job::_preconfig_fh {
   
   if (0 < scalar keys %$config) {
     if (!Forks::Super::Config::CONFIG('filehandles')) {
-      warn "Forks::Super::Job: interprocess filehandles not available!\n";
-      return;  # filehandle feature not available
+      #warn "Forks::Super::Job: interprocess filehandles not available!\n";
+      #return;  # filehandle feature not available
     }
     $job->{fh_config} = $config;
   }
@@ -469,31 +476,33 @@ sub _create_pipe_pair {
 sub _choose_fh_filename {
   my ($suffix, @debug_info) = @_;
   my $basename = ".fh_";
+  if (!Forks::Super::Config::CONFIG('filehandles')) {
+    return;
+  }
   if (not defined $Forks::Super::FH_DIR) {
     _identify_shared_fh_dir();
   }
-  if (Forks::Super::Config::CONFIG('filehandles')) {
-    $FH_COUNT++;
-    my $file = sprintf ("%s/%s%03d", $Forks::Super::FH_DIR,
-			$basename, $FH_COUNT);
-    if (defined $suffix) {
-      $file .= $suffix;
-    }
 
-    if (&IS_WIN32) {
-      $file =~ s!/!\\!g;
-    }
-
-    push @FH_FILES, $file;
-    $FH_FILES{$file} = [ @debug_info ];
-
-    if (!$FH_DIR_DEDICATED && -f $file) {
-      carp "Forks::Super::Job::_choose_fh_filename: ",
-	"IPC file $file already exists!\n";
-      debug("$file already exists ...") if $DEBUG;
-    }
-    return $file;
+  $FH_COUNT++;
+  my $file = sprintf ("%s/%s%03d", $Forks::Super::FH_DIR,
+		      $basename, $FH_COUNT);
+  if (defined $suffix) {
+    $file .= $suffix;
   }
+
+  if (&IS_WIN32) {
+    $file =~ s!/!\\!g;
+  }
+
+  push @FH_FILES, $file;
+  $FH_FILES{$file} = [ @debug_info ];
+
+  if (!$FH_DIR_DEDICATED && -f $file) {
+    carp "Forks::Super::Job::_choose_fh_filename: ",
+      "IPC file $file already exists!\n";
+    debug("$file already exists ...") if $DEBUG;
+  }
+  return $file;
 }
 
 #
@@ -502,7 +511,7 @@ sub _choose_fh_filename {
 #
 sub _identify_shared_fh_dir {
   return if defined $Forks::Super::FH_DIR;
-  Forks::Super::Config::unconfig('filehandles');
+  #Forks::Super::Config::unconfig('filehandles');
 
   # what are the good candidates ???
   # Any:       .
@@ -527,10 +536,11 @@ sub _identify_shared_fh_dir {
     debug("Considering $dir as shared filehandle dir ...") if $DEBUG;
     next unless -d $dir;
     next unless -r $dir && -w $dir && -x $dir;
-    _set_fh_dir($dir);
-    Forks::Super::Config::config('filehandles');
-    debug("Selected $Forks::Super::FH_DIR as shared filehandle dir ...")
-      if $DEBUG;
+    if (Forks::Super::Config::configif('filehandles')) {
+      _set_fh_dir($dir);
+      debug("Selected $Forks::Super::FH_DIR as shared filehandle dir ...")
+	if $DEBUG;
+    }
     last;
   }
   return;
@@ -608,16 +618,14 @@ ____;
   return;
 }
 
-END {
-  if ($$ == ($Forks::Super::MAIN_PID || $MAIN_PID)) { # FSJ::Ipc END {}
-    no warnings 'once';
-    if (defined $Forks::Super::FH_DIR
-	&& 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
-      if (&IS_WIN32) {
-	END_cleanup_MSWin32();
-      } else {
-	END_cleanup();
-      }
+sub _cleanup {
+  no warnings 'once';
+  if (defined $Forks::Super::FH_DIR
+      && 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
+    if (&IS_WIN32) {
+      END_cleanup_MSWin32();
+    } else {
+      END_cleanup();
     }
   }
 }
@@ -640,6 +648,7 @@ sub _trap_signals {
   }
 }
 
+our $_SIGNAL_TRAPPED_SO_SUPPRESS_INFO;
 sub __cleanup__ {
   my $SIG = shift;
   if ($DEBUG) {
@@ -648,6 +657,8 @@ sub __cleanup__ {
   _untrap_signals();
   if ($DEBUG) {
     print STDERR "$$ received $SIG -- cleaning up\n";
+  } else {
+    $_SIGNAL_TRAPPED_SO_SUPPRESS_INFO = 1;
   }
   if (&IS_WIN32) {
     END_cleanup_MSWin32();
@@ -773,13 +784,15 @@ sub END_cleanup {
         foreach my $g (@g) {
 	  my $gg = "$Forks::Super::FH_DIR/$g";
 	  if (defined $G{$gg} && $G{$gg}) {
-	    print STDERR "\t$gg ==> ";
 	    my %gg = @{$G{$gg}};
-	    foreach my $key (keys %gg) {
-	      if ($key eq 'job') {
-		print STDERR "\t\t",$gg{$key}->toString(),"\n";
-	      } else {
-		print STDERR "\t\t$key => ", $gg{$key}, "\n";
+	    unless ($_SIGNAL_TRAPPED_SO_SUPPRESS_INFO) {
+	      print STDERR "\t$gg ==> ";
+	      foreach my $key (keys %gg) {
+		if ($key eq 'job') {
+		  print STDERR "\t\t",$gg{$key}->toString(),"\n";
+		} else {
+		  print STDERR "\t\t$key => ", $gg{$key}, "\n";
+		}
 	      }
 	    }
 	  }
@@ -1419,7 +1432,12 @@ sub _close {
   $$handle->{closed} ||= Time::HiRes::gettimeofday();
   $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
   my $z = close $handle;
-  $__OPEN_FH-- if $z;
+  if ($z) {
+    $__OPEN_FH--;
+    if ($DEBUG) {
+      debug("$$ closing IPC handle $$handle->{glob}");
+    }
+  }
   return $z;
 }
 
@@ -1440,6 +1458,9 @@ sub _close_socket {
       $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
       $z = close $handle;
       $__OPEN_FH--;
+      if ($DEBUG) {
+	debug("$$ Closing IPC socket $$handle->{glob}");
+      }
     }
     return $z;
   }
@@ -1552,16 +1573,23 @@ sub Forks::Super::Job::write_stdin {
 }
 
 sub _read_socket {
-  my ($sh, $job, $wantarray) = @_;
+  my ($sh, $job, $wantarray, %options) = @_;
 
   if (!defined $sh) {
-    carp "Forks::Super::_read_socket: ",
-      "read on undefined filehandle for ",$job->toString(),"\n";
+    if (!defined($options{"warn"}) || $options{"warn"}) {
+      carp "Forks::Super::_read_socket: ",
+	"read on undefined handle for ",$job->toString(),"\n";
+    }
+    return;
   }
 
   # is socket is blocking, then we need to test whether
   # there is input to be read before we read on the socket
-  if ($sh->blocking() || &IS_WIN32) {
+
+  my $blocking_desired = defined($options{"block"}) && $options{"block"} != 0;
+  my $blocking_not_desired = defined($options{"block"}) && $options{"block"} == 0;
+
+  while ($sh->blocking() || &IS_WIN32 || $blocking_desired) {
     my $fileno = fileno($sh);
     if (not defined $fileno) {
       $fileno = Forks::Super::Job::Ipc::fileno($sh);
@@ -1587,29 +1615,33 @@ sub _read_socket {
       if ($DEBUG) {
 	debug("no input found on $sh/$fileno");
       }
-      return;
+      return if !$blocking_desired;
     }
     if ($rin ne $rout) {
       if ($DEBUG) {
 	debug("No input found on $sh/$fileno");
       }
-      return;
+      return if !$blocking_desired;
     }
 
     if ($nfound == -1) {
       warn "Forks::Super:_read_socket: ",
 	"Error in select4(): $! $^E. \$eout=$eout; \$ein=$ein\n";
     }
+    last if $nfound != 0;
+    return if $blocking_not_desired;
   }
   return readline($sh);
 }
 
 sub _read_pipe {
-  my ($sh, $job, $wantarray) = @_;
+  my ($sh, $job, $wantarray, %options) = @_;
 
   if (!defined $sh) {
-    carp "Forks::Super::_read_pipe: ",
-      "read on undefined filehandle for ",$job->toString(),"\n";
+    if (!defined($options{"warn"}) || $options{"warn"}) {
+      carp "Forks::Super::_read_pipe: ",
+	"read on undefined handle for ",$job->toString(),"\n";
+    }
   }
 
   my $fileno = fileno($sh);
@@ -1618,69 +1650,82 @@ sub _read_pipe {
     Carp::cluck "Cannot determine FILENO for pipe $sh!";
   }
 
-  my ($rin,$rout,$ein,$eout);
-  my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
-  $rin = '';
-  vec($rin, $fileno, 1) = 1;
-  local $! = undef;
-  my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+  my $blocking_desired = defined($options{"block"}) && $options{"block"} != 0;
+  my $blocking_not_desired = defined($options{"block"}) && $options{"block"} == 0;
 
-  if ($nfound == 0) {
-    if ($DEBUG) {
-      debug("no input found on $sh/$fileno");
+  # pipes are blocking by default.
+  if ($blocking_desired) {
+    if ($wantarray) {
+      return readline($sh);
+    } else {
+      return scalar readline($sh);
     }
-    return () if $wantarray;
-    return;
-  }
-  if ($nfound < 0) {
-    # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
-    return () if $wantarray;
-    return;
-  }
-
-  # perldoc select: warns against mixing select4
-  # (unbuffered input) with readline (buffered input).
-  # Do I have to do my own buffering? Eek. Don't look.
-
-  if ($wantarray) {
-    my $input = '';
-
-    while ($nfound) {
-      my $buffer = '';
-      last if 0 == sysread $sh, $buffer, 4096;
-      $input .= $buffer;
-      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
-    }
-
-    my @return = ();
-    while ($input =~ m!$/!) {
-      push @return, substr $input, 0, $+[0];
-      substr($input, 0, $+[0]) = "";
-    }
-    return @return;
   } else {
-    my $input = '';
-    while ($nfound) {
-      my $buffer = '';
-      last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
-      $input .= $buffer;
-      last if length($/) > 0 && substr($input,-length($/)) eq $/;
-      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+    my ($rin,$rout,$ein,$eout);
+    my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+    $rin = '';
+    vec($rin, $fileno, 1) = 1;
+    local $! = undef;
+    my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+
+    if ($nfound == 0) {
+      if ($DEBUG) {
+	debug("no input found on $sh/$fileno");
+      }
+      return () if $wantarray;
+      return;
     }
-    return $input;
+    if ($nfound < 0) {
+      # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
+      return () if $wantarray;
+      return;
+    }
+
+    # perldoc select: warns against mixing select4
+    # (unbuffered input) with readline (buffered input).
+    # Do I have to do my own buffering? Don't look.
+
+    if ($wantarray) {
+      my $input = '';
+
+      while ($nfound) {
+	my $buffer = '';
+	last if 0 == sysread $sh, $buffer, 4096;
+	$input .= $buffer;
+	($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+      }
+
+      my @return = ();
+      while ($input =~ m!$/!) {
+	push @return, substr $input, 0, $+[0];
+	substr($input, 0, $+[0]) = "";
+      }
+      return @return;
+    } else {
+      my $input = '';
+      while ($nfound) {
+	my $buffer = '';
+	last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
+	$input .= $buffer;
+	last if length($/) > 0 && substr($input,-length($/)) eq $/;
+	($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+      }
+      return $input;
+    }
   }
+
 }
 
 sub Forks::Super::Job::read_stdout {
-  my ($job) = @_;  # my ($job, @options) = @_;
+  my ($job, %options) = @_;  # my ($job, @options) = @_;
   Forks::Super::Job::_resolve($job);
-  return _readline($job->{child_stdout}, $job, wantarray);
+  return _readline($job->{child_stdout}, $job, wantarray, %options);
 }
 
 sub Forks::Super::Job::read_stderr {
-  my ($job) = @_;  # my ($job, @options) = @_;
+  my ($job, %options) = @_;  # my ($job, @options) = @_;
   Forks::Super::Job::_resolve($job);
-  return _readline($job->{child_stderr}, $job, wantarray);
+  return _readline($job->{child_stderr}, $job, wantarray, %options);
 }
 
 #
@@ -1699,17 +1744,19 @@ sub Forks::Super::Job::read_stderr {
 # error condition and eof condition on handle
 #
 sub _readline {
-  my ($fh,$job,$wantarray) = @_;  # my ($fh, $job, $wantarray, @options) = @_;
+  my ($fh,$job,$wantarray,%options) = @_;  # my ($fh, $job, $wantarray, @options) = @_;
   if (!defined $fh) {
-    if ($job->{debug}) {
+    if ($job->{debug} && (!defined($options{"warn"}) || $options{"warn"})) {
       carp "Forks::Super::_readline(): ",
 	"read on unconfigured handle for job $job->{pid}\n";
     }
     return;
   }
   if ($$fh->{closed}) {
-    carp_once "Forks::Super::_readline(): ",
-      "read on closed handle for job $job->{pid}\n";
+    if (!defined($options{"warn"}) || $options{"warn"}) {
+      carp_once "Forks::Super::_readline(): ",
+	"read on closed handle for job $job->{pid}\n";
+    }
     return;
   }
 
@@ -1719,51 +1766,67 @@ sub _readline {
     return _read_pipe(@_);
   }
 
+  # WARNING: blocking read on a filehandle can lead to deadlock
+  my $blocking_desired = defined($options{"block"}) && $options{"block"} != 0;
+  my $blocking_not_desired = defined($options{"block"}) && $options{"block"} == 0;
+
   local $! = undef;
   if ($wantarray) {
-    my @lines = readline($fh);
-    if (0 == @lines) {
+    my @lines;
+    while (@lines == 0) {
+      @lines = readline($fh);
+      if (@lines > 0) {
+	return @lines;
+      }
+
       if ($job->is_complete && Forks::Super::Util::Time() - $job->{end} > 3) {
 	if ($job->{debug}) {
 	  debug("Forks::Super::_readline(): ",
 		"job $job->{pid} is complete. Closing $fh");
-	  if ($fh eq $job->{child_stdout}) {
-	    $job->{child_stdout_closed}++;
-	  }
-	  if ($fh eq $job->{child_stderr}) {
-	    $job->{child_stderr_closed}++;
-	  }
-	  _close($fh);
-	  return ();
+	}
+	if (defined($job->{child_stdout}) && $fh eq $job->{child_stdout}) {
+	  $job->close_fh('stdout');
+	}
+	if (defined($job->{child_stderr}) && $fh eq $job->{child_stderr}) {
+	  $job->close_fh('stderr');
 	}
       } else {
-	@lines = ();
 	seek $fh, 0, 1;
 	Forks::Super::pause();
+      }
+      if (!$blocking_desired) {
+	return ();
       }
     }
     return @lines;
   } else {   # !$wantarray
-    my $line = readline($fh);
-    if (!defined $line) {
+    my $line;
+    while (!defined $line) {
+      $line = readline($fh);
+      if (defined $line) {
+	return $line;
+      }
+
       if ($job->is_complete && Forks::Super::Util::Time() - $job->{end} > 3) {
-	debug("Forks::Super::_readline(): ",
+	if ($job->{debug}) {
+	  debug("Forks::Super::_readline(): ",
 	      "job $job->{pid} is complete. Closing $fh");
+	}
 	if ($fh eq $job->{child_stdout}) {
-	  $job->{child_stdout_closed} = 1;
+	  $job->close_fh('stdout');
 	}
 	if ($fh eq $job->{child_stderr}) {
-	  $job->{child_stderr_closed} = 1;
+	  $job->close_fh('stderr');
 	}
-	_close($fh);
 	return;
       } else {
-	$line = '';
 	seek $fh, 0, 1;
 	Forks::Super::pause();
       }
+      if (!$blocking_desired) {
+	return '';
+      }
     }
-    return $line;
   }
 }
 

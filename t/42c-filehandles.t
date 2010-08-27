@@ -36,10 +36,10 @@ $t = time;
 @out = ();
 @err = ();
 while (time < $t+7) {
-  my @data = Forks::Super::read_stdout($pid);
+  my @data = Forks::Super::read_stdout($pid, "warn" => 0);
   push @out, @data if @data>0 and $data[0] ne "";
 
-  @data = Forks::Super::read_stderr($pid);
+  @data = Forks::Super::read_stderr($pid, "warn" => 0);
   push @err, @data if @data>0 and $data[0] ne "";
 }
 

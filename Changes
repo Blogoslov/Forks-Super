@@ -1,5 +1,12 @@
 Revision history for Forks-Super
 
+0.37    2010-08-27
+        Support  block=>0|1  option to F::S::J::Ipc::read_stdXXX methods
+        to force blocking/non-blocking IPC I/O.
+        Natural language for timeout/expiration/delay/start_after options
+        (requires DateTime::Format::NaturalLanguage).
+        Support CONFIG{filehandles}=0 to only use sockets & pipes for IPC.
+
 0.36    2010-08-23
 	Test case fixes only.
 
@@ -7,7 +14,7 @@ Revision history for Forks-Super
         New IPC methods F::S::Job::write_stdin, read_stdout, read_stderr;
         refactored a lot of IPC code.
         wait, waitpid can return overloaded F::S::Job objects like fork().
-        Documented $Forks::Super::WAIT_ACTION_ON_SUSPENDED_JOBS.
+        Documented $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS.
         Implemented suspend callback.
 
 0.34    2010-08-10

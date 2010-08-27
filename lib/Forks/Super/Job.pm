@@ -9,11 +9,10 @@ use Forks::Super::Debug qw(debug);
 use Forks::Super::Util qw(is_number qualify_sub_name IS_WIN32 is_pipe);
 use Forks::Super::Config qw(:all);
 use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
-use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::Timeout;
+use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
-#use Exporter;
 use base 'Exporter';
 use Carp;
 use IO::Handle;
@@ -22,7 +21,7 @@ use warnings;
 
 our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.36';
+our $VERSION = '0.37';
 our ($WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
 enable_overload() if $ENV{"FORKS_SUPER_JOB_OVERLOAD"};
@@ -608,13 +607,18 @@ sub _preconfig_start_time {
 
   ###########################
   # configure a future start time
+  my $start_after = 0;
   if (defined $job->{delay}) {
-    my $start_time = Forks::Super::Util::Time() + $job->{delay};
-
-    if ((not defined $job->{start_after}) 
-	|| $job->{start_after} > $start_time) {
-      $job->{start_after} = $start_time;
-    }
+    $start_after = Forks::Super::Util::Time() +  Forks::Super::Job::Timeout::_time_from_natural_language($job->{delay}, 1);
+    #$start_after = Forks::Super::Util::Time() +  $job->{delay};
+  }
+  if (defined $job->{start_after}) {
+    my $start_after2 = Forks::Super::Job::Timeout::_time_from_natural_language($job->{start_after}, 0);
+    #my $start_after2 = $job->{start_after};
+    $start_after = $start_after2 if $start_after < $start_after2;
+  }
+  if ($start_after) {
+    $job->{start_after} = $start_after;
     delete $job->{delay};
     debug('Forks::Super::Job::_can_launch(): start delay requested.')
       if $job->{debug};
@@ -716,6 +720,15 @@ sub _config_debug_child {
   }
 }
 
+END {
+  if ($$ == ($Forks::Super::MAIN_PID ||= $$)) {
+    Forks::Super::Queue::_cleanup();
+    Forks::Super::Job::Ipc::_cleanup();
+  } else {
+    Forks::Super::Job::Timeout::_cleanup_child();
+  }
+}
+
 #############################################################################
 # Package methods (meant to be called as Forks::Super::Job::xxx(@args))
 
@@ -731,6 +744,7 @@ sub enable_overload {
       '&' => sub { $_[0]->{pid} & $_[1] },
       '|' => sub { $_[0]->{pid} | $_[1] },
       '^' => sub { $_[0]->{pid} ^ $_[1] },
+      '~' => sub { ~$_[0]->{pid} },         # since 0.37
       '<=>' => sub { $_[2] ? $_[1] <=> $_[0]->{pid} : $_[0]->{pid} <=> $_[1] },
       'cmp' => sub { $_[2] ? $_[1] cmp $_[0]->{pid} : $_[0]->{pid} cmp $_[1] },
       '-'   => sub { $_[2] ? $_[1]  -  $_[0]->{pid} : $_[0]->{pid}  -  $_[1] },
@@ -927,7 +941,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.36
+0.37
 
 =head1 SYNOPSIS
 

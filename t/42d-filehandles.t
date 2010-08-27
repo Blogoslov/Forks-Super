@@ -4,13 +4,31 @@ use Carp;
 use strict;
 use warnings;
 
+############################################################
+#
+# this particular test is a failure point in v0.35 and v0.36.
+# In about 30-40% of CPAN tester results,
+#     -- all 6 tests are ok
+#     -- the exit code of the test is 2
+#        From test summary report: (Wstat: 512 Tests: 6 Failed: 0)
+#     -- or sometimes the "status" is 139 (SIGSEGV + core dump)
+#     -- affects Linux and BSD more than other archs
+#     -- affects archname =~ /x86_64-linux/ more than other archs
+#
+# The CPAN testers seem to reproduce it pretty easily, but
+# I have not been able to (even though I have x86_64-linux
+# and x86_64-linux-thread-multi versions of perl.
+#     -- Is there a stray SIGINT somewhere?
+#     -- Does perl interpreter exit with code 2 under some conditions?
+# 
+
+
 #
 # test whether the parent can have access to the
 # STDIN, STDOUT, and STDERR filehandles from a
 # child process when the child process uses
 # the "cmd" option to run a shell command.
 #
-
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
 
@@ -57,17 +75,9 @@ waitpid $pid, 0;
 my @output = split /\n/, $output;
 ok($output[0] eq "bike 2" && $output[2] eq "car 4" && $output[3] eq "gun 6",
 "read input from ARRAY ref");
+waitall;
 
 use Carp;$SIG{SEGV} = sub {
   Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
 };
-
-# Failure point in 0.35: all tests in this script pass,
-#       but the script still exits with code 2. Is there
-#       an uncaught SIGINT somewhere? This condition is
-#       harder for me to reproduce than it is for the
-#       CPAN testers :-(.
-#       Does this it happen more often on v >= 5.13.2? Not really.
-#       Does this happen more on threaded versions of Perl?
-
 

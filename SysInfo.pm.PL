@@ -30,6 +30,8 @@ open F, '>', $ARGV[0] || 'lib/Forks/Super/SysInfo.pm';
 print F <<"____;";
 
 package Forks::Super::SysInfo;
+use strict;
+use warnings;
 
 # This package contains some estimates about your
 # system's capabilities that were discovered during
@@ -46,6 +48,9 @@ printF('MAX_FORK', $info{maxfork}, '12.345');
 printF('MAX_OPEN_FH', $info{maxfilehandle}, '123.456');
 printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
+if (defined $info{ncpu}) {
+  printF('NUM_PROCESSORS', $info{ncpu}, '1');
+}
 
 print F "\n\n1;\n";
 close F;

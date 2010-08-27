@@ -3,7 +3,7 @@
 #
 # Forks::Super proof-of-concept to run unit tests in parallel.
 #
-# good for
+# this framework is good for
 #     fast testing
 #       * if you have lots of tests and your framework is mature
 #         enough that you expect the vast majority to pass
@@ -15,7 +15,8 @@
 #       * expose issues caused by multiple instances of
 #         a test script running at once
 #
-# The Makefile for the Forks::Super module includes additional targets:
+# The Makefile for the Forks::Super module includes additional targets
+# that use this script:
 #
 #     # fasttest -- run all tests once, in "parallel" (using
 #     #    Forks::Super to manage and throttle the tests)
@@ -40,11 +41,12 @@
 #  --repeat|-r n:        do up to <n> iterations of testing. Pause after each
 #                        iteration, and abort if iteration had error(s)
 #  --xrepeat|-x n:       run each test <n> times in each iteration
-#  --maxproc|-m n:       run up to <n> tests simultaneously [default: 9]
+#  --maxproc|-m n:       run up to <n> tests simultaneously
 #  --quiet|-q:           produce less output (-q is *not* the opposite of -v!)
 #  --debug|-d:           produce output about what forked_harness.pl is doing
 #  --abort-on-fail|-a:   stop after the first test failure
 #  --grep pattern:       grab test output matching <pattern>, print all at end
+#  --color|-C:           output in color (requires Term::ANSIColor >=3.00)
 
 
 use lib qw(blib/lib);
@@ -59,6 +61,7 @@ $^T = Time::HiRes::gettimeofday();
 my $timeout = 120;
 my $use_harness = '';
 my $use_callbacks = '';
+my $use_color = '';
 my $test_verbose = $ENV{TEST_VERBOSE} || 0;
 my @use_libs = qw(blib/lib blib/arch);
 my @perl_opts = ();
@@ -82,6 +85,7 @@ $::fail35584 = '';
 # x s    x@  si  @xixi x i x 
 my $result = GetOptions("harness" => \$use_harness,
 	   "callbacks=s" => \$use_callbacks,
+	   "C|color" => \$use_color,
 	   "verbose" => \$test_verbose,
 	   "include=s" => \@use_libs,
 	   "popts=s" => \@perl_opts,
@@ -98,12 +102,15 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "abort-on-fail" => \$abort_on_first_error);
 my @captured = ();
 my %fail = ();
+$use_color = $ENV{COLOR} && -t STDOUT &&
+  eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
 
 $test_verbose ||= 0;
 $repeat = 1 if $repeat < 1;
 $xrepeat = 1 if $xrepeat < 1;
 $Forks::Super::MAX_PROC = $maxproc if $maxproc;
 $Forks::Super::Util::DEFAULT_PAUSE = 0.10;
+sub color_print;
 
 my $glob_required = 0;
 if (@ARGV == 0) {
@@ -199,7 +206,7 @@ sub main {
   }
 
   for ($iteration = 1; $iteration <= $repeat; $iteration++) {
-    print "Iteration #$iteration/$repeat\n" if $repeat>1;
+    color_print 'white bold on_black', "Iteration #$iteration/$repeat\n" if $repeat>1;
     if ($iteration > 1) {
       sleep 1;
     }
@@ -313,7 +320,7 @@ sub process {
   my $j = Forks::Super::Job::get($pid);
   my $status = $j->{status};
   my $test_file = $j{$j->{pid}};
-  my $test_time = sprintf '%.3fs', $j->{end} - $j->{start};
+  my $test_time = sprintf '%6.3fs', $j->{end} - $j->{start};
   my @stdout = Forks::Super::read_stdout($pid);
   my @stderr = Forks::Super::read_stderr($pid);
   $j->close_fh;
@@ -322,31 +329,7 @@ sub process {
     print "Processing results of test $test_file\n";
   }
 
-  my $redo = 0;
-
-  if ($^O eq "linux" && $status == 35584) {
-    $redo++;
-  }
-
-  my $pp = $j->{pid};
-  my $count = $j{"$pp:count"};
-  my $iter = $j{"$test_file:iteration"};
-  my $dashes = "-" x (40 + length($test_file));
-
-  # print "\n$dashes\n";
-  if ($quiet == 0 || $status > 0) {
-    print "------------------- $test_file -------------------\n";
-  }
-  print "|= TEST=$iter.$count/$repeat.$ntests; ",
-    "STATUS[$test_file]: $status \[ $total_status + $::fail35584 \] ",
-    "TIME=$test_time\n";
-
-  if ($status > 0 || $quiet == 0) {
-    print map{"|- $_"}@stdout;
-    print "|= $dashes\n";
-    print map{"|: $_"}@stderr;
-  }
-
+  # see which tests failed ...
   my @s = @stdout;
   my $not_ok = 0;
   foreach my $s (@s) {
@@ -370,6 +353,47 @@ sub process {
 	last;
       }
     }
+  }
+  if ($use_harness && $quiet && $not_ok == 0) {
+    @stdout = grep { /ok$/ } @stdout;
+  }
+
+
+
+
+  my $redo = 0;
+
+  if ($^O eq "linux" && $status == 35584) {
+    $redo++;
+  }
+
+  my $pp = $j->{pid};
+  my $count = $j{"$pp:count"};
+  my $iter = $j{"$test_file:iteration"};
+  my $dashes = "-" x (40 + length($test_file));
+
+  # print "\n$dashes\n";
+  my $status_color = $status > 0 ? 'bold red' : 'bold green';
+  my $status_color = $status > 0 ? 'bold red on_black' : 'bold green on_black';
+  my $sep_color = $status > 0 ? 'bold red on_black' : '';
+  if ($quiet == 0 || $status > 0) {
+    color_print $sep_color, "------------------- $test_file -------------------\n";
+  }
+  my $aggr_status = $::fail35584 ? "$total_status+$::fail35584" : $total_status;
+  my $test_id = sprintf "%*s", 2*length("$repeat$ntests")+3, "$iter.$count/$repeat.$ntests";
+
+  if ($use_harness && $quiet && $not_ok == 0) {
+    color_print $status_color, "|= test=$test_id; ",
+      "status: $status/$aggr_status ","time=$test_time ", "| ", @stdout;
+  } else {
+    color_print $status_color, "|= test=$test_id; ",
+      "status: $status/$aggr_status time=$test_time | $test_file\n";
+  }
+
+  if ($status > 0 || $quiet == 0) {
+    print map{"|- $_"}@stdout;
+    print "|= $dashes\n";
+    color_print 'yellow bold on_black', map{"|: $_"}@stderr;
   }
 
   # there are some circumstances where the tests passed but there
@@ -524,6 +548,24 @@ sub maxproc_initial {
   } else {
     return int(2 * $n + 1);
   }
+}
+
+# if appropriate and suppported, enhance output
+# to STDOUT with color.
+sub color_print {
+  my ($color, @msg) = @_;
+  if ($color eq '' || !$use_color) {
+    return print STDOUT @msg;
+  }
+  if (@msg > 0 && chomp($msg[-1])) {
+    return print STDOUT colored([$color], @msg), "\n";
+  }
+  return print STDOUT colored([$color], @msg);
+}
+
+sub color_printf {
+  my ($color, $template, @msg) = @_;
+  color_print $color, sprintf($template,@msg);
 }
 
 

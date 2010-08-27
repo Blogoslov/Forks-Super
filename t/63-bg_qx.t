@@ -17,7 +17,7 @@ ok($Forks::Super::LAST_JOB->{_is_bg} > 0,
 	"\$Forks::Super::LAST_JOB marked bg");
 my $p = waitpid -1, 0;
 my $t3 = Time() - $t;
-ok($p == -1 && $t3 <= 1.5, 
+ok($p == -1 && $t3 <= 1.5,
 	"waitpid doesn't catch bg_eval job, fast fail ${t3}s expect <=1s");
 ok($$x eq "$z \n", "scalar bg_qx $$x");
 my $h = Time();

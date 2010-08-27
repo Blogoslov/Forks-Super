@@ -29,7 +29,7 @@ ok(defined $Forks::Super::CHILD_STDERR{$pid}, "\%CHILD_STDERR defined");
 $msg = sprintf "%x", rand() * 99999999;
 $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 $z = print $fh_in "$msg\n";
-close $fh_in;
+Forks::Super::close_fh($pid, 'stdin');
 ok($z > 0, "print to child STDIN successful [exec]");
 $t = time;
 $fh_out = $Forks::Super::CHILD_STDOUT{$pid};

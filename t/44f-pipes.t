@@ -98,8 +98,8 @@ my $t = time;
 #my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
 while (time < $t+8) {
-  push @out, $pid->read_stdout($pid); # Forks::Super::read_stdout($pid);
-  push @err, $pid->read_stderr($pid); # Forks::Super::read_stderr($pid);
+  push @out, $pid->read_stdout; # Forks::Super::read_stdout($pid);
+  push @err, $pid->read_stderr; # Forks::Super::read_stderr($pid);
   sleep 1;
 }
 Forks::Super::close_fh($pid);

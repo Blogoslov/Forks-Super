@@ -7,6 +7,8 @@ package Forks::Super::Tie::BackgroundScalar;
 use Forks::Super;
 use Forks::Super::Wait 'WREAP_BG_OK';
 use Carp;
+use strict;
+use warnings;
 
 # a scalar reference that is evaluated in a child process.
 # when the value is dereferenced, retrieve the output from

@@ -25,6 +25,15 @@ use lib q(lib);
 use strict;
 use warnings;
 
+
+
+
+
+
+
+my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
+my %LIMITS = (file => $limits_file);
+
 if ($^O eq 'cygwin') {
   print STDERR qq!
 *************************************************
@@ -35,8 +44,6 @@ if ($^O eq 'cygwin') {
 *************************************************\n!;
 
 }
-
-my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
 
 my $pid = fork();
 if ($pid) {
@@ -50,11 +57,6 @@ if ($pid) {
   if (! -r $limits_file) {
     warn "System limitations file $limits_file still not found.\n ";
   }
-  print STDERR <<'';
-"make" complete.
-You may now run "make test" to run the unit tests in series
-or "make fasttest" to run them in parallel.
-
   exit;
 }
 
@@ -62,8 +64,8 @@ or "make fasttest" to run them in parallel.
 open(LOCK, ">>", "t/out/.lock-flim");
 flock LOCK, 2;
 
-my %LIMITS = ();
-$LIMITS{file} = $ARGV[0] || "t/out/limits.$^O.$]";
+#my %LIMITS = ();
+#$LIMITS{file} = $ARGV[0] || "t/out/limits.$^O.$]";
 $LIMITS{system} = $^O;
 $LIMITS{version} = $];
 
@@ -72,7 +74,7 @@ $LIMITS{version} = $];
 &find_max_open_sockets;
 &find_pipe_capacity;
 &find_socket_capacity;
-&find_max_fork;  # run last because it might crash the system
+&find_max_fork(200);  # run last because it might crash the program
 print "Created system limitations file in: $limits_file\n";
 
 close LOCK;
@@ -95,12 +97,12 @@ sub write_limits {
 # determine the maximum number of simultaneous background processes
 #
 sub find_max_fork {
+  my $N = shift;
   my $limits_file = $LIMITS{file};
   if (-f $limits_file) {
     unlink $limits_file;
   }
 
-  my $N = 200;
   print STDERR "";
   undef $@;
   my $r = eval {
@@ -108,11 +110,9 @@ sub find_max_fork {
     for (my $i=0; $i<$N; $i++) {
       undef $@;
       my $pid;
-      eval { 
-	$pid = fork();    # CORE::fork, not Forks::Super::fork
-      }; 
+      eval { $pid = fork() };    # CORE::fork, not Forks::Super::fork
       if ($@ || !defined $pid) {
-	print STDERR "$^O-$] cannot fork more than $i child processes.\n";
+	print STDERR "Cannot fork more than $i child processes.\n";
 	1 while wait > -1;
 	exit 0;
       } elsif ($pid == 0) {
@@ -124,8 +124,12 @@ sub find_max_fork {
 	&write_limits('maxfork' => $i);
       }
     }
-    print STDERR "$^O-$] successfully forked $N processes.\n";
     1 while wait > -1;
+
+    if ($N == 200) {
+      return find_max_fork(2000);
+    }
+    print STDERR "$^O-$] successfully forked $N processes.\n";
   };
   print "Result: $r / $@\n";
   return $r;
@@ -165,7 +169,7 @@ sub find_max_open_filehandles {
   # print STDERR "Msg for $i open files: $err\n";
   &write_limits('maxfilehandle' => $i);
   unlink "xxx.$j";
-
+  print STDERR "Can open $i file handles simultaneously\n";
   return $i;
 }
 
@@ -179,9 +183,50 @@ sub find_max_open_sockets {
 # a default value of $Forks::Super::MAX_PROC in the
 # installed code.
 #
+# See also: Sys::CpuAffinity getNumCpus() method
+#           Forks::Super::Job::OS::get_number_of_processors() method
+#
 sub count_number_of_cpus {
-  # XXX - TODO
-  # XXX - Maybe wait for Sys::CpuAffinity
+  my ($ncpu, $fh);
+  $ncpu = 0
+
+    # Sys::CpuAffinity is best. If available it uses all of
+    # the methods below plus a few more, and uses them more
+    # robustly.
+    || eval { require Sys::CpuAffinity; 
+	      Sys::CpuAffinity::getNumCpus() }
+
+    || eval { require Test::Smoke::SysInfo;
+	      my $sysinfo = Test::Smoke::SysInfo->new();
+	      $sysinfo && $sysinfo->{_ncpu} }
+
+    # generally available on Win32
+    || $^O eq "MSWin32" ? $ENV{NUMBER_OF_PROCESSORS} : 0
+
+
+    # /proc/cpuinfo, /proc/stat available on many unix-y systems
+    || open($fh,'</proc/cpuinfo') ? grep/^processor\s/,<$fh> : 0
+    || open($fh,'</proc/stat') ? grep/^cpu\d/i,<$fh> : 0
+
+
+    # some OS-specific commands and other long shots
+    || (grep /\d+.+processors?$/i, qx(hinv -c processor 2>/dev/null))
+    || qx(bindprocessor -q 2>/dev/null)
+    || (grep /^hw.ncpu:/, qx(sysctl -a 2>/dev/null))
+    || (qx(psrinfo 2> /dev/null))
+    || qx(hwprefs cpu_count 2>/dev/null)
+
+    || 0 ;
+  
+  if ($ncpu > 0) {
+    print STDERR "There are $ncpu cpus on this system.\n";
+    write_limits( ncpu => $ncpu );
+  } else {
+    print STDERR "I am having trouble detecting the number\n";
+    print STDERR "of processors on your system. Consider\n";
+    print STDERR "installing the  Sys::CpuAffinity  module\n";
+    print STDERR "before running this script.\n";
+  }
 }
 
 sub find_socket_capacity {
@@ -189,12 +234,14 @@ sub find_socket_capacity {
     _get_capacity(16384, 5,
 		  qq[use Socket;
 		     socketpair DUMMY,WRITER,AF_UNIX,SOCK_STREAM,PF_UNSPEC]);
+  print STDERR "Default socket capacity is about $socket_capacity bytes\n";
   &write_limits('socket_capacity' => $socket_capacity);
 }
 
 sub find_pipe_capacity {
   my $pipe_capacity =
-    _get_capacity(16384, 5, qq[pipe DUMMY,WRITER]);
+    _get_capacity(256, 10, qq[pipe DUMMY,WRITER]);
+  print STDERR "Default pipe capacity is about $pipe_capacity bytes\n";
   &write_limits('pipe_capacity' => $pipe_capacity);
 }
 
@@ -255,11 +302,7 @@ for (;;) {
   print WRITER \$output;
   \$written += length \$output;
   open F, ">", \"$output_file\";
-  if (time - \$^T >= $timeout) {
-    print F "-2";
-  } else {
-    print F \$written;
-  }
+  print F time - \$^T >= $timeout ? -2 : \$written;
   close F;
 }
 __END_SLAVE_CODE__

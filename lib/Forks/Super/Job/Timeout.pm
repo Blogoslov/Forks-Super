@@ -29,13 +29,15 @@ sub Forks::Super::Job::_config_timeout_child {
   my $job = shift;
   my $timeout = 9E9;
   if (defined $job->{timeout}) {
-    $timeout = $job->{timeout};
+    #$timeout = $job->{timeout};
+    $timeout = _time_from_natural_language($job->{timeout}, 1);
     if ($job->{style} eq 'exec') {
       carp "Forks::Super: exec option used, timeout option ignored\n";
       return;
     }
   }
   if (defined $job->{expiration}) {
+    $job->{expiration} = _time_from_natural_language($job->{expiration}, 0);
     if ($job->{expiration} - Forks::Super::Util::Time() < $timeout) {
       $timeout = $job->{expiration} - Forks::Super::Util::Time();
     }
@@ -47,6 +49,8 @@ sub Forks::Super::Job::_config_timeout_child {
   if ($timeout > 9E8) {
     return;
   }
+  $job->{_timeout} = $timeout;
+  $job->{_expiration} = $timeout + Forks::Super::Util::Time();
 
   # Un*x systems - try to establish a new process group for
   # this child. If this process times out, we want to have
@@ -156,41 +160,38 @@ sub Forks::Super::Job::_config_timeout_child {
   return;
 }
 
-END {
-  # clean up child
-  if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) { # FSJ::Timeout END {}
-    if (defined $Forks::Super::Config::CONFIG{'alarm'}
-	&& $Forks::Super::Config::CONFIG{'alarm'}) {
-      alarm 0;
+sub _cleanup_child {
+  if (defined $Forks::Super::Config::CONFIG{'alarm'}
+      && $Forks::Super::Config::CONFIG{'alarm'}) {
+    alarm 0;
+  }
+  if ($TIMEDOUT) {
+    if ($DISABLE_INT) {
+      # our child process received its own SIGINT that got sent out
+      # to its children/process group. We intended the exit status
+      # here to be as if it had die'd.
+      
+      $? = 255 << 8;
     }
-    if ($TIMEDOUT) {
-      if ($DISABLE_INT) {
-	# our child process received its own SIGINT that got sent out
-	# to its children/process group. We intended the exit status
-	# here to be as if it had die'd.
-
-	$? = 255 << 8;
-      }
-      if (Forks::Super::Config::CONFIG('getpgrp')) {
-	# try to kill off any grandchildren
-	if ($ORIG_PGRP == $NEW_PGRP) {
-	  carp "Forks::Super::child_exit: original setpgrp call failed, ",
-	    "child-of-child process might not be terminated.\n";
+    if (Forks::Super::Config::CONFIG('getpgrp')) {
+      # try to kill off any grandchildren
+      if ($ORIG_PGRP == $NEW_PGRP) {
+	carp "Forks::Super::child_exit: original setpgrp call failed, ",
+	  "child-of-child process might not be terminated.\n";
+      } else {
+	setpgrp(0, $ORIG_PGRP);
+	$NEWNEW_PGRP = getpgrp(0);
+	if ($NEWNEW_PGRP eq $NEW_PGRP) {
+	  carp "Forks::Super::child_exit: final setpgrp call failed, ",
+	    "[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
+	      "child-of-child processes might not be terminated.\n";
 	} else {
-	  setpgrp(0, $ORIG_PGRP);
-	  $NEWNEW_PGRP = getpgrp(0);
-	  if ($NEWNEW_PGRP eq $NEW_PGRP) {
-	    carp "Forks::Super::child_exit: final setpgrp call failed, ",
-	      "[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
-		"child-of-child processes might not be terminated.\n";
-	  } else {
-	    local $SIG{INT} = 'IGNORE';
-	    my $num_killed = CORE::kill 'INT', -$NEW_PGRP; 
-	    # kill -PID === kill PGID. Not portable
-	    if ($num_killed && $NEW_PGRP && $DEBUG) {
-	      debug("Forks::Super::child_exit: sent SIGINT to ",
-		    "$num_killed grandchildren");
-	    }
+	  local $SIG{INT} = 'IGNORE';
+	  my $num_killed = CORE::kill 'INT', -$NEW_PGRP; 
+	  # kill -PID === kill PGID. Not portable
+	  if ($num_killed && $NEW_PGRP && $DEBUG) {
+	    debug("Forks::Super::child_exit: sent SIGINT to ",
+		  "$num_killed grandchildren");
 	  }
 	}
       }
@@ -207,6 +208,34 @@ sub warm_up {
 
   eval { croak "preload.\n" };
   return $@;
+}
+
+our $DT_NL_PARSER;
+sub _time_from_natural_language {
+  my ($time,$isInterval) = @_;
+  if ($time !~ /[A-Za-z]/) {
+    return $time;
+  }
+
+  if (Forks::Super::Config::CONFIG("DateTime::Format::Natural")) {
+    my $now = DateTime->now;
+    $DT_NL_PARSER = DateTime::Format::Natural->new(datetime => $now,
+						   lang => 'en',
+						   prefer_future => 1);
+    if ($isInterval) {
+      my ($dt) = $DT_NL_PARSER->parse_datetime_duration($time);
+      return $dt->epoch - $now->epoch;
+    } else {
+      my $dt = $DT_NL_PARSER->parse_datetime($time);
+      return $dt->epoch;
+    }
+  } else{
+    carp "Forks::Super::Job::Timeout: ",
+	"time spec $time may contain natural language. ",
+	"Install the  DateTime::Format::Natural  module ",
+	"to use this feature.\n";
+    return $time;
+  }
 }
 
 1;

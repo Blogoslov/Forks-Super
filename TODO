@@ -26,8 +26,9 @@ Possible TODOs:
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
 	Can test with  PERL_SIGNALS=unsafe make test .
 
-    ___	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
+    _x_	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
 	then all IPC should be through sockets or pipes.
+	___ Document? Come up with a better way to set this feature?
 
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. See what
@@ -53,12 +54,13 @@ Possible TODOs:
 	to invoke or emulate IPC::Run's rich feature set
 	___ What else can I learn by studying IPC::Run?
 
-    ___ More tests from a child process and see what breaks.
+    _X_ More tests from a child process and see what breaks.
 		use Forks::Super;
 		CORE::fork() && exit;
 		# now $$ != $MAIN_PID but this is the
 		# "parent" process of Forks::Super.
 		do_something_and_see_if_it_works();
+        _X_ works good. MAIN_PID doesn't get initialized until fork() call
 
     _o_ Investigate "filehandle leaks" in t/forked_harness.pl.
 
@@ -78,13 +80,17 @@ Possible TODOs:
 	___ on close in the parent, optionally kill the child process,
 		close both the read and write ends of the filehandle
 
-    ___ Tie all filehandles from _safeopen for improved debugging
+    _o_ Tie all filehandles from _safeopen for improved debugging
 	in Forks::Super::Job::IPC. 
+	_x_ we are piling a lot of handle data into the symbol table now
 
     ___ block attribute or block value in child_fh attribute to
 	indicate whether blocking I/O is desired.
 
-    ___ block/noblock option in F::S::J::read_stdxxx
+    _X_ block/noblock option in F::S::J::read_stdxxx
+
+    ___ What other key-value pairs should FSJ::read_stdxxx handle?
+	_X_ warn => 0|1
 
     ___ fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
 
@@ -98,7 +104,7 @@ Possible TODOs:
 	___ "is Windows/Cygwin"
 	___ we can spoof this information for some tests ...
 
-    ___ Natural language extension to timeout, expiration, delay, 
+    _X_ Natural language extension to timeout, expiration, delay, 
 	start_after options:
 
 	___ fork { timeout => "10 minutes" }
@@ -117,4 +123,7 @@ Possible TODOs:
 
     ___ Forks::Super::Util::Time() is redundant. Replace with
 	Time::HiRes::gettimeofday().
+
+    ___ Support bg_qx on systems where YAML::Tiny is installed
+	without YAML.
 

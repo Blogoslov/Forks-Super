@@ -175,7 +175,7 @@ sub _kill_queue_monitor {
 }
 
 
-END {
+sub _cleanup {
   $DURING_GLOBAL_DESTRUCTION = 1;
   _kill_queue_monitor();
 }

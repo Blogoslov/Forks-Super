@@ -162,6 +162,7 @@ sub get_number_of_processors {
     || _get_number_of_processors_from_proc_cpuinfo()
     || _get_number_of_processors_from_psrinfo()
     || _get_number_of_processors_from_ENV()
+    || $Forks::Super::SysInfo::NUM_PROCESSORS
     || do {
       my $install = "Install the Sys::CpuAffinity module";
       carp_once "Forks::Super::get_number_of_processors(): ",

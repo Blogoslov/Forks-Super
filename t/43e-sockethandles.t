@@ -61,5 +61,5 @@ if (@out < 10) {
 ok(@err == 2 || @err==3, "got " . scalar @err . "==2|3 lines of error");
 ok($out[0] eq "$msg\n", "got expected output from child");
 ok($err[0] =~ /received message $msg/, "got expected error from child");
-close $fh_in;
+Forks::Super::close_fh($pid, 'stdin');
 waitall;

@@ -39,7 +39,7 @@ ok($Forks::Super::CHILD_STDOUT{$pid} eq $Forks::Super::CHILD_STDERR{$pid},
 $t = time;
 @out = ();
 while (time < $t+6) {
-  while ((my $line = Forks::Super::read_stdout($pid))) {
+  while ((my $line = Forks::Super::read_stdout($pid, warn => 0))) {
     push @out,$line;
     if (@out > 100) {
       print STDERR "\nCrud. \@out is growing out of control:\n@out\n";

@@ -88,6 +88,6 @@ do '../conditionally-install-submodule.pl';
   promptDefault => 'n',
   declineMessage => "Some features of Forks::Super may not be available",
   force => scalar(grep { /force/ } @ARGV),
-  reinstall => scalar(grep { /reinstall/ || /bundle/ } @ARGV),
+  reinstall => $ENV{BUNDLE_REINSTALL}
 
 );

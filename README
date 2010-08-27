@@ -1,5 +1,5 @@
 
-Forks::Super version 0.36
+Forks::Super version 0.37
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -13,12 +13,12 @@ and managing them, including:
       (name or code reference) to invoke in the child
       process
 
-   *  setting deadlines
+   *  timeouts for background processes
 
       can specify a deadline (in relative or absolute
       time) for a background process to complete,
       with the background process being killed if it does
-      not complete by the deadline.
+      not complete by its deadline.
 
    *  throttling
 
@@ -26,7 +26,9 @@ and managing them, including:
       block new processes from starting when the system's
       CPU load is too high. Callers can install their own
       functions to determine when the system is too busy 
-      to launch another job.
+      to launch another job. More advanced features allow
+      you to suspend and resume background tasks according
+      to your own criteria.
 
    *  dependencies
 
@@ -39,13 +41,13 @@ and managing them, including:
       the future, or to be launched under some specific
       future conditions. Arbitrary priorities can be
       assigned to jobs so that more urgent jobs will be
-      launched first
+      launched first.
 
-   *  access to standard child filehandles
+   *  simple interprocess communication
 
-      Parent process can have access to STDIN, STDOUT,
-      and STDERR filehandles of child processes to
-      facilitate interprocess communication
+      Parent process can access a child process's standard
+      input, output, and error streams to facilitate
+      interprocess communication.
 
    *  timeouts on wait,waitpid calls
 

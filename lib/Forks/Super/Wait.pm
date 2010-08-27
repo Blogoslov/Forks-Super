@@ -10,6 +10,7 @@ use Forks::Super::Util qw(is_number isValidPid pause Time);
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Config;
 use Forks::Super::Queue;
+use Forks::Super::Tie::Enum;
 use POSIX ':sys_wait_h';
 use Exporter;
 use base 'Exporter';
@@ -24,7 +25,8 @@ our $VERSION = $Forks::Super::Util::VERSION;
 our ($productive_pause_code, $productive_waitpid_code);
 our $REAP_NOTHING_MSGS = 0;
 
-our $WAIT_ACTION_ON_SUSPENDED_JOBS = 'wait'; # wait | fail | resume
+tie our $WAIT_ACTION_ON_SUSPENDED_JOBS, 
+  'Forks::Super::Tie::Enum', qw(wait fail resume);
 
 sub set_productive_pause_code (&) {
   $productive_pause_code = shift;
