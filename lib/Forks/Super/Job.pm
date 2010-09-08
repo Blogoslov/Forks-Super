@@ -19,11 +19,13 @@ use IO::Handle;
 use strict;
 use warnings;
 
-our (@ALL_JOBS, %ALL_JOBS);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.37';
-our ($WIN32_PROC, $WIN32_PROC_PID);
+our $VERSION = '0.38';
+
+our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
+our $INSIDE_END_QUEUE = 0;
+
 enable_overload() if $ENV{"FORKS_SUPER_JOB_OVERLOAD"};
 
 #############################################################################
@@ -35,7 +37,7 @@ sub new {
   if (ref $opts eq 'HASH') {
     $this->{$_} = $opts->{$_} foreach keys %$opts;
   }
-  $this->{created} = Forks::Super::Util::Time();
+  $this->{created} = Time::HiRes::gettimeofday();
   $this->{state} = 'NEW';
   $this->{ppid} = $$;
   if (!defined $this->{_is_bg}) {
@@ -149,7 +151,7 @@ sub toShortString {
 sub _mark_complete {
   my $job = shift;
   $job->{state} = 'COMPLETE';
-  $job->{end} = Forks::Super::Util::Time();
+  $job->{end} = Time::HiRes::gettimeofday();
 
   $job->run_callback('collect');
   $job->run_callback('finish');
@@ -158,7 +160,7 @@ sub _mark_complete {
 sub _mark_reaped {
   my $job = shift;
   $job->{state} = 'REAPED';
-  $job->{reaped} = Forks::Super::Util::Time();
+  $job->{reaped} = Time::HiRes::gettimeofday();
   $? = $job->{status};
   debug("Job $job->{pid} reaped") if $job->{debug};
   return;
@@ -171,7 +173,7 @@ sub can_launch {
   no strict 'refs';
 
   my $job = shift;
-  $job->{last_check} = Forks::Super::Util::Time();
+  $job->{last_check} = Time::HiRes::gettimeofday();
   if (defined $job->{can_launch}) {
     if (ref $job->{can_launch} eq 'CODE') {
       return $job->{can_launch}->($job);
@@ -188,7 +190,7 @@ sub can_launch {
 sub _can_launch_delayed_start_check {
   my $job = shift;
   return 1 if !defined $job->{start_after} ||
-    Forks::Super::Util::Time() >= $job->{start_after};
+    Time::HiRes::gettimeofday() >= $job->{start_after};
 
   debug('Forks::Super::Job::_can_launch(): ',
 	'start delay requested. launch fail') if $job->{debug};
@@ -324,7 +326,10 @@ sub launch {
   while (!defined $pid && $retries-- > 0) {
     warn "Forks::Super::launch: ",
       "system fork call returned undef. Retrying ...\n";
-    Forks::Super::Util::pause(1 + ($job->{retries} || 1) - $retries);
+    $Forks::Super::Job::_RETRY_PAUSE ||= 1.0;
+    my $delay = 1.0 + $Forks::Super::Job::_RETRY_PAUSE
+      * (($job->{retries} || 1) - $retries);
+    Forks::Super::Util::pause($delay);
     $pid = _CORE_fork();
   }
 
@@ -368,7 +373,7 @@ sub launch {
     }
     $job->{real_pid} = $pid;
     $job->{pid} = $pid unless defined $job->{pid};
-    $job->{start} = Forks::Super::Util::Time();
+    $job->{start} = Time::HiRes::gettimeofday();
 
     $job->_config_parent;
     $job->run_callback('start');
@@ -609,8 +614,8 @@ sub _preconfig_start_time {
   # configure a future start time
   my $start_after = 0;
   if (defined $job->{delay}) {
-    $start_after = Forks::Super::Util::Time() +  Forks::Super::Job::Timeout::_time_from_natural_language($job->{delay}, 1);
-    #$start_after = Forks::Super::Util::Time() +  $job->{delay};
+    $start_after = Time::HiRes::gettimeofday() +  Forks::Super::Job::Timeout::_time_from_natural_language($job->{delay}, 1);
+    #$start_after = Time::HiRes::gettimeofday() +  $job->{delay};
   }
   if (defined $job->{start_after}) {
     my $start_after2 = Forks::Super::Job::Timeout::_time_from_natural_language($job->{start_after}, 0);
@@ -721,7 +726,14 @@ sub _config_debug_child {
 }
 
 END {
+  $INSIDE_END_QUEUE = 1;
   if ($$ == ($Forks::Super::MAIN_PID ||= $$)) {
+
+    # disable SIGCHLD handler during cleanup. Hopefully this will fix
+    # intermittent test failures where all subtests pass but the
+    # test exits with non-zero exit status (e.g., t/42d-filehandles.t)
+    delete $SIG{CHLD};
+
     Forks::Super::Queue::_cleanup();
     Forks::Super::Job::Ipc::_cleanup();
   } else {
@@ -941,7 +953,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.37
+0.38
 
 =head1 SYNOPSIS
 

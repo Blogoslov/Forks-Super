@@ -15,26 +15,26 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
- SKIP: {
+SKIP: {
+  if (!Forks::Super::CONFIG("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 3;
   }
-  exit 0;
-}
 
 #######################################################
 
-my $now = Forks::Super::Util::Time();
-my $future = Forks::Super::Util::Time() + 3;
+my $now = Time::HiRes::gettimeofday();
+my $future = Time::HiRes::gettimeofday() + 3;
 my $pid = fork { sub => sub { sleep 10; exit 0 }, expiration => $future };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($p == $pid, "$$\\wait successful");
 ok($t < 5.95, "wait took ${t}s, expected ~3s");  ### 11 ###
-ok($? != 0, "job expired with non-zero status"); ### 12 ###
+ok($? != 0, "job expired with non-zero STATUS"); ### 12 ###
 
 # script dies intermittently here?
 
 #######################################################
+
+} # end SKIP

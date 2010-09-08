@@ -6,9 +6,9 @@
 # that wish to run them.
 # 
 
-my $t0 = Time();
+my $t0 = Time::HiRes::gettimeofday();
 my $x = bg_eval { sleep 3 ; return 42 };
-my $t = Time();
+my $t = Time::HiRes::gettimeofday();
 ok(defined $Forks::Super::LAST_JOB,        ### 3 ###
    "\$Forks::Super::LAST_JOB set");
 ok(defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID set");
@@ -19,7 +19,7 @@ ok($Forks::Super::LAST_JOB->{_is_bg} > 0,
 my $p = waitpid -1, 0, 10.0;
 ok($p == -1, "waitpid doesn't catch bg_eval job");
 ok($$x == 42, "scalar bg_eval");
-my $t1 = Time();
+my $t1 = Time::HiRes::gettimeofday();
 ($t,$t0) = ($t1-$t,$t1-$t0);
 my $y = $$x;
 ok($y == 42, "scalar bg_eval");
@@ -29,9 +29,9 @@ $$x = 19;
 ok($$x == 19, "result is not read only");
 
 $x = bg_eval { sleep 10; return 19 } { timeout => 2 };
-$t = Time();
+$t = Time::HiRes::gettimeofday();
 ok(!defined $$x, "scalar bg_eval undef on failure");
-$t = Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t <= 3.95,                    ### 13 ### was 3.25, obs 3.41
    "scalar bg_eval respected timeout, took ${t}s expected ~2s");
 
@@ -40,7 +40,7 @@ ok($t <= 3.95,                    ### 13 ### was 3.25, obs 3.41
 # result is a tie'd array so let's exercise the array operations
 #
 
-$t = Time();
+$t = Time::HiRes::gettimeofday();
 my @x = bg_eval {
   sleep 2;
   opendir(X, "t");
@@ -49,7 +49,7 @@ my @x = bg_eval {
   return @f;
 };
 my @tests = @x;
-$t = Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok(@tests > 10, "list bg_eval");
 ok($t >= 1.84, "list bg_eval took ${t}s expected ~2s");
 
@@ -74,7 +74,7 @@ ok(@x == 0, "list bg_eval clear");
 
 ### scalar context, return reference ###
 
-$t0 = Time();
+$t0 = Time::HiRes::gettimeofday();
 $x = bg_eval {
   sleep 2;
   opendir(X, "t");
@@ -82,9 +82,9 @@ $x = bg_eval {
   closedir X;
   return \@f;
 };
-$t = Time();
+$t = Time::HiRes::gettimeofday();
 my @others = @$$x;
-my $t2 = Time();
+my $t2 = Time::HiRes::gettimeofday();
 ($t,$t0) = ($t2-$t,$t2-$t0);
 ok($t0 >= 1.95 && $t <= 5.04,           ### 25 ### was 3.25 obs 3.56,3.75,4.97
    "listref bg_eval took ${t0}s ${t}s expected ~2s");
@@ -97,14 +97,14 @@ waitall;
 
 $$x = 20;
 my $w = 14;
-$t0 = Time();
+$t0 = Time::HiRes::gettimeofday();
 $x = bg_eval {
   sleep 5; return 19
 } { name => 'bg_eval_job', delay => 3, on_busy => "queue",
       callback => { queue => sub { $w++ }, start => sub { $w+=2 },
 		    finish => sub { $w+=5 } }
     };
-$t = Time();
+$t = Time::HiRes::gettimeofday();
 my $j = Forks::Super::Job::get('bg_eval_job');
 ok($j eq $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
 ok($j->{state} eq "DEFERRED", "bg_eval with delay");
@@ -113,7 +113,7 @@ Forks::Super::pause(4);
 ok($j->{state} eq "ACTIVE", "bg_eval job left queue " . $j->toString());
 ok($w == 14 + 1 + 2, "bg_eval start callback");
 ok($$x == 19, "scalar bg_eval with lots of options");
-$t1 = Time();
+$t1 = Time::HiRes::gettimeofday();
 ($t,$t0) = ($t1-$t,$t1-$t0);
 ok($t0 > 7.85 && $t < 13.5,  ### 34 ### was 9.6 obs 9.99,10.35,11.37,13.20
    "bg_eval with delay took ${t}s ${t0}s, expected ~8s");

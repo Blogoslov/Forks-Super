@@ -14,29 +14,19 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.37';
-our @EXPORT_OK = qw(Time Ctime is_number isValidPid pause qualify_sub_name 
+our $VERSION = '0.38';
+our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK, IS_OS => [ qw(IS_WIN32 IS_CYGWIN) ]);
 
-our $DEFAULT_PAUSE = 0.10;
-our ($Time_HiRes_avail, $something_productive, $something_else_productive);
-our $_PAUSE = 0;
+our (%SIG_NO, @SIG_NAME, $Time_HiRes_avail,
+    $something_productive, $something_else_productive);
+our ($DEFAULT_PAUSE, $_PAUSE) = (0.10, 0);
+$Time_HiRes_avail = eval "use Time::HiRes; 1" || 0;
 
-my $x = eval "use Time::HiRes";
-if ($@) {
-  $Time_HiRes_avail = 0;
-} else {
-  $Time_HiRes_avail = 1;
-}
-
-sub Time {
-  return $Time_HiRes_avail
-    ? scalar Time::HiRes::gettimeofday() : CORE::time();
-}
 
 sub Ctime {
-  my $t = Time();
+  my $t = Time::HiRes::gettimeofday(); #Time();
   return sprintf "%02d:%02d:%02d.%03d: ",
     ($t/3600)%24, ($t/60)%60, $t%60, ($t*1000)%1000;
 }
@@ -71,7 +61,7 @@ sub set_other_productive_pause_code (&) {
 
 # productive "sleep" function
 sub pause {
-  my $start = Forks::Super::Util::Time();
+  my $start = Time::HiRes::gettimeofday();
   my $delay = shift || $DEFAULT_PAUSE;
   my $unproductive = shift || 0;
   my $expire = $start + ($delay || 0.25);
@@ -79,16 +69,16 @@ sub pause {
   $_PAUSE++; # prevent too much productive code from nested pause calls
 
   if ($Time_HiRes_avail) {
-    my $time_left = $expire - Forks::Super::Util::Time();
+    my $time_left = $expire - Time::HiRes::gettimeofday();
     while ($time_left > 0) {
       if ($_PAUSE < 2 && $something_productive && !$unproductive) {
 	$something_productive->();
-	$time_left = $expire - Forks::Super::Util::Time();
+	$time_left = $expire - Time::HiRes::gettimeofday();
 	last if $time_left <= 0;
       }
       my $resolution = $time_left > $DEFAULT_PAUSE ? $DEFAULT_PAUSE : $time_left * 0.5 + 0.01;
       Time::HiRes::sleep($resolution || 0.25);
-      $time_left = $expire - Forks::Super::Util::Time();
+      $time_left = $expire - Time::HiRes::gettimeofday();
     }
   } else {
     my $stall = $delay * 0.1;
@@ -99,12 +89,12 @@ sub pause {
     while ($delay > 0) {
       if ($_PAUSE < 2 && $something_productive && !$unproductive) {
 	$something_productive->();
-	$delay = Forks::Super::Util::Time() - $expire;
+	$delay = Time::HiRes::gettimeofday() - $expire;
 	last if $delay <= 0;
       }
 
       if ($stall >= 1) {
-	sleep $stall;
+	CORE::sleep $stall;
       } else {
 	select undef, undef, undef, $stall < $delay ? $stall : $delay;
       }
@@ -119,7 +109,7 @@ sub pause {
     $something_productive->();
   }
   $_PAUSE = 0;
-  return Time() - $start;
+  return Time::HiRes::gettimeofday() - $start;
 }
 
 #
@@ -143,8 +133,6 @@ sub qualify_sub_name {
   }
   return join "::", $calling_package, $name;
 }
-
-our (%SIG_NO, @SIG_NAME);
 
 sub signal_name {
   my $num = shift;

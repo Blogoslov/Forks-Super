@@ -21,13 +21,16 @@ use warnings;
 $Forks::Super::Sigchld::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
 
-
-ok($Forks::Super::SysInfo::SYSTEM eq $^O,
-   "Forks::Super::SysInfo configured for $Forks::Super::SysInfo::SYSTEM==$^O");
-ok($Forks::Super::SysInfo::PERL_VERSION <= $],
-   "Forks::Super::SysInfo configured for "
-   . "$Forks::Super::SysInfo::PERL_VERSION<=$]");
-
+SKIP: {
+  if ($ENV{WRONG_MAKEFILE_OK}) {
+    skip "ok to run $0 with inconsistent version of perl", 2;
+  }
+  ok($Forks::Super::SysInfo::SYSTEM eq $^O,
+     "Forks::Super::SysInfo configured for $Forks::Super::SysInfo::SYSTEM==$^O");
+  ok($Forks::Super::SysInfo::PERL_VERSION <= $],
+     "Forks::Super::SysInfo configured for "
+     . "$Forks::Super::SysInfo::PERL_VERSION<=$]");
+}
 
 my $NN = 149;
 my $nn = $NN;
@@ -35,9 +38,10 @@ SKIP: {
   $nn = int(0.85 * $Forks::Super::SysInfo::MAX_FORK) || 5;
   $nn = $NN if $nn > $NN;
 
-  # solaris tends to barf on this test even though it passes
-  # the others -- disable until we figure out why.
-  # (raises SIGSYS? don't know if that is easy to trap)
+  # solaris tends to barf on this test even though it passes the others.
+  # (raises SIGSYS? can that be trapped?)
+  # This test was disabled on solaris for a long time.
+  # Reenable with v0.38 and see if this test can pass now.
   if ($^O =~ /solaris/) {
     $nn = 0;
   }
@@ -95,8 +99,8 @@ sub check_CHLD_handle_history_for_interleaving {
 if ($test::fail > 0) {
   print STDERR "Errors in $0\n";
   print STDERR "Writing SIGCHLD handler history to\n";
-  print STDERR "'t/out/sigchld.debug' for analysis.\n";
-  open(D, ">", "t/out/sigchld.debug");
+  print STDERR "'t/out/sigchld.debug.$$' for analysis.\n";
+  open(D, ">", "t/out/sigchld.debug.$$");
   print D @Forks::Super::CHLD_HANDLE_HISTORY;
   close D;
 }

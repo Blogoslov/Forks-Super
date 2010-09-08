@@ -16,25 +16,23 @@ use warnings;
 
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-
 our $VERSION = $Forks::Super::Util::VERSION;
 
-our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID);
-our $QUEUE_MONITOR_FREQ;
+our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID, $QUEUE_MONITOR_FREQ);
 our $QUEUE_DEBUG = $ENV{FORKS_SUPER_QUEUE_DEBUG} || 0;
 our $QUEUE_MONITOR_LIFESPAN = 14400;
 our $DEFAULT_QUEUE_PRIORITY = 0;
 our $INHIBIT_QUEUE_MONITOR = 1;
 our $NEXT_DEFERRED_ID = -100000;
+our $OLD_QINTERRUPT_SIG;
+our ($MAIN_PID,$_LOCK) = ($$,0);
 
-our $OLD_SIG;
-our $MAIN_PID = $$;
-our $_LOCK = 0; # ??? can this prevent crash -- no, but it can cause deadlock
-our $CHECK_FOR_REAP = 1;
-
-# set flag if the program is shutting down. Use flag in queue_job()
-# to suppress warning messages
-our $DURING_GLOBAL_DESTRUCTION = 0;
+# if a child process finishes while the  run_queue()  function is running,
+# we will usually have to restart that function in order to make sure
+# that jobs are dispatched quickly and in the correct order. The SIGCHLD
+# handler sets the flag  $_REAP , and if we check that flag  run_queue()
+# will do its job properly.
+our ($CHECK_FOR_REAP, $_REAP) = (1,0);
 
 # use var $Forks::Super::QUEUE_INTERRUPT, not lexical package var
 
@@ -48,13 +46,12 @@ sub init {
   tie $QUEUE_MONITOR_FREQ, 
     'Forks::Super::Queue::QueueMonitorFreq', 30;
 
-  tie $Forks::Super::QUEUE_INTERRUPT, 
-    'Forks::Super::Queue::QueueInterrupt', ('', keys %SIG);
-
   tie $INHIBIT_QUEUE_MONITOR, 
     'Forks::Super::Queue::InhibitQueueMonitor', &IS_WIN32;
     # !Forks::Super::Util::_has_POSIX_signal_framework();
 
+  tie $Forks::Super::QUEUE_INTERRUPT, 
+    'Forks::Super::Queue::QueueInterrupt', ('', keys %SIG);
   if (grep {/USR1/} keys %SIG) {
     $Forks::Super::QUEUE_INTERRUPT = 'USR1';
   }
@@ -102,7 +99,7 @@ sub _launch_queue_monitor {
     return;
   }
 
-  $OLD_SIG = $SIG{$Forks::Super::QUEUE_INTERRUPT};
+  $OLD_QINTERRUPT_SIG = $SIG{$Forks::Super::QUEUE_INTERRUPT};
   $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::Queue::check_queue;
   $QUEUE_MONITOR_PPID = $$;
   $QUEUE_MONITOR_PID = CORE::fork();
@@ -113,7 +110,7 @@ sub _launch_queue_monitor {
     return;
   }
   if ($QUEUE_MONITOR_PID == 0) {
-    $0 = "$QUEUE_MONITOR_PPID:QMon";
+    $0 = "QMon:$QUEUE_MONITOR_PPID";
     if ($DEBUG || $QUEUE_DEBUG) {
       debug("Launching queue monitor process $$ ",
 	    "SIG $Forks::Super::QUEUE_INTERRUPT ",
@@ -126,8 +123,11 @@ sub _launch_queue_monitor {
     } else {
       init_child();
     }
+    close STDIN;
+    close STDOUT;
+    close STDERR unless $DEBUG || $QUEUE_DEBUG;
 
-    # three ways the queue monitor can die:
+    # three (normal) ways the queue monitor can die:
     #  1. (preferred) killed by the calling process (_kill_queue_monitor)
     #  2. fails to signal calling process 10 straight times
     #  3. exit after $QUEUE_MONITOR_LIFESPAN seconds
@@ -167,8 +167,8 @@ sub _kill_queue_monitor {
 
       undef $QUEUE_MONITOR_PID;
       undef $QUEUE_MONITOR_PPID;
-      if (defined $OLD_SIG) {
-	$SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_SIG;
+      if (defined $OLD_QINTERRUPT_SIG) {
+	$SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_QINTERRUPT_SIG;
       }
     }
   }
@@ -176,7 +176,6 @@ sub _kill_queue_monitor {
 
 
 sub _cleanup {
-  $DURING_GLOBAL_DESTRUCTION = 1;
   _kill_queue_monitor();
 }
 
@@ -187,7 +186,7 @@ sub _cleanup {
 #
 sub queue_job {
   my $job = shift;
-  if ($DURING_GLOBAL_DESTRUCTION) {
+  if ($Forks::Super::Job::INSIDE_END_QUEUE) {
     return;
   }
   if (defined $job) {
@@ -209,8 +208,6 @@ sub queue_job {
   return;
 }
 
-our $_REAP;
-
 sub _check_for_reap {
   if ($CHECK_FOR_REAP && $_REAP > 0) {
     if ($DEBUG || $QUEUE_DEBUG) {
@@ -227,7 +224,12 @@ sub _check_for_reap {
 #
 sub run_queue {
   my ($ignore) = @_;
-  return if @QUEUE <= 0;
+  if (@QUEUE <= 0) {
+    return;
+  }
+  if ($Forks::Super::Job::INSIDE_END_QUEUE > 0) {
+    return;
+  }
   # XXX - run_queue from child ok if $Forks::Super::CHILD_FORK_OK
   {
     no warnings 'once';
@@ -272,7 +274,7 @@ sub run_queue {
 	# abort and restart the loop.
 	#
 	# To disable this check, set 
-	# $Forks::Super::Queue::CHECK_FOR_REAP := 0
+	# $Forks::Super::Queue::CHECK_FOR_REAP = 0
 
 	if (_check_for_reap()) {
 	  $job->{state} = 'DEFERRED';

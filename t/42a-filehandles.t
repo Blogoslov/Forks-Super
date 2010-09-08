@@ -10,7 +10,10 @@ use warnings;
 # child process when the child process uses
 # the "cmd" option to run a shell command.
 #
-
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
 
@@ -22,8 +25,11 @@ my (@cmd,$pid,$fh_in,$z,$t,$fh_out,$fh_err,@out,@err,$msg);
 
 $pid = fork { exec => [ @cmd ], timeout => 5, child_fh => "all" };
 
+Forks::Super::Debug::_use_Carp_Always();
+
 ok(isValidPid($pid), "$$\\fork successful");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "\%CHILD_STDIN defined [exec,child_fh]");
+ok(defined $Forks::Super::CHILD_STDIN{$pid}, 
+   "\%CHILD_STDIN defined [exec,child_fh]");
 ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "\%CHILD_STDOUT defined");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "\%CHILD_STDERR defined");
 $msg = sprintf "%x", rand() * 99999999;

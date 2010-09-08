@@ -14,6 +14,7 @@ my $builderclass = Module::Build->subclass(
  sub ACTION_build {
    use File::Copy;
    my $self = shift;
+   my $DEBUG = $ENV{DEBUG};
 
    ### STEP 1: Try to compile each .xs file in ./contrib/ ###
    if (!glob("contrib/fail/*.xs") && ! -f 'lib/Sys/CpuAffinity.xs') {
@@ -26,6 +27,7 @@ my $builderclass = Module::Build->subclass(
        eval { $self->ACTION_code() };
        if ($@) {
            print "\n\nFailed to compile $xs_file\n\n";
+           print "$@\n" if $DEBUG;
            File::Copy::move($xs_file, "contrib/fail/");
        } else {
            print "\n\nSuccessfully compiled $xs_file\n\n";

@@ -15,21 +15,19 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
- SKIP: {
+SKIP: {
+  if (!Forks::Super::CONFIG("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 3;
   }
-  exit 0;
-}
 
 #######################################################
 
-my $future = Forks::Super::Util::Time() - 5;
+my $future = Time::HiRes::gettimeofday() - 5;
 my $pid = fork { sub => sub { sleep 5; exit 0 }, expiration => $future };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($p == $pid, "wait succeeded");
 # A "fast fail" can still take longer than a second. 
 # "fast fail" invokes Carp::croak, which wants to load
@@ -37,6 +35,8 @@ ok($p == $pid, "wait succeeded");
 # That can add up.
 #ok($t <= 1.0, "expected fast fail took ${t}s"); ### 17 ###
 ok($t <= 1.9, "expected fast fail took ${t}s"); ### 17 ###
-ok($? != 0, "job expired with non-zero exit status");
+ok($? != 0, "job expired with non-zero exit STATUS");
 
 #######################################################
+
+} # end SKIP

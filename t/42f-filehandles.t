@@ -10,6 +10,11 @@ use warnings;
 # child process when the child process uses
 # the "cmd" option to run a shell command.
 #
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
+
 
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };

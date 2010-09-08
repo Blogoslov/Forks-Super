@@ -31,12 +31,16 @@ ok(! defined $job->{status}, "no job status");
 Forks::Super::pause(4);
 ok($job->{state} eq "COMPLETE", "job state " . $job->{state} . "==COMPLETE");
 ok(defined $job->{status}, "job status defined");
-ok($? != $job->{status}, "job status not available yet");
+
+###
+# unit tests about exit status should be distinguished with keyword "STATUS" 
+###
+ok($? != $job->{status}, "job STATUS not available yet");
 my $p = waitpid $pid,0;
 ok($job->{state} eq "REAPED", "job status REAPED after waitpid");
 ok($p == $pid, "reaped correct pid");
-ok($? == 256, "system status is $?, Expected 256");
-ok($? == $job->{status}, "captured correct job status");
+ok($? == 256, "system STATUS is $?, Expected 256");
+ok($? == $job->{status}, "captured correct job STATUS");
 
 #########################################################
 
@@ -67,13 +71,3 @@ ok(-1 == $waitpid, "non-blocking wait ok");
 $job = Forks::Super::Job::get($p);
 ok($j eq $job, "correct Forks::Super::Job object");
 waitall;
-
-__END__
--------------------------------------------------------
-
-Feature:	ordinary fork
-
-What to test:	behavior is the same as CORE::fork()
-		child process has different $$
-
--------------------------------------------------------

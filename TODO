@@ -31,8 +31,26 @@ Possible TODOs:
 	___ Document? Come up with a better way to set this feature?
 
     ___ There's enough stuff in here now that performance is affected,
-	especially when there are lots of short tasks. See what
-	can be done to tighten up performance.
+	especially when there are lots of short tasks. What can be done
+	to tighten up performance? What can be done to reduce overhead
+	when there are many short tasks?
+
+        Characterize some use cases for Forks::Super, and use settings
+        appropriate to that use case. For example, if we use Forks::Super
+        to manage many short tasks, we want to run the queue frequently
+	and we want to use a short pause time. If we use Forks::Super to
+	manage long, CPU-intense tasks, then frequent queue checks and
+        brief pauses will make the Forks::Super module use up CPU that
+	could be going to the tasks.
+
+        ___ $FSU::DEFAULT_PAUSE short when tasks are quick,
+            long when there are a lot of tasks
+        ___ $FSQ::QUEUE_MONITOR_FREQ short when tasks are quick
+        ___ $FSQ::QUEUE_MONITOR_LIFESPAN long or infinite for "daemon" programs
+        ___ $FS::SOCKET_READ_TIMEOUT short for quick tasks
+	___ $FS::MAX_PROC and ::DEFAULT_PROC to 1-1.5 times the number of
+	    CPUs for CPU-intensive tasks; higher for IO bound tasks;
+	    much higher for tasks with ample idle time
 
 	Also document tips and tricks for tuning performance.
 	Things like "Set $Forks::Super::Util::DEFAULT_PAUSE to
@@ -87,43 +105,78 @@ Possible TODOs:
     ___ block attribute or block value in child_fh attribute to
 	indicate whether blocking I/O is desired.
 
-    _X_ block/noblock option in F::S::J::read_stdxxx
-
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
 
-    ___ fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
+    _o_ fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
 
 		open input and output filehandles in the child with the given 
 		names, accessible in the parent at something like 
 		$Forks::Super::CHILD_FH{$pid}{X}
+
+	Plans for Forks::Super::IPCChannel in 1.0 should handle this.
 
     ___ what else to configure at build time?
 	___ e.g. "has Unixy signal framework"
 	___ "is Windows"
 	___ "is Windows/Cygwin"
 	___ we can spoof this information for some tests ...
-
-    _X_ Natural language extension to timeout, expiration, delay, 
-	start_after options:
-
-	___ fork { timeout => "10 minutes" }
- 	___ fork { expiration => "8:00 am Tuesday" }
- 	___ fork { start_after => "midnight" }
-	___ fork { expiration => "3:00 am tomorrow" }
-
-	See DateTime::Format::Natural
+	___ signal list? trappable? "available"?
 
     ___ Reimplement gensym() in Forks::Super::Job::Ipc to use
 	safer 'Forks::Super::Symbol' package ?
 
-    ___ Rework Forks::Super::LazyEval to use overloading rather
-        than tied scalars. Use case is to be able to use
-        $output rather than $$output.
-
-    ___ Forks::Super::Util::Time() is redundant. Replace with
+    _X_ Forks::Super::Util::Time() is redundant. Replace with
 	Time::HiRes::gettimeofday().
 
     ___ Support bg_qx on systems where YAML::Tiny is installed
 	without YAML.
+
+    _X_ Use Carp::Always in unit tests (if available). Um, but don't
+	ALWAYS use it.
+
+    _X_ Reimplement F::S::Tie::BackgroundScalar to not require
+	dereferencing. Say, by using overloading.
+
+    ___ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
+
+    ___ Turn installation of bundled packages on by default for a couple
+	of CPAN testing cycles. See what breaks.
+
+    ___ Keep the pipes clear:
+        ___ During productive pauses, read and buffer input from all pipes
+            connected to child process output streams. IO handles in the parent
+	    are tied to some package that implements this functionality.
+
+        ___ Harder: child processes have a subroutine to read and buffer
+	    input from piped STDIN, and an out-of-the-way signal handler
+	    to invoke the subroutine. During productive pauses in the
+	    parent process, signal the child processes to run these
+	    subroutines.
+
+    ___ The IPC module needs to create a temporary directory that will
+        be deleted when the program ends. Is there another module that
+        has solved this problem better than I did?
+
+    ___ Runtime IPC cleanup routine for long running programs. For long
+	completed jobs: close the open filehandles that have slipped
+	through the cracks; remove the IPC files; move from 
+	%ALL_JOBS,@ALL_JOBS to %ARCHIVED_JOBS,@ARCHIVED_JOBS
+
+    ___ Is it possible/desirable to use threads in place of "queue
+	monitor process", "productive pause"?
+
+    _X_ Does Forks::Super work in taint mode? Need some tests to make
+	sure.
+
+	Can run t/forked_harness.pl with  -p -t  or  -p -T  options.
+
+    _x_ Make Win32::API a required module for MSWin32.
+
+    ___ http://www.cpantesters.org/cpan/report/8376777 -- are there
+	issues with Forks::Super and $ENV{LANG} == 'zh_TW.UTF-8'?
+	utf issues?
+
+	_X_ Vanilla utf8 seems ok. Running  t/forked_harness.pl  with
+	    -p -Mutf8  passes.
 

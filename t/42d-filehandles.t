@@ -6,7 +6,7 @@ use warnings;
 
 ############################################################
 #
-# this particular test is a failure point in v0.35 and v0.36.
+# this particular test is a failure point in v0.35 through v0.37
 # In about 30-40% of CPAN tester results,
 #     -- all 6 tests are ok
 #     -- the exit code of the test is 2
@@ -21,6 +21,10 @@ use warnings;
 #     -- Is there a stray SIGINT somewhere?
 #     -- Does perl interpreter exit with code 2 under some conditions?
 # 
+# This may be a consequence of the SIGCHLD handler running after
+# the END queue call has started. In v0.38 we disable the SIGCHLD handler
+# in the END queue -- we'll see if that helps.
+
 
 
 #
@@ -29,6 +33,12 @@ use warnings;
 # child process when the child process uses
 # the "cmd" option to run a shell command.
 #
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
+
+Forks::Super::Debug::_use_Carp_Always();
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
 

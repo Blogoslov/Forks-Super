@@ -188,36 +188,43 @@ sub find_max_open_sockets {
 #
 sub count_number_of_cpus {
   my ($ncpu, $fh);
-  $ncpu = 0
 
-    # Sys::CpuAffinity is best. If available it uses all of
-    # the methods below plus a few more, and uses them more
-    # robustly.
-    || eval { require Sys::CpuAffinity; 
-	      Sys::CpuAffinity::getNumCpus() }
+  $ncpu = 0;
+  if (eval "require Sys::CpuAffinity; 1") {
+    $ncpu = Sys::CpuAffinity::getNumCpus();
+  }
+  if ($ncpu == 0 && eval "require Test::Smoke::SysInfo;1") {
+    my $sysinfo = Test::Smoke::SysInfo->new();
+    $ncpu = $sysinfo && $sysinfo->{_ncpu};
+  }
 
-    || eval { require Test::Smoke::SysInfo;
-	      my $sysinfo = Test::Smoke::SysInfo->new();
-	      $sysinfo && $sysinfo->{_ncpu} }
+  if ($ncpu == 0 && $^O eq "MSWin32") {
+    $ncpu = $ENV{NUMBER_OF_PROCESSORS};
+  }
+  if ($ncpu == 0 && open($fh,'<','/proc/cpuinfo')) {
+    $ncpu = grep /^processor\s/, <$fh>;
+    close $fh;
+  }
+  if ($ncpu == 0 && open($fh,'<','/proc/stat')) {
+    $ncpu = grep /^cpu\d/i, <$fh>;
+    close $fh;
+  }
+  if ($ncpu == 0) {
+    $ncpu = grep /\d+.+processors?$/i, qx(hinv -c processor 2>/dev/null);
+  }
+  if ($ncpu == 0) {
+    $ncpu = qx(bindprocessor -q 2>/dev/null);
+  }
+  if ($ncpu == 0) {
+    $ncpu = grep /^hw.ncpu:/, qx(sysctl -a 2>/dev/null);
+  }
+  if ($ncpu == 0) {
+    $ncpu = (qx(psrinfo 2> /dev/null));
+  }
+  if ($ncpu == 0) {
+    $ncpu = qx(hwprefs cpu_count 2>/dev/null);
+  }
 
-    # generally available on Win32
-    || $^O eq "MSWin32" ? $ENV{NUMBER_OF_PROCESSORS} : 0
-
-
-    # /proc/cpuinfo, /proc/stat available on many unix-y systems
-    || open($fh,'</proc/cpuinfo') ? grep/^processor\s/,<$fh> : 0
-    || open($fh,'</proc/stat') ? grep/^cpu\d/i,<$fh> : 0
-
-
-    # some OS-specific commands and other long shots
-    || (grep /\d+.+processors?$/i, qx(hinv -c processor 2>/dev/null))
-    || qx(bindprocessor -q 2>/dev/null)
-    || (grep /^hw.ncpu:/, qx(sysctl -a 2>/dev/null))
-    || (qx(psrinfo 2> /dev/null))
-    || qx(hwprefs cpu_count 2>/dev/null)
-
-    || 0 ;
-  
   if ($ncpu > 0) {
     print STDERR "There are $ncpu cpus on this system.\n";
     write_limits( ncpu => $ncpu );
@@ -293,7 +300,8 @@ my \$pid = \$\$;
 if (fork() == 0) {
   sleep $timeout + 1;
   kill('INT',\$pid) || kill('BREAK',\$pid)
-    || system "TASKKILL /f /pid \$pid > NUL 2> NUL";
+    || system "TASKKILL /f /pid \$pid > NUL 2> NUL"
+    || system "kill -INT \$pid";
   exit 0;
 }
 my \$output = " " x $packetsize;
@@ -319,4 +327,3 @@ __END_SLAVE_CODE__
   unlink $output_file;
   return $capacity + 0;
 }
-

@@ -10,7 +10,13 @@ use warnings;
 # child process when the child process uses
 # the "cmd" option to run a shell command.
 #
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
 
+
+Forks::Super::Debug::_use_Carp_Always();
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
 

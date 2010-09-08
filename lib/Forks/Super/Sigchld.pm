@@ -6,13 +6,11 @@ package Forks::Super::Sigchld;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
 use POSIX ':sys_wait_h';
+use Time::HiRes;
 use strict;
 use warnings;
 
-
-
-our $_SIGCHLD = 0;
-our $_SIGCHLD_CNT = 0;
+our ($_SIGCHLD, $_SIGCHLD_CNT) = (0,0);
 our (@CHLD_HANDLE_HISTORY, @SIGCHLD_CAUGHT) = (0);
 our $SIG_DEBUG = $ENV{SIG_DEBUG};
 
@@ -25,14 +23,15 @@ our $SIG_DEBUG = $ENV{SIG_DEBUG};
 # were not handled correctly.
 #
 sub handle_CHLD {
+  local $!;
   $SIGCHLD_CAUGHT[0]++;
   my $sig = shift;
-  # poor man's synchronization
   $_SIGCHLD_CNT++;
+
+  # poor man's synchronization
   $_SIGCHLD++;
   if ($_SIGCHLD > 1) {
     if ($SIG_DEBUG) {
-      use Time::HiRes;
       my $z = Time::HiRes::gettimeofday() - $^T;
       push @CHLD_HANDLE_HISTORY, "synch $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
     }
@@ -41,7 +40,6 @@ sub handle_CHLD {
   }
 
   if ($SIG_DEBUG) {
-    use Time::HiRes;
     my $z = Time::HiRes::gettimeofday() - $^T;
     push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
@@ -69,7 +67,6 @@ sub handle_CHLD {
       debug("Forks::Super::handle_CHLD(): ",
 	    "preliminary reap for $pid status=$status") if $DEBUG;
       if ($SIG_DEBUG) {
-	use Time::HiRes;
 	my $z = Time::HiRes::gettimeofday() - $^T;
 	push @CHLD_HANDLE_HISTORY, 
 	  "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
@@ -98,7 +95,6 @@ sub handle_CHLD {
     $Forks::Super::Queue::_REAP = 1;
   }
   if ($SIG_DEBUG) {
-    use Time::HiRes;
     my $z = Time::HiRes::gettimeofday() - $^T;
     push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }

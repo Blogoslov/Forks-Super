@@ -1,5 +1,5 @@
-use Forks::Super ':test';
-use Test::More tests => 20;
+use Forks::Super ':test_CA';
+use Test::More tests => 21;
 use strict;
 use warnings;
 
@@ -11,14 +11,10 @@ use warnings;
 # the "REAPED" status.
 #
 
-my $old_sig_chld = delete $SIG{CHLD};
-$SIG{CHLD} = \&child_signal_hijacker;
-*Forks::Super::handle_CHLD = *child_signal_hijacker;
-$SIGNAL::TIME = Forks::Super::Util::Time();
+our $_LOCK = 0;  # use same synchronization technique as F::S::Sigchld
 
-my $_LOCK = 0;  # use same synchronization technique as F::S::Sigchld
 sub child_signal_hijacker {
-# $SIGNAL::TIME = Forks::Super::Util::Time() if $_[0] =~ /^C/;
+# $SIGNAL::TIME = Time::HiRes::gettimeofday() if $_[0] =~ /^C/;
   $_LOCK++;
   if ($_LOCK>1) {
     $_LOCK--;
@@ -36,12 +32,19 @@ sub child_signal_hijacker {
       #print "NEW COMPLETE JOB: ", $cj->toString(), "\n";
       $LAST::COMPLETE = $cj;
       $LAST::COMPLETE{$cj}++;
-      $SIGNAL::TIME = Forks::Super::Util::Time();
+      $SIGNAL::TIME = Time::HiRes::gettimeofday();
     }
   }
   $_LOCK--;
   return;
 }
+
+##################################################################
+
+my $old_sig_chld = delete $SIG{CHLD};
+$SIG{CHLD} = \&child_signal_hijacker;
+*Forks::Super::handle_CHLD = *child_signal_hijacker;
+$SIGNAL::TIME = Time::HiRes::gettimeofday();
 
 my $pid = fork();
 if (defined $pid && $pid == 0) {
@@ -52,21 +55,38 @@ ok(defined $pid && isValidPid($pid), "$$\\valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 
+# sometimes one SIGCHLD isn't enough to force a system call interruption.
+# let's set up a couple more processes to send SIGCHLD
+#for my $n (3,4,5,6) {
+#  my $pidn = fork();
+#  if (defined $pidn && $pidn == 0) {
+#    sleep $n;
+#    exit 0;
+#  }
+#}
+
 # Perl's sleep can _sometimes_ be interrupted by SIGCHLD.
-# This never happens on Windows.
+# This never happens on Windows, which doesn't have a 
 # But I've also seen it not happen intermittently
 # on FreeBSD and CentOS :-(
 
-my $t = Forks::Super::Util::Time();
-sleep 10;   # sleep can be interrupted by SIGCHLD
-$t = Forks::Super::Util::Time() - $t;
+my $t = Time::HiRes::gettimeofday();
 SKIP: {
-
-  if ($t > 9) {
-    Forks::Super::pause();
-    skip "No interruption to sleep on $^O.", 1;
+  if ($^O eq "MSWin32") {
+    Forks::Super::pause(5);
+    skip "sleep call not interrupted on $^O", 2;
   }
+  local $! = 0;
+  sleep 10;   # sleep should be interrupted by SIGCHLD
+  $t = Time::HiRes::gettimeofday() - $t;
+
+  #if ($t > 9) {
+  #  Forks::Super::pause();
+  #  skip "No interruption to sleep on $^O.", 1;
+  #}
   ok($t <= 5.05, "Perl sleep interrupted by CHLD signal ${t}s");
+  ok($! =~ /Interrupted/, "\$! indicates interrupted system call $!");
+  Forks::Super::pause();
 }
 ok($j->{state} eq "COMPLETE", "job state is COMPLETE");
 SKIP: {
@@ -101,9 +121,9 @@ if (defined $pid && $pid == 0) {
 ok(defined $pid && isValidPid($pid), "valid pid $pid");
 $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
-$t = Forks::Super::Util::Time();
+$t = Time::HiRes::gettimeofday();
 Forks::Super::pause(6);   # ACK! sleep can be interrupted by CHLD signal!
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t > 5.7 && $t < 7.75,                           ### 13 ### was 7.1 obs 7.10
    "Forks::Super::pause(6) took ${t}s expected 6");
 ok($j->{state} eq 'COMPLETE', "complete state " . $j->{state});

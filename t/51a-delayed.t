@@ -11,8 +11,8 @@ use warnings;
 
 $Forks::Super::ON_BUSY = "block";
 
-my $now = Forks::Super::Util::Time();
-my $future = Forks::Super::Util::Time() + 10;
+my $now = Time::HiRes::gettimeofday();
+my $future = Time::HiRes::gettimeofday() + 10;
 
 my $p1 = fork { sub => sub { sleep 3 } , delay => 5 };
 my $p2 = fork { sub => sub { sleep 3 } , start_after => $future };

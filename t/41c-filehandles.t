@@ -3,6 +3,8 @@ use Test::More tests => 2;
 use strict;
 use warnings;
 
+Forks::Super::Debug::_use_Carp_Always();
+
 $SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
 eval { alarm 150 };
 

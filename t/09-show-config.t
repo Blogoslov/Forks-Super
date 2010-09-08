@@ -2,6 +2,12 @@ use Forks::Super ':test_config';
 use Test::More tests => 1;
 
 # show some items and modules that could be configured on this system.
+# This test is included mostly so that I can get more detail about
+# the CPAN testers' configuration.
+
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+}
 
 ok(1);
 
@@ -16,3 +22,5 @@ Forks::Super::CONFIG("alarm");
 Forks::Super::CONFIG("Sys::CpuAffinity");
 Forks::Super::CONFIG("Sys::CpuLoadX");
 Forks::Super::CONFIG("/uptime");
+print STDERR "\$ENV{PERL_SIGNALS} = $ENV{PERL_SIGNALS}\n";
+

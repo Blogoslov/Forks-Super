@@ -20,18 +20,16 @@
 #
 #     # fasttest -- run all tests once, in "parallel" (using
 #     #    Forks::Super to manage and throttle the tests)
-#     fasttest :: pm_to_blib
+#     fasttest :: pure_all
 #           $(PERLRUN) t/forked_harness.pl $(TEST_FILES) -h
 #
 #     # stresstest -- run all tests 100 times, in parallel
-#     stresstest :: pm_to_blib
+#     stresstest :: pure_all
 #           $(PERLRUN) t/forked_harness.pl $(TEST_FILES) -r 20 -x 5 -s -q
 
 # options:
 #
 #  --harness|-h:         wrap tests in the ExtUtils::Command::MM::test_harness
-#  --callbacks=[s][f][q]:print debug information when a test starts/finishes
-#          |-c [s][f][q] /is queued
 #  --verbose|-v:         with -h, use verbose test harness
 #  --include|-I lib:     use Perl lib dirs [default: blib/lib, blib/arch]
 #  --popts|-p option:    pass option to perl interpreter during test
@@ -45,11 +43,16 @@
 #  --quiet|-q:           produce less output (-q is *not* the opposite of -v!)
 #  --debug|-d:           produce output about what forked_harness.pl is doing
 #  --abort-on-fail|-a:   stop after the first test failure
-#  --grep pattern:       grab test output matching <pattern>, print all at end
-#  --color|-C:           output in color (requires Term::ANSIColor >=3.00)
+#  --color|-C:           colorize output (requires Term::ANSIColor >=3.00)
+#
+# Environment:
+#  COLOR                 if true, try to colorize output [like -C flag]
+#  ENDGAME_CHECK         if true, check that program cleans up after itself
+#  MAX_PROC              default max processes [like -m flag]
+#  TEST_VERBOSE          if true, use verbose test harness [like -v flag]
+#
 
-
-use lib qw(blib/lib);
+use lib qw(blib/lib blib/arch lib .);
 use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
 use Getopt::Long;
 use Time::HiRes;
@@ -57,11 +60,15 @@ use POSIX ':sys_wait_h';
 use strict;
 $| = 1;
 $^T = Time::HiRes::gettimeofday();
+if (${^TAINT}) {
+  $ENV{PATH} = "/bin:/usr/bin:/usr/local/bin";
+  ($^X)=$^X=~/(.*)/;
+}
 
 my $timeout = 120;
 my $use_harness = '';
-my $use_callbacks = '';
-my $use_color = '';
+my $use_color = $ENV{COLOR} && -t STDOUT &&
+  eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
 my $test_verbose = $ENV{TEST_VERBOSE} || 0;
 my @use_libs = qw(blib/lib blib/arch);
 my @perl_opts = ();
@@ -70,21 +77,18 @@ my $repeat = 1;
 my $xrepeat = 1;
 my $quiet = 0;
 my $maxproc = &maxproc_initial;
-my $check_endgame = 0;
+my $check_endgame = $ENV{ENDGAME_CHECK} || 0;
 my $abort_on_first_error = '';
 my $debug = '';
-my @output_patterns = ();
 my $use_socket = '';
 my $logfile = "/tmp/forked_harness.log";
 $::fail35584 = '';
 
 # [-h] [-c] [-v] [-I lib [-I lib [...]]] [-p xxx [-p xxx [...]]] [-s] 
-# [-t nnn] [-r nnn] [-x nnn] [-m nnn] [-q] [-a] [-g patt [-g patt [...]]
-
+# [-t nnn] [-r nnn] [-x nnn] [-m nnn] [-q] [-a] 
 # abcdefghijklmnopqrstuvwxyz
 # x s    x@  si  @xixi x i x 
 my $result = GetOptions("harness" => \$use_harness,
-	   "callbacks=s" => \$use_callbacks,
 	   "C|color" => \$use_color,
 	   "verbose" => \$test_verbose,
 	   "include=s" => \@use_libs,
@@ -96,14 +100,10 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "maxproc=i" => \$maxproc,
 	   "quiet" => \$quiet,
            "debug" => \$debug,
-	   "grep=s" => \@output_patterns,
            "logfile=s" => \$logfile,
 	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
-my @captured = ();
 my %fail = ();
-$use_color = $ENV{COLOR} && -t STDOUT &&
-  eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
 
 $test_verbose ||= 0;
 $repeat = 1 if $repeat < 1;
@@ -115,11 +115,12 @@ sub color_print;
 my $glob_required = 0;
 if (@ARGV == 0) {
   # read  $(TEST_FILES) from Makefile
-  open(MFILE, '<', 'Makefile') 
-    or open(MFILE, '<', '../Makefile')
+  my $mfile;
+  open($mfile, '<', 'Makefile') 
+    or open($mfile, '<', '../Makefile')
     or die "No test files specified, can't read defaults from Makefile!\n";
-  my ($test_files) = grep { /^TEST_FILES\s*=/ } <MFILE>;
-  close MFILE;
+  my ($test_files) = grep { /^TEST_FILES\s*=/ } <$mfile>;
+  close $mfile;
   $test_files =~ s/\s+=/= /;
   my @test_files = split /\s+/, $test_files;
   shift @test_files;
@@ -149,50 +150,27 @@ if ($debug) {
 }
 my (%j,$count);
 
+
+# these colors are appropriate when your terminal has a dark background.
+# How can this program determine when your terminal has a dark background?
+my %colors = (ITERATION => 'bold white',
+	      GOOD_STATUS => 'bold green',
+	      BAD_STATUS => 'bold red',
+	      'STDERR' => 'yellow bold',
+	      NORMAL => '');
+
+
 $SIG{SEGV} = \&handle_SIG;
 $SIG{SYS} = \&handle_SIG;
 &main;
-if (@captured > 0) {
-  print "============================================\n";
-  print "|= captured output from all test\n";
-  print "|===========================================\n";
-  print map {"|- $_"} @captured;
-  print "============================================\n\n";
-  @captured = ();
-}
-if (@result > 0) {
-  if ($logfile && open(LOG, '>>', $logfile)) {
-    print LOG $], " ", $^O, " ", scalar localtime, "\n";
-    print LOG @result;
-    print LOG "=====================================\n";
-    close LOG;
-  }
+&summarize;
+&check_endgame if $check_endgame;
+exit $total_status >> 8;
 
-  print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
-  print "=====================================\n";
-  print scalar localtime, "\n";
-  print @result;
-  print "=====================================\n";
-  print "\n\n\n\n\n";
-}
-if (scalar keys %fail > 0) {
-  print "\nTest failures:\n";
-  print "================\n";
-  foreach my $test_file (sort keys %fail) {
-    foreach my $test_no (sort {$a+0<=>$b+0} keys %{$fail{$test_file}}) {
-      print "\t$test_file#$test_no ";
-      if ($fail{$test_file}{$test_no} == 1) {
-	print "1 time\n";
-      } else {
-	print "$fail{$test_file}{$test_no} times\n";
-      }
-    }
-  }
-  print "================\n";
-}
-
+#
 # handle some signals that might be generated in a test or by the
 # operating system if this script tries to do too much
+#
 sub handle_SIG {
   use Carp;
   my $name = shift;
@@ -200,13 +178,18 @@ sub handle_SIG {
   Carp::confess "SIG$name caught in $0 @ARGV\n";
 }
 
+#
+# iterate over list of test files and run tests in background processes.
+# when child processes are reaped, dispatch &process_test_output
+# to analyze the output
+#
 sub main {
   if ($debug) {
     print "Test files: @test_files\n";
   }
 
   for ($iteration = 1; $iteration <= $repeat; $iteration++) {
-    color_print 'white bold on_black', "Iteration #$iteration/$repeat\n" if $repeat>1;
+    color_print 'ITERATION', "Iteration #$iteration/$repeat\n" if $repeat>1;
     if ($iteration > 1) {
       sleep 1;
     }
@@ -222,6 +205,10 @@ sub main {
     $count = 0;
 
     foreach my $test_file (@test_files) {
+
+      $test_file =~ /(.*)/;
+      $test_file = $1;
+      
       launch_test_file($test_file);
 
       if ($debug) {
@@ -231,7 +218,7 @@ sub main {
       if (rand() > 0.95 || @Forks::Super::Queue::QUEUE > 0) {
 	my $reap = waitpid -1, WNOHANG;
 	while (Forks::Super::isValidPid($reap)) {
-	  return if &process($reap) eq "ABORT";
+	  return if process_test_output($reap) eq "ABORT";
 	  $reap = -1;
 	  $reap = waitpid -1, WNOHANG;
 	}
@@ -244,7 +231,7 @@ sub main {
 
     while (Forks::Super::Util::isValidPid(my $pid = wait)) {
 
-      return if &process($pid) eq "ABORT";
+      return if process_test_output($pid) eq "ABORT";
 
     }
     if ($total_status > 0) {
@@ -254,26 +241,12 @@ sub main {
   return;
 }
 
-if ($total_status == 0) {
-  $iteration--;
-  print "All tests successful. $iteration iterations.\n";
-}
-
-my $elapsed = Time::HiRes::gettimeofday() - $^T;
-printf "Elapsed time: %.3f\n", $elapsed; sleep 3 if $debug;
-
-
-
-# Ideally,
-#   * There are no stray .fhfork<nnn> directories
-#   * There are no stray processes
-&check_endgame if $check_endgame;
-
-exit $total_status >> 8;
-
 sub launch_test_file {
   my ($test_file) = @_;
   my ($test_harness, @cmd);
+  if (grep { /^-t$/i } @perl_opts) {
+    $ENV{PATH} = "";
+  }
   if ($use_harness) {
     $test_harness = "test_harness($test_verbose";
     $test_harness .= ",'$_'" foreach @use_libs;
@@ -284,24 +257,12 @@ sub launch_test_file {
     @cmd = ($^X, @perl_opts, (map{"-I$_"}@use_libs), $test_file);
   }
 
-  my $callbacks = {};
-  if ($use_callbacks =~ /q/) {
-    $callbacks->{queue} = sub { print "Queue $test_file\n" };
-  }
-  if ($use_callbacks =~ /s/) {
-    $callbacks->{start} = sub { print "Start $test_file\n" };
-  }
-  if ($use_callbacks =~ /f/) {
-    $callbacks->{finish} = sub { print "Finish $test_file\n" };
-  }
-  
   if ($debug) {
     print "Launching test $test_file:\n";
   }
   my $pid = fork {
     cmd => [ @cmd ],
     child_fh => $use_socket ? "out,err,socket" : "out,err",
-    callback => $callbacks,
     timeout => $timeout
   };
 
@@ -311,7 +272,7 @@ sub launch_test_file {
   $j{"$test_file:iteration"} = $iteration;
 }
 
-sub process {
+sub process_test_output {
   my ($pid) = @_;
 
   # keep track of what else is running right now
@@ -337,7 +298,9 @@ sub process {
       $fail{$test_file}{$1}++;
       $not_ok++;
     }
-    if ($s =~ /Failed tests?:\s+(.+)/  # ExtUtils::Command::MM::test_harness
+
+    # ExtUtils::MM::test_harness output
+    elsif ($s =~ /Failed tests?:\s+(.+)/
        || $s =~ /DIED. FAILED tests (.+)/) {
       my @failed_tests = split /\s*,\s*/, $1;
       foreach my $failed_test (@failed_tests) {
@@ -347,15 +310,43 @@ sub process {
       }
       $not_ok++;
     }
-    foreach my $pattern (@output_patterns) {
-      if ($s =~ qr/$pattern/) {
-	push @captured, "$test_file: $s";
-	last;
+    elsif ($s =~ /Non-zero exit status: (\d+)/) {
+      my $actual_status = $status & 0xFF00;
+      my $expected_status = $1 << 8;
+      if ($actual_status != $expected_status) {
+	warn "Status $status from test $test_file does not match ",
+	  "reported exit status $expected_status\n";
       }
+      $not_ok++;
+    }
+    elsif ($s =~ /Non-zero wait status: (\d+)/) {
+      my $actual_status = $status;
+      my $expected_status = $1;
+      if ($actual_status != $expected_status) {
+	warn "Status $status from test $test_file does not match ",
+	  "reported wait status $expected_status\n";
+      }
+      $not_ok++;
     }
   }
   if ($use_harness && $quiet && $not_ok == 0) {
-    @stdout = grep { /ok$/ } @stdout;
+    # look for one of:
+    #     t/nn-xxx.t .. ok
+    #     t/nn-xxx.t....ok
+    my @stdout2 = grep { / ?\.+ ?ok$/ } @stdout;
+    if (@stdout2 > 0) {
+      @stdout = @stdout2;
+    } else {
+      # the output didn't say anything about test failures and
+      # the exit code was zero, but the output also didn't say "ok" --
+      # this test is not quite right
+      $not_ok = 0.5;
+      $status = 0.5;
+
+      color_print 'STDERR', "Not quite right: ", $j->toString(), "\n";
+      color_print 'STDERR', "OUTPUT: ", @stdout, "\n";
+      color_print 'STDERR', "ERROR: ", @stderr, "\n";
+    }
   }
 
 
@@ -373,14 +364,15 @@ sub process {
   my $dashes = "-" x (40 + length($test_file));
 
   # print "\n$dashes\n";
-  my $status_color = $status > 0 ? 'bold red' : 'bold green';
-  my $status_color = $status > 0 ? 'bold red on_black' : 'bold green on_black';
-  my $sep_color = $status > 0 ? 'bold red on_black' : '';
+  my $status_color = $status > 0 ? 'BAD_STATUS' : 'GOOD_STATUS';
+  my $sep_color = $status > 0 ? 'BAD_STATUS' : 'NORMAL';
   if ($quiet == 0 || $status > 0) {
     color_print $sep_color, "------------------- $test_file -------------------\n";
   }
-  my $aggr_status = $::fail35584 ? "$total_status+$::fail35584" : $total_status;
-  my $test_id = sprintf "%*s", 2*length("$repeat$ntests")+3, "$iter.$count/$repeat.$ntests";
+  my $aggr_status = $::fail35584 
+    ? "$total_status+$::fail35584" : $total_status;
+  my $test_id = sprintf "%*s", 
+    2*length("$repeat$ntests")+3, "$iter.$count/$repeat.$ntests";
 
   if ($use_harness && $quiet && $not_ok == 0) {
     color_print $status_color, "|= test=$test_id; ",
@@ -393,7 +385,7 @@ sub process {
   if ($status > 0 || $quiet == 0) {
     print map{"|- $_"}@stdout;
     print "|= $dashes\n";
-    color_print 'yellow bold on_black', map{"|: $_"}@stderr;
+    color_print 'STDERR', map{"|: $_"}@stderr;
   }
 
   # there are some circumstances where the tests passed but there
@@ -450,7 +442,7 @@ sub process {
 	    @stderr, "===================================\n";
       }
     } else {
-      $status = 0;
+      # $status = 0;
     }
   }
   my $num_dequeued = 0;
@@ -479,14 +471,54 @@ sub process {
 }
 
 
+sub summarize {
+  if (@result > 0) {
+    if ($logfile && open(LOG, '>>', $logfile)) {
+      print LOG $], " ", $^O, " ", scalar localtime, "\n";
+      print LOG @result;
+      print LOG "=====================================\n";
+      close LOG;
+    }
 
+    print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
+    print "=====================================\n";
+    print scalar localtime, "\n";
+    print @result;
+    print "=====================================\n";
+    print "\n\n\n\n\n";
+  }
+  if (scalar keys %fail > 0) {
+    print "\nTest failures:\n";
+    print "================\n";
+    foreach my $test_file (sort keys %fail) {
+      foreach my $test_no (sort {$a+0<=>$b+0} keys %{$fail{$test_file}}) {
+	print "\t$test_file#$test_no ";
+	if ($fail{$test_file}{$test_no} == 1) {
+	  print "1 time\n";
+	} else {
+	  print "$fail{$test_file}{$test_no} times\n";
+	}
+      }
+    }
+    print "================\n";
+  }
+  if ($total_status == 0) {
+    $iteration--;
+    print "All tests successful. $iteration iterations.\n";
+  }
+  my $elapsed = Time::HiRes::gettimeofday() - $^T;
+  printf "Elapsed time: %.3f\n", $elapsed; sleep 3 if $debug;
+}
 
 #
-# this subroutine is specific to *testing* the Forks::Super module.
-# If you are adapting this script for other purposes, you can
-# leave this part out.
+# make sure the Forks::Super module is cleaning up after itself.
+# This is mainly helpful for testing the Forks::Super module.
 #
 sub check_endgame {
+  print "Checking endgame $Forks::Super::FH_DIR\n";
+
+  # fork so the main process can exit and the Forks::Super
+  # module can start cleanup.
 
   # Forks::Super shouldn't leave temporary dirs/files around
   # after testing, but it might
@@ -498,13 +530,14 @@ sub check_endgame {
     $x = $Forks::Super::FH_DIR;
   }
 
-  print "Checking endgame\n";
+  CORE::fork() && return;
+
   sleep 12;
 
   my @fhforks = ();
   opendir(D, $x);
   while (my $g = readdir(D)) {
-    if ($g =~ /^.fhfork/) {
+    if ($g =~ /^.fh/) {
       opendir(E, "$x/$g");
       my $gg = readdir(E);
       closedir E;
@@ -521,7 +554,7 @@ sub check_endgame {
 
 #
 # find good initial setting for $Forks::Super::MAX_PROC.
-# This can be overridden with -m|--maxproc command-line arg.
+# This can be overridden with -m|--maxproc command-line arg
 #
 sub maxproc_initial {
   if ($ENV{MAX_PROC}) {
@@ -550,24 +583,16 @@ sub maxproc_initial {
   }
 }
 
-# if appropriate and suppported, enhance output
-# to STDOUT with color.
+# if appropriate and suppported, enhance output to STDOUT with color.
 sub color_print {
   my ($color, @msg) = @_;
   if ($color eq '' || !$use_color) {
     return print STDOUT @msg;
   }
+  $color = $colors{$color} if defined $colors{$color};
   if (@msg > 0 && chomp($msg[-1])) {
     return print STDOUT colored([$color], @msg), "\n";
   }
   return print STDOUT colored([$color], @msg);
 }
-
-sub color_printf {
-  my ($color, $template, @msg) = @_;
-  color_print $color, sprintf($template,@msg);
-}
-
-
-__END__
-
+sub color_printf { color_print shift, sprintf @_ }

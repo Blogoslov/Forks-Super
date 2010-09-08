@@ -28,11 +28,11 @@ if (!&IS_WIN32 && !&IS_CYGWIN) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = $Forks::Super::Job::VERSION;
 our @EXPORT = ();
 our %EXPORT_TAGS = ('all' => [ @EXPORT ]);
+our $VERSION = $Forks::Super::Job::VERSION;
 
-our ($_THREAD_API, $_THREAD_API_INITIALIZED);
+our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 our %_WIN32_API_SPECS
   = ('GetActiveProcessorCount' => [ 'kernel32',
 		'DWORD GetActiveProcessorCount(WORD g)' ],
@@ -285,7 +285,6 @@ sub resume_thread {
 
 ######################################################################
 
-our %SYSTEM_INFO = ();
 sub get_system_info {
   # XXX - will this work on all versions of Windows? Somehow I doubt it
   if (0 == scalar keys %SYSTEM_INFO && CONFIG('Win32::API')) {

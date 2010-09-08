@@ -17,14 +17,14 @@ ok(!defined $Forks::Super::LAST_JOB_ID,
 delete $Forks::Super::Config::CONFIG{"YAML"};
 $Forks::Super::Config::CONFIG{"JSON"} = 0;
 
+SKIP: {
 
-if ($ENV{NO_YAML} || !Forks::Super::Config::CONFIG("YAML")) {
- SKIP: {
+  if ($ENV{NO_YAML} || !Forks::Super::Config::CONFIG("YAML")) {
     skip "YAML not available, skipping bg_eval tests", 33;
   }
-  exit 0;
+  require "./t/62a-bg_eval.tt";
+
 }
 
-require "t/62-bg_eval.tt";
 
 

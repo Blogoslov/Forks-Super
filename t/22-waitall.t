@@ -1,4 +1,4 @@
-use Forks::Super ':test';
+use Forks::Super ':test_CA';
 use Test::More tests => 22;
 use strict;
 use warnings;
@@ -10,7 +10,7 @@ use warnings;
 
 
 my (%x,@pid);
-my $t0 = Forks::Super::Util::Time();
+my $t0 = Time::HiRes::gettimeofday();
 for (my $i=0; $i<5; $i++) {
   my $pid = fork { sub => sub { sleep 5 ; exit $i },
 	callback => { ___start => sub { 
@@ -19,9 +19,9 @@ for (my $i=0; $i<5; $i++) {
   push @pid, $pid;
 }
 
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 Forks::Super::waitall;
-my $t2 = Forks::Super::Util::Time();
+my $t2 = Time::HiRes::gettimeofday();
 ($t0,$t) = ($t2-$t0, $t2-$t);
 my $p = wait;
 ok($p == -1, "wait after waitall returns -1==$p");

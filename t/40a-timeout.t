@@ -15,18 +15,18 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
- SKIP: {
+SKIP: {
+  if (!Forks::Super::CONFIG("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 3;
   }
-  exit 0;
-}
 
 my $pid = fork { sub => sub { sleep 10; exit 0 }, timeout => 3 };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($p == $pid, "$$\\wait successful");
-ok($? != 0, "job expired with non-zero exit status");
+ok($? != 0, "job expired with non-zero exit STATUS");
 ok($t < 6.05, "Timed out in ${t}s, expected ~3s"); ### 3a ### was 5.1 obs 5.98
+
+} # end SKIP

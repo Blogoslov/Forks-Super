@@ -35,10 +35,13 @@ $TIMES_TO_FAIL = 1;
 $pid = fork { retries => 1, sub => sub { exit 0 } };
 ok(isValidPid($pid), "retries 1 succeeds");
 
+# use a shorter pause to speed this test up.
+$Forks::Super::Job::_RETRY_PAUSE = 0.5;
 $TIMES_TO_FAIL = 5;
 $pid = fork { retries => 2, sub => sub { exit 0 } };
 ok(!defined $pid, "retries 2 fails");
 
+$Forks::Super::Job::_RETRY_PAUSE = 0.1;
 $TIMES_TO_FAIL = 5;
 $pid = fork { retries => 10, sub => sub { exit 0 } };
 ok(isValidPid($pid), "retries 10 succeeds");

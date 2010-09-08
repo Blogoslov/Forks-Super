@@ -12,13 +12,9 @@ use Forks::Super::Util qw(isValidPid :IS_OS);
 use Carp;
 use strict;
 use warnings;
+require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-# $Carp::Internal{ (__PACKAGE__) }++;
 our $VERSION = $Forks::Super::Util::VERSION;
-
-{
-  require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
-}
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -315,7 +311,7 @@ amigaos
 beos
 mpeix
 
-Not from perlport:
+Not from perlport, but seen from CPAN tester reports:
 netbsd
 midnightbsd
 dragonfly

@@ -9,6 +9,10 @@ use warnings;
 # complex commands (with pipes) that expect
 # input require special handling
 #
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
 
 #######################################################
 
@@ -40,9 +44,9 @@ my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
 ok($z > 0, "print to child STDIN successful");
 
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 waitpid $pid, 0;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t > 1.01 && $t < 6.15,              ### 8 ### was 1.25/5.05,obs 1.05/6.12
    "compound command took ${t}s, expected ~2s");
 sleep 1;

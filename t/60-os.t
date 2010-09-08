@@ -18,6 +18,8 @@ use warnings;
 
 # update priority
 
+my $output = "t/out/test-os.$$";
+
 SKIP: {
   my $pid1 = fork { sub => sub { sleep 10 } };
   sleep 1;
@@ -83,14 +85,14 @@ SKIP: {
     skip "cpu affinity test, Sys::CpuAffinity module not installed", 1;
   }
 
-  unlink "t/out/test-os";
+  unlink "$output";
   my $pid = fork {
     cmd => [ $^X, "t/external-command.pl", 
-	     "-o=t/out/test-os", "--winpid", "-s=6" ],
+	     "-o=$output", "--winpid", "-s=6" ],
       cpu_affinity => 1
   };
   sleep 2;
-  open(T, "<", "t/out/test-os");
+  open(T, "<", "$output");
   my $winpid = <T>;
   close T;
 
@@ -124,14 +126,14 @@ SKIP: {
 
   skip "priority test unavailable", 1;
 
-  unlink "t/out/test-os";
+  unlink "$output";
   my $pid = fork {
     cmd => [ $^X, "t/external-command.pl", 
-	     "-o=t/out/test-os", "--winpid", "-s=10" ],
+	     "-o=$output", "--winpid", "-s=10" ],
       os_priority => 1
   };
   sleep 2;
-  open(T, "<", "t/out/test-os");
+  open(T, "<", "$output");
   my $winpid = <T>;
   close T;
 
@@ -153,6 +155,7 @@ SKIP: {
 }
 
 waitall;
+unlink $output;
 
 ######################################################################
 

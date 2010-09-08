@@ -21,11 +21,11 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
 my $pid1 = fork { sub => sub { sleep 5 } };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, 
 		    queue_priority => 10 };
 my $pid3 = fork { sub => sub { }, queue_priority => 5 };
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t <= 1.95, "fast return ${t}s for queued job, expected <= 1s"); ### 1 ###
 my $j1 = Forks::Super::Job::get($pid1);
 my $j2 = Forks::Super::Job::get($pid2);
@@ -46,13 +46,13 @@ $pid1 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1), "job 1 started");
 $j1 = Forks::Super::Job::get($pid1);
 
-$t = Forks::Super::Util::Time();
+$t = Time::HiRes::gettimeofday();
 $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1 };
 $j2 = Forks::Super::Job::get($pid2);
 ok($j1->{state} eq "COMPLETE", "job 1 complete when job 2 starts");
 $pid3 = fork { sub => sub { } };
 $j3 = Forks::Super::Job::get($pid3);
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t >= 4.75, "job 2 took ${t}s to start expected >5s"); ### 8 ###
 
 ok($j2->{state} eq "ACTIVE", "job 2 still running");

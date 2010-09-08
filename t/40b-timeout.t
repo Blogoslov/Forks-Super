@@ -9,31 +9,37 @@ use warnings;
 # down so much
 Forks::Super::Job::Timeout::warm_up();
 
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
+
+
 #
 # test that jobs respect deadlines for jobs to
 # complete when the jobs specify "timeout" or
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
- SKIP: {
+SKIP: {
+  if (!Forks::Super::CONFIG("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 3;
   }
-  exit 0;
-}
 
 #######################################################
 
-my $u = Forks::Super::Util::Time();
+my $u = Time::HiRes::gettimeofday();
 my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $p = wait;
-my $v = Forks::Super::Util::Time();
+my $v = Time::HiRes::gettimeofday();
 ($t,$u)=($v-$t,$v-$u);
 ok($p == $pid, "wait successful; Expected $pid got $p");
 ok($t > 3.9 && $u <= 7.5,                 ### 2b ### was 7, obs 7.03
    "job completed before timeout ${t}s ${u} expected ~5s");
-ok($? == 0, "job completed with zero exit status");
+ok($? == 0, "job completed with zero exit STATUS");
 
 #######################################################
+
+} # end SKIP

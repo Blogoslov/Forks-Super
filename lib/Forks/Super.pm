@@ -19,7 +19,6 @@ use strict;
 use warnings;
 $| = 1;
 
-our $VERSION = '0.37';
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
@@ -29,9 +28,11 @@ our @EXPORT_OK = (@export_ok_func, @export_ok_vars);
 our %EXPORT_TAGS = 
   ( 'test' =>  [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
     'test_config' =>  [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
+    'test_CA' =>  [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars' => [ @export_ok_vars, @EXPORT ],
     'all' => [ @EXPORT_OK, @EXPORT ] );
+our $VERSION = '0.38';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC);
@@ -77,6 +78,9 @@ sub import {
 	$Forks::Super::Config::IS_TEST = 1;
 	if ($args[$i] =~ /config/) {
 	  $Forks::Super::Config::IS_TEST_CONFIG = 1
+	}
+	if ($args[$i] =~ /CA/) {
+	  Forks::Super::Debug::_use_Carp_Always();
 	}
 
 	# preload some modules so lazy loading doesn't affect
@@ -172,7 +176,7 @@ sub fork {
       $job->run_callback('fail');
 
       #$job->_mark_complete;
-      $job->{end} = Forks::Super::Util::Time();
+      $job->{end} = Time::HiRes::gettimeofday();
 
       $job->{status} = -1;
       $job->_mark_reaped;
@@ -318,7 +322,7 @@ sub kill {
 	$j->{status} = Forks::Super::Util::signal_number($signal) || -1;
 	$j->_mark_reaped;
 	$num_signalled++;
-      } elsif ($signal eq 'STOP') {
+      } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
 	$j->{state} = 'SUSPENDED-DEFERRED';
 	$num_signalled++;
       } elsif ($signal eq 'CONT') {
@@ -363,7 +367,7 @@ sub kill {
 	      $num_signalled++;;
 	      push @terminated, $pid;
 	    }
-	  } elsif ($signal eq 'STOP') {
+	  } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
 	    if (Forks::Super::Job::OS::Win32::suspend_thread(-$pid)) {
 	      $signalled = 1;
 	      $num_signalled++;
@@ -442,7 +446,7 @@ sub kill_all {
   my @all_jobs;
   if ($signal eq 'CONT') {
     @all_jobs = grep { $_->is_suspended } @Forks::Super::ALL_JOBS;
-  } elsif ($signal eq 'STOP') {
+  } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
     @all_jobs = grep { $_->is_active || $_->{state} eq 'DEFERRED' }
       @Forks::Super::ALL_JOBS;
   } else {
@@ -502,7 +506,7 @@ sub open3 {
 
 sub _you_bastard {
   my ($pid, $status) = @_;
-  $BASTARD_DATA{$pid} = [ Forks::Super::Util::Time(), $status ];
+  $BASTARD_DATA{$pid} = [ scalar Time::HiRes::gettimeofday(), $status ];
   return;
 }
 
@@ -517,6 +521,38 @@ sub _is_test {
   return defined $IMPORT{':test'} && $IMPORT{':test'};
 }
 
+###################################################################
+##
+## XXX - Do we want to hijack the sleep function? This would prevent a 
+## sleep call from getting interrupted by a SIGCHLD event.
+##
+## Advantages:
+##   In normal use case, you'd need to do less defensive programming.
+##   Automatically get the productive functionality of  pause  without
+##       needing to get in the habit of using it
+##   Retire tests 31#1-4
+##   Remove "BUGS AND LIMITATIONS" entry on Interrupted system calls.
+#        sleep  is the only one of importance.
+## Disadvantages:
+##   You might actually want sleep to get interrupted
+##   pause uses more CPU than sleep
+##   return value of pause might not be an integer
+##   what other system calls are there to hijack?
+##   pause has potential to over-sleep
+##
+
+#BEGIN { *CORE::GLOBAL::sleep = *__sleep; $Forks::Super::HIJACK{"sleep"} = 1 }
+sub __sleep { # not used in v0.38
+  my $n = shift;
+  if ($Forks::Super::HIJACK{"sleep"} && defined $MAIN_PID && $$ == $MAIN_PID) {
+    return Forks::Super::Util::pause($n);
+  } else {
+    return CORE::sleep $n;
+  }
+}
+
+###################################################################
+
 1;
 
 __END__
@@ -525,12 +561,11 @@ __END__
 
 =head1 NAME
 
-Forks::Super - extensions and convenience methods 
-for managing background processes.
+Forks::Super - extensions and convenience methods to manage background processes.
 
 =head1 VERSION
 
-Version 0.37
+Version 0.38
 
 =head1 SYNOPSIS
 
@@ -564,8 +599,10 @@ Version 0.37
     $pid = fork { sub => sub { "anonymous sub" }, args => [ @args ] );
 
     # put a time limit on the child process
-    $pid = fork { cmd => $command, timeout => 30 };            # kill child if not done in 30s
-    $pid = fork { sub => $subRef , expiration => 1260000000 }; # complete by 8AM Dec 5, 2009 UTC
+    $pid = fork { cmd => $command, 
+                  timeout => 30 };            # kill child if not done in 30s
+    $pid = fork { sub => $subRef , args => [ @args ],
+                  expiration => 1260000000 }; # complete by 8AM Dec 5, 2009 UTC
 
     # obtain standard filehandles for the child process
     $pid = fork { child_fh => "in,out,err" };
@@ -584,7 +621,7 @@ Version 0.37
     print $child_stdin "Clean your room\n";
     sleep 2;
     $child_stdout = $Forks::Super::CHILD_STDOUT{$pid};
-    $child_response = <$child_stdout>; # -or-  = Forks::Super::read_stdout($pid);
+    $child_response = <$child_stdout>; # -or-: Forks::Super::read_stdout($pid);
     if ($child_response eq "Yes\n") {
         print $child_stdin "Good boy. You can have ice cream.\n";
     } else {
@@ -596,7 +633,7 @@ Version 0.37
     }
 
     # ---------- manage jobs and system resources ---------------
-    # runs 100 tasks but the fork call blocks when there are already 5 jobs running
+    # runs 100 tasks but fork call blocks while there are already 5 active jobs
     $Forks::Super::MAX_PROC = 5;
     $Forks::Super::ON_BUSY = 'block';
     for ($i=0; $i<100; $i++) {
@@ -610,19 +647,22 @@ Version 0.37
     if    ($pid > 0) { print "'$task' is running\n" }
     elsif ($pid < 0) { print "current CPU load > 2.0 -- didn't start '$task'\n"; }
 
-    # $Forks::Super::MAX_PROC setting can be overridden. Start job immediately if < 3 jobs running
+    # $Forks::Super::MAX_PROC setting can be overridden. 
+    # Start job immediately if < 3 jobs running
     $pid = fork { sub => 'MyModule::MyMethod', args => [ @b ], max_proc => 3 };
 
     # try to fork no matter how busy the system is
     $pid = fork { force => 1, sub => \&MyMethod, args => [ @my_args ] };
 
-    # when system is busy, queue jobs. When system is not busy, some jobs on the queue will start.
+    # when system is busy, queue jobs. When system is not busy, 
+    #     some jobs on the queue will start.
     # if job is queued, return value from fork() is a very negative number
     $Forks::Super::ON_BUSY = 'queue';
     $pid = fork { cmd => $command };
     $pid = fork { cmd => $useless_command, queue_priority => -5 };
     $pid = fork { cmd => $important_command, queue_priority => 5 };
-    $pid = fork { cmd => $future_job, delay => 20 }   # keep job on queue for at least 20s
+    $pid = fork { cmd => $future_job, 
+                  delay => 20 }       # force job to stay on queue for at least 20s
 
     # assign descriptive names to tasks
     $pid1 = fork { cmd => $command, name => "my task" };
@@ -630,17 +670,21 @@ Version 0.37
 
     # run callbacks at various points of job life-cycle
     $pid = fork { cmd => $command, callback => \&on_complete };
-    $pid = fork { sub => $sub, callback => { start => 'on_start', finish => \&on_complete,
-                                             queue => sub { print "Job $_[1] queued.\n" } } };
+    $pid = fork { sub => $sub, args => [ @args ],
+                  callback => { start => 'on_start', finish => \&on_complete,
+                                queue => sub { print "Job $_[1] queued\n" } } };
 
     # set up dependency relationships
     $pid1 = fork { cmd => $job1 };
-    $pid2 = fork { cmd => $job2, depend_on => $pid1 };            # put on queue until job 1 is complete
-    $pid4 = fork { cmd => $job4, depend_start => [$pid2,$pid3] }; # put on queue until jobs 2,3 have started
+    $pid2 = fork { cmd => $job2, 
+                   depend_on => $pid1 };            # put on queue until job 1 is complete
+    $pid4 = fork { cmd => $job4, 
+                   depend_start => [$pid2,$pid3] }; # put on queue until jobs 2,3 have started
 
     $pid5 = fork { cmd => $job5, name => "group C" };
     $pid6 = fork { cmd => $job6, name => "group C" };
-    $pid7 = fork { cmd => $job7, depend_on => "group C" }; # wait for jobs 5 & 6 to complete
+    $pid7 = fork { cmd => $job7, 
+                   depend_on => "group C" };        # wait for jobs 5 & 6 to complete
 
     # manage OS settings on jobs -- not available on all systems
     $pid1 = fork { os_priority => 10 };    # like nice(1) on Un*x
@@ -648,7 +692,7 @@ Version 0.37
 
     # job information
     $state = Forks::Super::state($pid);    # 'ACTIVE', 'DEFERRED', 'COMPLETE', 'REAPED'
-    $status = Forks::Super::status($pid);  # exit status for completed jobs
+    $status = Forks::Super::status($pid);  # exit status ($?) for completed jobs
 
     # --- evaluate long running expressions in the background
     $result = bg_eval { a_long_running_calculation() };
@@ -661,7 +705,8 @@ Version 0.37
 
     # --- convenience methods, compare to IPC::Open2, IPC::Open3
     my ($fh_in, $fh_out, $pid, $job) = Forks::Super::open2(@command);
-    my ($fh_in, $fh_out, $fh_err, $pid, $job) = Forks::Super::open3(@command, { timeout => 60 });
+    my ($fh_in, $fh_out, $fh_err, $pid, $job) 
+            = Forks::Super::open3(@command, { timeout => 60 });
 
 =head1 DESCRIPTION
 
@@ -823,7 +868,6 @@ natural language:
     $pid = fork { timeout => "in 5 minutes", sub => ... };
 
     $pid = fork { expiration => "next Wednesday", cmd => $long_running_cmd };
-
 
 =item C<< fork { delay => $delay_in_seconds } >>
 
@@ -2325,9 +2369,16 @@ without the required modules will be silently ignored.
 =head2 Leftover temporary files and directories
 
 In programs that use the interprocess communication features, 
-the module does not always do a good job of cleaning up after
-itself. You may find directories called C<< .fhfork<nnn> >>
+the module will usually but not always do a good job of cleaning
+up after itself. You may find directories called C<< .fhfork<nnn> >>
 that may or not be empty scattered around your filesystem.
+
+=cut
+
+XXX - See Forks::Super::__sleep. If we install it by default,
+then this section about interrupted system calls won't apply
+to  sleep . The other calls that are subject to interruption
+are more subtle.
 
 =head2 Interrupted system calls
 

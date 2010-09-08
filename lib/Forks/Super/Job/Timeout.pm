@@ -15,6 +15,7 @@ use strict;
 use warnings;
 
 our $VERSION = $Forks::Super::Util::VERSION;
+
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
 our $TIMEDOUT = 0;
@@ -38,8 +39,8 @@ sub Forks::Super::Job::_config_timeout_child {
   }
   if (defined $job->{expiration}) {
     $job->{expiration} = _time_from_natural_language($job->{expiration}, 0);
-    if ($job->{expiration} - Forks::Super::Util::Time() < $timeout) {
-      $timeout = $job->{expiration} - Forks::Super::Util::Time();
+    if ($job->{expiration} - Time::HiRes::gettimeofday() < $timeout) {
+      $timeout = $job->{expiration} - Time::HiRes::gettimeofday();
     }
     if ($job->{style} eq 'exec') {
       carp "Forks::Super: exec option used, expiration option ignored\n";
@@ -50,7 +51,7 @@ sub Forks::Super::Job::_config_timeout_child {
     return;
   }
   $job->{_timeout} = $timeout;
-  $job->{_expiration} = $timeout + Forks::Super::Util::Time();
+  $job->{_expiration} = $timeout + Time::HiRes::gettimeofday();
 
   # Un*x systems - try to establish a new process group for
   # this child. If this process times out, we want to have
@@ -210,7 +211,6 @@ sub warm_up {
   return $@;
 }
 
-our $DT_NL_PARSER;
 sub _time_from_natural_language {
   my ($time,$isInterval) = @_;
   if ($time !~ /[A-Za-z]/) {
@@ -219,14 +219,14 @@ sub _time_from_natural_language {
 
   if (Forks::Super::Config::CONFIG("DateTime::Format::Natural")) {
     my $now = DateTime->now;
-    $DT_NL_PARSER = DateTime::Format::Natural->new(datetime => $now,
+    my $dt_nl_parser = DateTime::Format::Natural->new(datetime => $now,
 						   lang => 'en',
 						   prefer_future => 1);
     if ($isInterval) {
-      my ($dt) = $DT_NL_PARSER->parse_datetime_duration($time);
+      my ($dt) = $dt_nl_parser->parse_datetime_duration($time);
       return $dt->epoch - $now->epoch;
     } else {
-      my $dt = $DT_NL_PARSER->parse_datetime($time);
+      my $dt = $dt_nl_parser->parse_datetime($time);
       return $dt->epoch;
     }
   } else{

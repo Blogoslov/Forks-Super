@@ -36,7 +36,7 @@ sub run_callback {
     return;
   }
 
-  $job->{"callback_time_$callback"} = Forks::Super::Util::Time();
+  $job->{"callback_time_$callback"} = Time::HiRes::gettimeofday();
   $callback = delete $job->{$key};
 
   no strict 'refs';

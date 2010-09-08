@@ -3,6 +3,11 @@ use Test::More tests => 28;
 use strict;
 use warnings;
 
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
+
 my @cmd = ($^X, "t/external-command.pl",
 	   "-e=Hello", "-s=2", "-y=1", "-e=whirled");
 
@@ -32,7 +37,8 @@ ok($pid == waitpid($pid,0), "job reaped");
 my $fh_err;
 $cmd[4] = "-y=3";
 ($fh_in, $fh_out, $fh_err, $pid, $job) = Forks::Super::open3(@cmd);
-ok(defined($fh_in) && defined($fh_out) && defined($fh_err), "open3: child fh available");
+ok(defined($fh_in) && defined($fh_out) && defined($fh_err),
+   "open3: child fh available");
 ok(isValidPid($pid), "open3: valid pid $pid");
 sleep 1;
 ok(defined($job), "open3: received job object");
@@ -53,14 +59,20 @@ ok($out[1] eq "$msg\n", "got right output (2)");
 ok(@err == 1, "open3: got right error lines");
 ok($err[0] eq "received message $msg\n", "open3: got right error");
 Forks::Super::pause();
-ok($job->{state} eq 'COMPLETE', "job complete");
+ok($job->{state} eq 'COMPLETE', 
+   "job state " . $job->{state} . " == 'COMPLETE'");
 ok($pid == waitpid($pid,0), "job reaped");
 
 #############################################################################
 
 $cmd[3] = "-s=5";
-($fh_in, $fh_out, $fh_err, $pid, $job) = Forks::Super::open3(@cmd, {timeout => 3});
-ok(defined($fh_in) && defined($fh_out) && defined($fh_err), "open3: child fh available");
+($fh_in, $fh_out, $fh_err, $pid, $job) 
+  = Forks::Super::open3(@cmd, {timeout => 3});
+
+Forks::Super::Debug::_use_Carp_Always();
+
+ok(defined($fh_in) && defined($fh_out) && defined($fh_err),
+   "open3: child fh available");
 ok(defined($job), "open3: received job object");
 ok($job->{state} eq 'ACTIVE', "open3: respects additional options");
 sleep 1;

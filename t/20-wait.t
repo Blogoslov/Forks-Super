@@ -1,4 +1,4 @@
-use Forks::Super ':test';
+use Forks::Super ':test_CA';
 use Test::More tests => 94;
 use strict;
 use warnings;
@@ -9,27 +9,27 @@ use warnings;
 
 my $pid = fork { sub => sub { sleep 2 ; exit 2 } };
 sleep 4;
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 my $s = $?;
 ok(isValidPid($pid), "fork was successful");
 ok($p == $pid, "wait captured correct pid");
 ok($t <= 1.05, "fast wait took ${t}s, expected <=1s");
-ok($s == 512, "wait set exit status in \$\?");
+ok($s == 512, "wait set exit STATUS in \$\?");
 
 ############################################
 
-my $u = Forks::Super::Util::Time();
+my $u = Time::HiRes::gettimeofday();
 $pid = fork { sub => sub { sleep 3; exit 3 } };
-$t = Forks::Super::Util::Time();
+$t = Time::HiRes::gettimeofday();
 $p = wait;
-my $v = Forks::Super::Util::Time();
+my $v = Time::HiRes::gettimeofday();
 ($u,$t) = ($v-$u,$v-$t);
 $s = $?;
 ok(isValidPid($pid) && $p==$pid, "successful fork+wait");
 ok($u >= 2.9, "child completed in ${t}s ${u}s, expected ~3s"); ### 6 ###
-ok($s == 768, "correct exit status captured");
+ok($s == 768, "correct exit STATUS captured");
 
 ############################################
 
@@ -40,23 +40,23 @@ for (my $i=0; $i<20; $i++) {
   ok(isValidPid($pid), "successful fork $pid");
   $x{$pid} = $i;
 }
-$t = Forks::Super::Util::Time();
+$t = Time::HiRes::gettimeofday();
 while (0 < scalar keys %x) {
   my $p = wait;
   ok(isValidPid($p), "waited on arbitrary pid $p");
   ok(defined $x{$p}, "return value from wait was valid pid");
-  ok($?>>8 == $x{$p}, "wait returned correct exit status");
+  ok($?>>8 == $x{$p}, "wait returned correct exit STATUS");
   delete $x{$p};
 }
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t <= 10.5,        ### 88 ### was 8 obs 10.23,10.40
    "wait did not take too long ${t}s, expected <=8s");
-$t = Forks::Super::Util::Time();
+$t = Time::HiRes::gettimeofday();
 for (my $i=0; $i<5; $i++) {
   my $p = wait;
   ok($p == -1, "wait on nothing gives -1");
 }
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t <= 1, "fast return wait on nothing ${t}s, expected <=1s"); ### 94 ###
 
 

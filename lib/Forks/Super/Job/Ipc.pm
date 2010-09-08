@@ -24,12 +24,11 @@ use base 'Exporter';
 use strict;
 use warnings;
 
-#our @EXPORT = qw(close_fh preconfig_fh config_fh_parent
-#		 config_fh_child config_cmd_fh_child);
 our @EXPORT = qw(close_fh);
 our $VERSION = $Forks::Super::Util::VERSION;
+
 our (%FILENO, %SIG_OLD, $FH_COUNT, $FH_DIR_DEDICATED, @FH_FILES, %FH_FILES);
-our $SIGNALS_TRAPPED = 0;
+our ($SIGNALS_TRAPPED, $_CLEANUP, $_SIGNAL_TRAPPED_SO_SUPPRESS_INFO) = (0,0,0);
 our $MAIN_PID = $$;
 our $__OPEN_FH = 0; # for debugging, monitoring filehandle usage. Not ready.
 our $__MAX_OPEN_FH = do {
@@ -648,7 +647,6 @@ sub _trap_signals {
   }
 }
 
-our $_SIGNAL_TRAPPED_SO_SUPPRESS_INFO;
 sub __cleanup__ {
   my $SIG = shift;
   if ($DEBUG) {
@@ -676,7 +674,6 @@ sub _untrap_signals {
 # clean them up even if the children are still alive -- these files
 # are exclusively for IPC, and IPC isn't needed after the parent
 # process is done.
-our $_CLEANUP = 0;
 sub END_cleanup {
 
   if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) {
@@ -713,6 +710,7 @@ sub END_cleanup {
   # daemonize
   return if CORE::fork();
   exit 0 if CORE::fork();
+  $0 = "cleanup:$0";
   sleep 3;
 
   # removing all the files we created during IPC
@@ -762,13 +760,18 @@ sub END_cleanup {
     }
     if (!$z
 	&& -d $Forks::Super::FH_DIR
-	&& 0 < scalar glob("$Forks::Super::FH_DIR/.nfs*")) {
+	&& 0 < glob("$Forks::Super::FH_DIR/.nfs*")) {
 
       # Observed these files on Linux running from NSF mounted filesystem
       # .nfsXXX files are usually temporary (~30s) but hard to kill
       for (my $i=0; $i<10; $i++) {
 	sleep 5;
-	last if glob("$Forks::Super::FH_DIR/.nfs*") <= 0;
+	if (glob("$Forks::Super::FH_DIR/.nfs*") <= 0) {
+	  if ($DEBUG) {
+	    print STDERR "Temporary .nfsXXX files are gone.\n";
+	  }
+	  last;
+	}
       }
       $z = rmdir($Forks::Super::FH_DIR) || 0;
     }
@@ -807,7 +810,8 @@ sub END_cleanup {
 sub END_cleanup_MSWin32 {
 # $Devel::Trace::TRACE = 0;
   return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
-  return if $_CLEANUP++;  
+  return if $_CLEANUP++;
+  $0 = "cleanup:$0";
 
   $_->close_fh('all') foreach @Forks::Super::ALL_JOBS;
   #$__OPEN_FH -= close $_ for (values %Forks::Super::CHILD_STDIN, 
@@ -1690,13 +1694,13 @@ sub _read_pipe {
 
       while ($nfound) {
 	my $buffer = '';
-	last if 0 == sysread $sh, $buffer, 4096;
+	last if 0 == sysread $sh, $buffer, 1;
 	$input .= $buffer;
 	($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
       }
 
       my @return = ();
-      while ($input =~ m!$/!) {
+      while ($input =~ m!$/!) {  # XXX - what if $/ is "" or undef ?
 	push @return, substr $input, 0, $+[0];
 	substr($input, 0, $+[0]) = "";
       }
@@ -1713,7 +1717,6 @@ sub _read_pipe {
       return $input;
     }
   }
-
 }
 
 sub Forks::Super::Job::read_stdout {
@@ -1744,7 +1747,7 @@ sub Forks::Super::Job::read_stderr {
 # error condition and eof condition on handle
 #
 sub _readline {
-  my ($fh,$job,$wantarray,%options) = @_;  # my ($fh, $job, $wantarray, @options) = @_;
+  my ($fh,$job,$wantarray,%options) = @_;
   if (!defined $fh) {
     if ($job->{debug} && (!defined($options{"warn"}) || $options{"warn"})) {
       carp "Forks::Super::_readline(): ",
@@ -1779,7 +1782,7 @@ sub _readline {
 	return @lines;
       }
 
-      if ($job->is_complete && Forks::Super::Util::Time() - $job->{end} > 3) {
+      if ($job->is_complete && Time::HiRes::gettimeofday() - $job->{end} > 3) {
 	if ($job->{debug}) {
 	  debug("Forks::Super::_readline(): ",
 		"job $job->{pid} is complete. Closing $fh");
@@ -1807,7 +1810,7 @@ sub _readline {
 	return $line;
       }
 
-      if ($job->is_complete && Forks::Super::Util::Time() - $job->{end} > 3) {
+      if ($job->is_complete && Time::HiRes::gettimeofday() - $job->{end} > 3) {
 	if ($job->{debug}) {
 	  debug("Forks::Super::_readline(): ",
 	      "job $job->{pid} is complete. Closing $fh");

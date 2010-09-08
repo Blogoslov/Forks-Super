@@ -9,40 +9,46 @@ use warnings;
 # down so much
 Forks::Super::Job::Timeout::warm_up();
 
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
+
 #
 # test that jobs respect deadlines for jobs to
 # complete when the jobs specify "timeout" or
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
- SKIP: {
+SKIP: {
+
+  if (!Forks::Super::CONFIG("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 2;
   }
-  exit 0;
-}
 
 ##########################################################
 
-my $t0 = Forks::Super::Util::Time();
+my $t0 = Time::HiRes::gettimeofday();
 my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=15" ], 
 		   timeout => 2 };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 waitpid $pid, 0;
-my $t2 = Forks::Super::Util::Time();
+my $t2 = Time::HiRes::gettimeofday();
 ($t0,$t) = ($t2-$t0,$t2-$t);
 ok($t <= 6.95,           ### 29 ### was 3.0 obs 3.10,3.82,4.36,6.63,9.32
    "cmd-style respects timeout ${t}s ${t0}s "
    ."expected ~2s"); 
 
-$t0 = Forks::Super::Util::Time();
+$t0 = Time::HiRes::gettimeofday();
 $pid = fork { exec => [ $^X, "t/external-command.pl", "-s=6" ], timeout => 2 };
-$t = Forks::Super::Util::Time();
+$t = Time::HiRes::gettimeofday();
 waitpid $pid, 0;
-$t2 = Forks::Super::Util::Time();
+$t2 = Time::HiRes::gettimeofday();
 ($t0,$t) = ($t2-$t0,$t2-$t);
 ok($t0 >= 5.9 && $t > 4.95, 
    "exec-style doesn't respect timeout ${t}s ${t0}s expected ~6s");
 
 ######################################################################
+
+} # end SKIP

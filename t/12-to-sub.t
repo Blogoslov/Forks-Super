@@ -1,4 +1,4 @@
-use Forks::Super ':test';
+use Forks::Super ':test_CA';
 use Test::More tests => 30;
 use strict;
 use warnings;
@@ -53,7 +53,7 @@ my $pid = fork { sub => 'main::internal_command',
 ok(isValidPid($pid), "fork to \$qualified::subroutineName successful, pid=$pid");
 my $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child status \$? == 0");
+ok($? == 0, "child STATUS \$? == 0");
 my $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Wurrled $pid";
@@ -71,7 +71,7 @@ $pid = fork { sub => 'internal_command',
 ok(isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child status \$? == 0");
+ok($? == 0, "child STATUS \$? == 0");
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Wurrled $pid";
@@ -88,7 +88,7 @@ $pid = fork { sub => \&internal_command,
 ok(isValidPid($pid), "fork to \\\&subroutine successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child status \$? == 0");
+ok($? == 0, "child STATUS \$? == 0");
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Wurrled $pid";
@@ -112,7 +112,7 @@ $p = wait;
 
 # failure point on linux under load ...
 
-ok($?>>8 == 14, "child status $? \$? != 0");     ### 14 ###
+ok($?>>8 == 14, "child STATUS $? \$? != 0");     ### 14 ###
 ok($pid == $p, "wait reaped child $pid == $p");  ### 15 ###
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
@@ -124,12 +124,12 @@ ok($z eq $target_z,
 
 # test that timing of reap is correct
 
-my $u = Forks::Super::Util::Time();
+my $u = Time::HiRes::gettimeofday();
 $pid = fork { sub => sub { sleep 3 } };
 ok(isValidPid($pid), "fork to sleepy sub ok");
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 $p = wait;
-my $v = Forks::Super::Util::Time();
+my $v = Time::HiRes::gettimeofday();
 ($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait on sleepy sub ok");        ### 18 ###
 ok($u >= 2.9 && $t <= 5.05,                     ### 19 ### was 4 obs 4.69
@@ -143,7 +143,7 @@ $pid = fork { sub => sub { exit 7 } };
 ok(isValidPid($pid), "fork to false sub ok");
 $p = Forks::Super::wait;
 ok($p == $pid, "wait on false sub ok");
-ok($?>>8 == 7, "captured correct non-zero status");
+ok($?>>8 == 7, "captured correct non-zero STATUS");
 ok($Forks::Super::ALL_JOBS{$pid}->{status} == 7 << 8,
    "captured exit status from sub with exit statement");
 
@@ -152,7 +152,7 @@ ok($Forks::Super::ALL_JOBS{$pid}->{status} == 7 << 8,
 $pid = fork { sub => sub {} };
 ok(isValidPid($pid), "fork to trivial sub ok");
 $p = wait;
-ok($? == 0, "captured correct zero status from trivial sub");
+ok($? == 0, "captured correct zero STATUS from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");
 
 #############################################################################

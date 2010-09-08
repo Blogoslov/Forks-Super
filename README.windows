@@ -93,7 +93,7 @@ delay.
 
 Although Windows lacks the signal framework of more
 Unix-like systems, there are still ways for Windows to
-DWIM with respect to many common uses of signals.
+Do What I Mean with respect to many common uses of signals.
 For example, there are Windows API calls to suspend
 and resume execution of pseudo-processes, they just
 don't have anything to do with Unix's SIGSTOP/SIGCONT
@@ -164,3 +164,5 @@ attempting to use  fork  under Windows systems.
 All of these caveats also apply to any background
 processes created with this module.
 
+Did I mention that it is highly recommended for
+Windows users to install the  Win32::API  module?

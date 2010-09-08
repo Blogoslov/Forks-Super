@@ -15,23 +15,23 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-if (!Forks::Super::CONFIG("alarm")) {
- SKIP: {
+SKIP: {
+  if (!Forks::Super::CONFIG("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 3;
   }
-  exit 0;
-}
 
 #######################################################
 
-my $future = Forks::Super::Util::Time() + 15;
+my $future = Time::HiRes::gettimeofday() + 15;
 my $pid = fork { sub => sub { sleep 5; exit 0 }, expiration => $future };
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 my $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($p == $pid, "wait successful");
 ok($t < 10, "job completed before expiration ${t}s expected ~5s");
-ok($? == 0, "job completed with zero exit status");
+ok($? == 0, "job completed with zero exit STATUS");
 
 #######################################################
+
+} # end SKIP

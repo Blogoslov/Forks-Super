@@ -3,19 +3,18 @@ use Test::More tests => 10;
 use strict;
 use warnings;
 
-if (!Forks::Super::Config::CONFIG("DateTime::Format::Natural")) {
- SKIP: {
+SKIP: {
+  if (!Forks::Super::Config::CONFIG("DateTime::Format::Natural")) {
     skip "natural language test requires DateTime::Format::Natural module", 10;
   }
-  exit 0;
-}
 
 my $pid = fork { timeout => "in 5 seconds", sub => sub { sleep 10 } };
 my $pp = waitpid $pid, 0;
 my $job = Forks::Super::Job::get($pid);
 my $elapsed = $job->{end} - $job->{start};
 
-ok(isValidPid($pid) && $pid == $pp, "created task with natural language timeout");
+ok(isValidPid($pid) && $pid == $pp, 
+   "created task with natural language timeout");
 ok($elapsed >= 4 && $elapsed <= 6, "natural language timeout was respected");
 ok($job->{status} != 0, "natural language timeout had nonzero exit code");
 
@@ -29,7 +28,8 @@ $pid = fork { timeout => "in 10 seconds",
 $pp = waitpid $pid, 0;
 $job = Forks::Super::Job::get($pid);
 $elapsed = $job->{end} - $job->{start};
-ok(isValidPid($pid) && $pid == $pp, "created another task with natural language timeout");
+ok(isValidPid($pid) && $pid == $pp, 
+   "created another task with natural language timeout");
 ok($job->{status} == 0, "natural language timeout had zero exit code");
 my $e = $job->read_stdout();
 ok($e > $job->{end}, "job ended $job->{end} before expiration $e");
@@ -63,3 +63,5 @@ ok($d !~ /foo/, "job with expiration in the past did not get started");
 ok(1);
 
 waitall;
+
+}  # end SKIP

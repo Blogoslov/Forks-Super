@@ -24,6 +24,7 @@ if ($DEBUG) {
   open TTY, '>&2';   # original STDERR
 }
 
+
 sub _printtty ($$;@) {
   my ($self,$func,@msg) = @_;
   return unless $DEBUG;

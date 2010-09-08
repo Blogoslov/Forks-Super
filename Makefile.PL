@@ -45,36 +45,38 @@ sub probe_system {
   system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
 }
 
-sub recommend_modules {
-  my @recommends = ("Time::HiRes" => '1.30', 
-		    "YAML" => '0.62',
-		    "JSON" => '2.0',
-		    "Sys::CpuAffinity" => '0.9',
-		    "Sys::CpuLoadX" => '0.02',
-		    "DateTime::Format::Natural" => '0.80',
-		   );
+# Construct %REQUIRED, %RECOMMENDED. We currently don't use %RECOMMENDED.
+our %RECOMMENDED
+  = ('YAML' => '0.62',
+     'JSON' => '2.0',
+     'Sys::CpuAffinity' => '0.91',
+     'Sys::CpuLoadX' => '0.02',
+     'DateTime::Format::Natural' => '0.89');
+our %REQUIRED = ('Test::More' => '0',
+		'Time::HiRes' => '1.30');
 
-  if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
-    push @recommends, ("Win32::Process" => '0.11',
-		       "Win32::API" => '0.43');
-  }
+if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
+  $RECOMMENDED{'Win32::Process'} = '0.11';
+  $RECOMMENDED{'Win32::API'} = '0.43';
   if ($^O eq "MSWin32") {
-    push @recommends, ("Win32::Process::Kill" => '2.64');
+    $RECOMMENDED{'Win32::Process::Kill'} = '2.64';
+    $REQUIRED{'Win32::API'} = '0.43';
   }
-  return [ @recommends ];
 }
 
 ######################################################################
 
-probe_system();
 if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {
   $ENV{BUNDLE_REINSTALL} = 1;
   @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
 }
 
+# install bundled modules first so Sys::CpuAffinity is avail to system-limits.PL
+install_bundled_modules();
+probe_system();
 WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
-         ? ('META_MERGE' => { 'recommends' => &recommend_modules })
+         ? ('META_MERGE' => { 'recommends' => \%RECOMMENDED })
 	 : ()),
     NAME                => 'Forks::Super',
     AUTHOR              => q[Marty O'Brien <mob@cpan.org>],
@@ -85,9 +87,7 @@ WriteMakefile(
       : ()),
     PL_FILES            => {},
 
-    PREREQ_PM => {
-        'Test::More' => 0,
-    },
+    PREREQ_PM => \%REQUIRED,
 
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => join (" ",'Forks-Super-*',
@@ -103,7 +103,6 @@ WriteMakefile(
 					    '_Inline') },
 );
 
-install_bundled_modules();
 
 print STDERR q[
 
@@ -142,12 +141,12 @@ sub MY::postamble {
 
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 
-fasttest :: pm_to_blib
+fasttest :: pure_all
 	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -h -q
 
 # ------ stress test: run all tests in parallel 100 times
 
-stresstest :: pm_to_blib
+stresstest :: pure_all
 	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) $stresstestargs
 
 __END_POSTAMBLE__

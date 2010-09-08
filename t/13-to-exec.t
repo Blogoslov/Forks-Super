@@ -1,4 +1,4 @@
-use Forks::Super ':test';
+use Forks::Super ':test_CA';
 use Test::More tests => 21;
 use strict;
 use warnings;
@@ -6,6 +6,10 @@ use warnings;
 #
 # test forking and invoking a shell command
 #
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
 
 my $output = "t/out/test13.$$";
 my @cmd = ($^X,"t/external-command.pl",
@@ -20,7 +24,7 @@ my $pid = fork {exec => \@cmd };
 ok(isValidPid($pid), "fork to \@command successful");
 my $p = Forks::Super::wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child status \$? == 0");
+ok($? == 0, "child STATUS \$? == 0");
 my $z = do { my $fh; open($fh, "<", $output); 
 	     my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
@@ -37,7 +41,7 @@ $pid = fork { exec => $cmd };
 ok(isValidPid($pid), "fork to \$command successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child status \$? == 0");
+ok($? == 0, "child STATUS \$? == 0");
 $z = do { my $fh; open($fh, "<", $output); 
 	  my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
@@ -51,9 +55,9 @@ ok($z eq $target_z,
 
 $pid = fork { exec => [ $^X, "t/external-command.pl", "-s=5" ] };
 ok(isValidPid($pid), "fork to external command");
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 $p = wait;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($p == $pid, "wait reaped correct pid");
 ok($t > 4.4 && $t < 10.05,         ### 11 ### was 7.05,obs 8.02,11.96
    "background command ran for ${t}s, expected 5-6s");
@@ -66,7 +70,7 @@ $pid = fork { exec => [ $^X, "t/external-command.pl", "-x=5" ] };
 ok(isValidPid($pid), "fork to external command");
 $p = wait;
 ok($p == $pid, "wait reaped correct pid");
-ok(($?>>8) == 5, "captured correct non-zero status  $?");
+ok(($?>>8) == 5, "captured correct non-zero STATUS  $?");
 
 ##################################################################
 
@@ -74,7 +78,7 @@ $pid = fork { exec => [ $^X, "t/external-command.pl", "-x=0" ] };
 ok(isValidPid($pid), "fork to external command");
 $p = wait;
 ok($p == $pid, "wait reaped correct pid");
-ok($? == 0, "captured correct zero status");
+ok($? == 0, "captured correct zero STATUS");
 
 ##################################################################
 

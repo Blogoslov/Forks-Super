@@ -8,6 +8,11 @@ use warnings;
 # complex commands (with pipes) that expect
 # input require special handling
 #
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
+}
+
 
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };
@@ -31,9 +36,9 @@ my $z = print $fh_in "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "print to child STDIN successful");
 
-my $t = Forks::Super::Util::Time();
+my $t = Time::HiRes::gettimeofday();
 waitpid $pid, 0;
-$t = Forks::Super::Util::Time() - $t;
+$t = Time::HiRes::gettimeofday() - $t;
 ok($t > 1.05 && $t < 5.05,                 ### 6 ###
    "compound command took ${t}s, expected ~2s");
 sleep 1;

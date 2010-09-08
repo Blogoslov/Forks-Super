@@ -16,7 +16,7 @@ if ($pid1 == 0) {
 }
 my $p = waitpid $pid1,0;
 ok($p == $pid1, "waitpid reaped child");
-ok(23 == $? >> 8, "child failed to fork as Expected");
+ok(23 == $? >> 8, "child failed to fork as Expected STATUS");
 
 
 $Forks::Super::CHILD_FORK_OK = 1;
@@ -27,7 +27,7 @@ if ($pid2 == 0) {
 }
 $p = waitpid $pid2, 0;
 ok($p == $pid2, "blocking waitpid");
-ok(0 == $?, "child fork was allowed");
+ok(0 == $?, "child fork was allowed STATUS $?, expected 0");
 
 $Forks::Super::CHILD_FORK_OK = -1;
 my $pid3 = fork();
@@ -37,7 +37,7 @@ if ($pid3 == 0) {
 }
 $p = wait;
 ok($p == $pid3, "blocking wait");
-ok(25 == $? >> 8, "child fork used CORE::fork status $?");
+ok(25 == $? >> 8, "child fork used CORE::fork STATUS $?");
 
 
 
@@ -55,14 +55,3 @@ sub try_to_fork_from_child {
     }
   }
 }
-
-__END__
--------------------------------------------------------
-
-Feature:	Prevent fork from children
-
-What to test:	fork from child fails when CHILD_FORK_OK==0
-		fork from child OK when CHILD_FORK_OK==1
-		fork from child calls CORE::fork() when CFO==-1
-
--------------------------------------------------------

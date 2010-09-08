@@ -11,6 +11,7 @@ lib/Forks/Super/Job/Timeout.pm
 lib/Forks/Super/LazyEval.pm
 lib/Forks/Super/Tie/BackgroundArray.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
+lib/Forks/Super/Tie/BackgroundZcalar.pm          # experimental v0.38
 lib/Forks/Super/Tie/Enum.pm
 lib/Forks/Super/Tie/IPCFileHandle.pm
 lib/Forks/Super/Queue.pm
@@ -45,7 +46,7 @@ t/23-wait-timeout.t
 t/24-kill.t
 t/25-open.t
 t/30-child-fork-behavior.t
-t/31-chld-signal.t
+t/31-chld-signal.tt
 t/32-stress-test.t
 t/40a-timeout.t
 t/40b-timeout.t
@@ -94,9 +95,12 @@ t/52-dependencies.t
 t/53-name.t
 t/60-os.t
 t/61-callbacks.t
-t/62-bg_eval.tt
-t/62j-bg_eval.t
-t/62y-bg_eval.t
+t/62a-bg_eval.tt
+t/62aj-bg_eval.t
+t/62ay-bg_eval.t
+t/62b-bg_eval.tt
+t/62bj-bg_eval.t
+t/62by-bg_eval.t
 t/63-bg_qx.t
 t/64-cpu_load.t
 t/tie-enum.tt

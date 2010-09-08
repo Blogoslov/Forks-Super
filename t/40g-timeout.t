@@ -9,16 +9,17 @@ use warnings;
 # complete when the jobs specify "timeout" or
 # "expiration" options
 #
-
-if (!Forks::Super::CONFIG('alarm')) {
- SKIP: {
-    skip "alarm function unavailable on this system ($^O,$]), "
-      . "can't test timeout feature", 10;
-  }
-  exit 0;
+if (${^TAINT}) {
+  $ENV{PATH} = "";
+  ($^X) = $^X =~ /(.*)/;
 }
 
 SKIP: {
+  if (!Forks::Super::CONFIG('alarm')) {
+    skip "alarm function unavailable on this system ($^O,$]), "
+      . "can't test timeout feature", 6;
+  }
+
   if (!Forks::Super::Config::CONFIG("getpgrp")) {
     if (!($^O eq 'MSWin32' 
 	  && Forks::Super::Config::CONFIG("Win32::Process"))) {
@@ -32,13 +33,13 @@ SKIP: {
   # itself (i.e., kill off its grandchildren). 
 
   unlink "t/out/spawn.pids.$$";
-  my $t = Forks::Super::Util::Time();
+  my $t = Time::HiRes::gettimeofday();
   my $pid = fork { timeout => 5, 
 		     cmd => [ $^X, "t/spawner-and-counter.pl",
 			      "t/out/spawn.pids.$$", "3", "15" ] };
-  my $t2 = Forks::Super::Util::Time();
+  my $t2 = Time::HiRes::gettimeofday();
   my $p = wait;
-  my $t3 = Forks::Super::Util::Time();
+  my $t3 = Time::HiRes::gettimeofday();
   ($t,$t2) = ($t3-$t,$t3-$t2);
   my $j = Forks::Super::Job::get($pid);
   my $t4 = $j->{end} - $j->{start};
@@ -73,9 +74,13 @@ SKIP: {
   unlink "t/out/spawn.pids.$$";
   
   waitall;
-}
+} # end SKIP
 
 SKIP: {
+  if (!Forks::Super::CONFIG('alarm')) {
+    skip "alarm function unavailable on this system ($^O,$]), "
+      . "can't test timeout feature", 4;
+  }
   if (!Forks::Super::Config::CONFIG("getpgrp")) {
     skip "setpgrp() unavailable, can't test process group manipulation", 4;
   }
@@ -96,5 +101,5 @@ SKIP: {
   ok($p == -1, "waitpid on parent pgid returns -1");
   $p = waitpid -$pgid, 0;
   ok($p == $pid, "waitpid on child pgid returns child pid");
-}
+} # end SKIP
 
