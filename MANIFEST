@@ -36,9 +36,10 @@ t/10-to-natural.t
 t/11-to-command.t
 t/12-to-sub.t
 t/13-to-exec.t
-t/14-debug.t
-t/15-overload.t
-t/16-retries.t
+t/14-to-run.t
+t/15-debug.t
+t/16-overload.t
+t/17-retries.t
 t/20-wait.t
 t/21-waitpid.t
 t/22-waitall.t
@@ -96,11 +97,15 @@ t/53-name.t
 t/60-os.t
 t/61-callbacks.t
 t/62a-bg_eval.tt
+t/62ad-bg_eval.t
 t/62aj-bg_eval.t
 t/62ay-bg_eval.t
+t/62ayt-bg_eval.t
 t/62b-bg_eval.tt
+t/62bd-bg_eval.t
 t/62bj-bg_eval.t
 t/62by-bg_eval.t
+t/62byt-bg_eval.t
 t/63-bg_qx.t
 t/64-cpu_load.t
 t/tie-enum.tt
@@ -154,4 +159,5 @@ bundle/Sys-CpuLoadX/README
 bundle/Sys-CpuLoadX/t/00-load.t
 bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
+TODO-1.0
 META.yml                                 Module meta-data (added by MakeMaker)

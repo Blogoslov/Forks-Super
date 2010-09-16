@@ -81,7 +81,10 @@ ok(defined $Forks::Super::CHILD_STDERR{$pid},"found stderr fh");
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
+
+shutdown $fh_in, 1;
 Forks::Super::close_fh($pid, 'stdin');
+
 ok($z > 0, "print to child stdin successful");
 my $t = time;
 my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};

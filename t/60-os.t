@@ -42,7 +42,7 @@ SKIP: {
 # update cpu affinity - doesn't work very well on all platforms.
 
 SKIP: {
-  if (!CONFIG("Sys::CpuAffinity")) {
+  if (!Forks::Super::Config::CONFIG_module("Sys::CpuAffinity")) {
     skip "cpu affinity test: requires Sys::CpuAffinity", 1;
   }
 
@@ -81,7 +81,7 @@ SKIP: {
   if ($^O ne 'MSWin32') {
     skip "cpu affinity test of Win32 Process object on $^O", 1;
   }
-  if (!Forks::Super::Config::CONFIG('Sys::CpuAffinity')) {
+  if (!Forks::Super::Config::CONFIG_module('Sys::CpuAffinity')) {
     skip "cpu affinity test, Sys::CpuAffinity module not installed", 1;
   }
 
@@ -92,9 +92,9 @@ SKIP: {
       cpu_affinity => 1
   };
   sleep 2;
-  open(T, "<", "$output");
-  my $winpid = <T>;
-  close T;
+  open(my $T, '<', $output);
+  my $winpid = <$T>;
+  close $T;
 
   my $phandle = Forks::Super::Job::OS::Win32::get_process_handle($winpid);
   if ($phandle) {
@@ -133,9 +133,9 @@ SKIP: {
       os_priority => 1
   };
   sleep 2;
-  open(T, "<", "$output");
-  my $winpid = <T>;
-  close T;
+  open(my $T, '<', $output);
+  my $winpid = <$T>;
+  close $T;
 
   my $phandle = Forks::Super::Job::OS::Win32::get_process_handle($winpid);
   if ($phandle) {

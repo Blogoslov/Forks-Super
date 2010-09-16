@@ -1,5 +1,7 @@
 use Forks::Super ':test';
 use Test::More tests => 9;
+use strict;
+use warnings;
 
 #
 # user can supply their own subroutine to decide
@@ -9,8 +11,8 @@ use Test::More tests => 9;
 
 sub do_launch { 1; }
 sub dont_launch { 0; }
-$launch_after_nap = sub { sleep 10; 1 };
-$sleepy = sub { sleep 30 };
+my $launch_after_nap = sub { sleep 10; return 1 };
+my $sleepy = sub { return sleep 30 };
 
 sub dont_launch_external {
   # block jobs that invoke external commands
@@ -24,33 +26,35 @@ sub dont_launch_external {
 $Forks::Super::MAX_PROC = 1;
 $Forks::Super::ON_BUSY = "fail";
 
-$pid = fork { sub => $sleepy };
+my $pid = fork { sub => $sleepy };
 ok(isValidPid($pid), "successful fork");
-$pid2 = fork { sub => $sleepy };
+my $pid2 = fork { sub => $sleepy };
 ok(!isValidPid($pid2), "failed fork");
-$pid3 = fork { sub => $sleepy , can_launch => 'main::do_launch' };
+my $pid3 = fork { sub => $sleepy , can_launch => 'main::do_launch' };
 ok(isValidPid($pid3), "successful user fork");
-$t = Time::HiRes::gettimeofday();
-$pid4 = fork { sub => $sleepy , can_launch => $launch_after_nap };
+my $t = Time::HiRes::gettimeofday();
+my $pid4 = fork { sub => $sleepy , can_launch => $launch_after_nap };
 $t = Time::HiRes::gettimeofday() - $t;
 ok(isValidPid($pid4), "successful delayed fork");
-ok($t >= 9.95, "fork was delayed ${t}s expected >10s");
+ok($t >= 9.7, "fork was delayed ${t}s expected >10s");
 
 $Forks::Super::MAX_PROC = 50;
-$pid5 = fork { sub => $sleepy };
+my $pid5 = fork { sub => $sleepy };
 ok(isValidPid($pid5), "successful fork");
-$pid6 = fork { sub => $sleepy , can_launch => \&dont_launch };
+my $pid6 = fork { sub => $sleepy , can_launch => \&dont_launch };
 ok(!isValidPid($pid6), "force failed fork");
 
-@to_kill = grep { isValidPid($_) } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
+# PERL_SIGNALS=unsafe: can hang here
+
+my @to_kill = grep { isValidPid($_) } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
 print "to kill: @to_kill\n";
 Forks::Super::kill('TERM', @to_kill) if @to_kill > 0;
 waitall;
 
 $Forks::Super::MAX_PROC = 3;
-$pid7 = fork { cmd => [ $^X,"t/external-command.pl", "-e=Hello" ],
+my $pid7 = fork { cmd => [ $^X,"t/external-command.pl", "-e=Hello" ],
 		 can_launch => \&dont_launch_external };
-$pid8 = fork { sub => sub { sleep 2 } };
+my $pid8 = fork { sub => sub { sleep 2 } };
 ok(!isValidPid($pid7), "failed fork with logic");
 ok(isValidPid($pid8), "successful fork with logic");
 waitall;

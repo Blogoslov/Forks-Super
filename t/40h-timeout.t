@@ -22,7 +22,7 @@ if (${^TAINT}) {
 
 SKIP: {
 
-  if (!Forks::Super::CONFIG("alarm")) {
+  if (!Forks::Super::Config::CONFIG_Perl_component("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 2;
   }

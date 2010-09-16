@@ -73,41 +73,15 @@ sub new {
   my ($class, $style, $command_or_code, %other_options) = @_;
   my $self = { value_set => 0, style => $style };
   if ($style eq 'eval') {
+    my $protocol = $other_options{'protocol'};
     $self->{code} = $command_or_code;
-    if ($other_options{'use_YAML'}) {
-      require YAML;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
-			  sub => sub {
-			    my $Result = $command_or_code->();
-			    print STDOUT YAML::Dump($Result);
-			  }, _is_bg => 1, _useYAML => 1 };
-    } elsif ($other_options{'use_JSON2'}) {
-      require JSON;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
-			  sub => sub {
-			    my $Result = $command_or_code->();
-			    if (ref $Result eq "") {
-			      print STDOUT JSON::encode_json(["$Result"]);
-			    } else {
-			      print STDOUT JSON::encode_json([$Result]);
-			    }
-			  }, _is_bg => 1, _useJSON => 1, _useJSON2 => 1 };
-    } elsif ($other_options{'use_JSON1'}) {
-      require JSON;
-      $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
-			  sub => sub {
-			    my $Result = $command_or_code->();
-			    my $js = new JSON;
-			    if (ref $Result eq "") {
-			      print STDOUT $js->objToJson(["$Result"]);
-			    } else {
-			      print STDOUT $js->objToJson([$Result]);
-			    }
-			  }, _is_bg => 1, _useJSON => 1, _useJSON1 => 1 };
-    } else {
-      croak "Forks::Super::Tie::BackgroundZcalar: expected YAML or JSON ",
-	"to be available\n";
-    }
+    $self->{job_id} 
+      = Forks::Super::fork { %other_options, child_fh => 'out',
+			     sub => sub {
+			       my $Result = $command_or_code->();
+			       print STDOUT _encode($protocol, $Result);
+			  }, _is_bg => 1, _lazy_proto => $protocol };
+
   } elsif ($style eq 'qx') {
     $self->{command} = $command_or_code;
     $self->{stdout} = '';
@@ -119,6 +93,63 @@ sub new {
   Forks::Super::_set_last_job($self->{job}, $self->{job_id});
   $self->{value} = undef;
   return bless $self, $class;
+}
+
+sub _encode {
+  my ($protocol, $data) = @_;
+  if ($protocol eq 'YAML') {
+    require YAML;
+    return YAML::Dump($data);
+  } elsif ($protocol eq 'JSON1') {
+    require JSON;
+    if (ref $data eq '') {
+      return new JSON()->objToJson(["$data"]);
+    } else {
+      return new JSON()->objToJson([$data]);
+    }
+  } elsif ($protocol eq 'JSON2') {
+    require JSON;
+    if (ref $data eq '') {
+      return JSON::encode_json(["$data"]);
+    } else {
+      return JSON::encode_json([$data]);
+    }
+  } elsif ($protocol eq 'YAML::Tiny') {
+    require YAML::Tiny;
+    return YAML::Tiny::Dump($data);
+  } elsif ($protocol eq 'Data::Dumper') {
+    require Data::Dumper;
+    return Data::Dumper::Dumper($data);
+  } else {
+    croak "Forks::Super::Tie::BackgroundZcalar: ",
+      "expected YAML or JSON to be available\n";
+  }
+}
+
+sub _decode {
+  my ($protocol, $data) = @_;
+  if (!defined($data) || $data eq "") {
+    return;
+  } elsif ($protocol eq 'YAML') {
+    require YAML;
+    return YAML::Load($data);
+  } elsif ($protocol eq 'JSON1') {
+    require JSON;
+    return new JSON()->jsonToObj($data)->[0];
+  } elsif ($protocol eq 'JSON2') {
+    require JSON;
+    return JSON::decode_json($data)->[0];
+  } elsif ($protocol eq 'Data::Dumper') {
+    require Data::Dumper;
+    my $VAR1;
+    my $decoded = eval "$data";
+    return $decoded;
+  } elsif ($protocol eq 'YAML::Tiny') {
+    require YAML::Tiny;
+    return YAML::Tiny::Load($data);
+  } else {
+    croak "YAML or JSON required to use bg_eval";
+  }
 }
 
 # unbless the object (so we can access hash elements without going
@@ -158,7 +189,8 @@ sub _fetch {
     if (!$self->{job}->is_complete) {
       my $pid = Forks::Super::waitpid $self->{job_id}, WREAP_BG_OK;
       if ($pid != $self->{job}->{real_pid}) {
-	carp "Forks::Super::bg_eval: failed to retrieve result from process!\n";
+	carp "Forks::Super::bg_eval: ",
+	  "failed to retrieve result from process!\n";
 	$self->{value_set} = 1;
 	$self->{error} = "waitpid failed, result not retrieved from process";
 	bless $self, $class;
@@ -172,40 +204,14 @@ sub _fetch {
 
     if ($self->{style} eq 'eval') {
       my $stdout = join'', Forks::Super::read_stdout($self->{job_id});
-      if ($self->{job}->{_useYAML}) {
-	require YAML;
-	my ($result) = YAML::Load( $stdout );
-	$self->{value_set} = 1;
-	$self->{value} = $result;
-      } elsif ($self->{job}->{_useJSON2}) {
-
-	require JSON;
-	if (!defined $stdout || $stdout eq "") {
-	  $self->{value_set} = 1;
-	  $self->{value} = undef;
-	} else {
-	  my $result = JSON::decode_json( $stdout );
-	  $self->{value_set} = 1;
-	  $self->{value} = $result->[0];
-	}
-      } elsif ($self->{job}->{_useJSON1}) {
-
-	require JSON;
-	if (!defined $stdout || $stdout eq "") {
-	  $self->{value_set} = 1;
-	  $self->{value} = undef;
-	} else {
-	  my $js = new JSON;
-	  my $result = $js->jsonToObj( $stdout );
-	  $self->{value_set} = 1;
-	  $self->{value} = $result->[0];
-	}
-      } else {
-	$self->{error} ||= "YAML or JSON required to use bg_eval call";
-	bless $self, $class;
-	croak "Forks::Super::Tie::BackgroundZcalar: ",
-	  "YAML or JSON required to use bg_eval\n";
+      eval {
+	$self->{value} = _decode($self->{job}->{_lazy_proto}, $stdout);
+      };
+      if ($@) {
+	$self->{error} ||= $@;
+	$self->{value} = undef;
       }
+      $self->{value_set} = 1;
     } elsif ($self->{style} eq 'qx') {
       $self->{value_set} = 1;
       $self->{value} = $self->{stdout};

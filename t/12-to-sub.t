@@ -19,12 +19,13 @@ use warnings;
 #
 sub internal_command {
   my (@args) = @_;
+  my $out;
   foreach my $arg (@args) {
     my ($key,$val) = split /=/, $arg;
     if ($key eq "--output" or $key eq "-o") {
-      open(OUT, ">", $val);
-      select OUT;
-      $| = 1;
+      open($out, ">", $val);
+      select $out;
+      $out->autoflush(1);
     } elsif ($key eq "--echo" or $key eq "-e") {
       print $val, " ";
     } elsif ($key eq "--ppid" or $key eq "-p") {
@@ -34,12 +35,12 @@ sub internal_command {
       sleep $val || 1;
     } elsif ($key eq "--exit" or $key eq "-x") {
       select STDOUT;
-      close OUT;
+      close $out;
       exit $val || 0;
     }
   }
   select STDOUT;
-  close OUT;
+  close $out;
 }
 
 my $output = "t/out/test12.$$";
@@ -101,9 +102,9 @@ ok($z eq $target_z,
 
 unlink $output;
 $pid = fork { sub => sub { my (@x) = @_;
-			   open(T, ">", $output);
-			   print T "@x - $$\n";
-			   close T;
+			   open(my $T, ">", $output);
+			   print $T "@x - $$\n";
+			   close $T;
 			   exit 14;
 			 },
 			   args => [ "Hello", "-", "World" ] };

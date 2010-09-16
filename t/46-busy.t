@@ -14,7 +14,7 @@ $Devel::Trace::TRACE=0;
 
 #######################################################
 
-sub sleepy { sleep 3 }
+sub sleepy { return sleep 3 }
 my $sleepy = \&sleepy;
 
 $Forks::Super::MAX_PROC = 3;

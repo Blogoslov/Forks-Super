@@ -5,7 +5,8 @@ Possible TODOs:
 
     ___ incorporate free memory into system busy-ness calc 
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
-		"non functional")
+		"non functional"). [Do I need to start putting
+		together a Sys::FreeMemory distribution, too?]
 
     _X_ implement child handles through pipe objects
 	___ use IO::Pipe
@@ -25,6 +26,27 @@ Possible TODOs:
 
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
 	Can test with  PERL_SIGNALS=unsafe make test .
+
+	___ cygwin 5.10: occassionally failure, IPC litter
+	___ linux: make test can hang
+
+    ___ Make Forks::Super usable with v5.6.
+	_X_ No  base
+	_x_ No  Time::HiRes?
+	___ MSWin32 5.6 ActiveState
+	    ___ No  alarm
+	    ___ No  socketpair
+        ___ cygwin 5.6.1, failures in 40g,43a-f,44a-f,45
+	    sockets and pipes work ok as standalone prog 
+            (perl56 -Ilib t/43a-sockethandles.t) but not as a child process 
+            (perl56 t/forked_harness.pl t/43a-sockethandles.t). So
+	    "make test" works but "make fasttest" does not. Curious.
+	    ___ No Cygwin::pid_to_winpid
+	_X_ linux 5.6.2, failures in 41f, 42f
+	___ linux make stresstest sometimes hangs
+	    ___ failures related to overloading!  $job||1 idiom looks
+                like trouble in child
+	    I think we can live with intermittent failures for now.
 
     _x_	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
 	then all IPC should be through sockets or pipes.
@@ -82,28 +104,14 @@ Possible TODOs:
 
     _o_ Investigate "filehandle leaks" in t/forked_harness.pl.
 
-    ___ Tie scalar in parent to read end of a pipe? As child
-	writes to the pipe, the scalar can be updated in
-	the parent?
-
-	Use case is  fork { stdout => $output }, and to be able
-	to read/use intermediate $output values without having to
-	wait for the child to finish.
-
-	Prototype in spike-pipe-tie2.pl
-
-	___ scalar is associated with a read handle and the job
-	___ add scalar to a global list/set of pipes to read from
-	___ on FETCH and during productive pauses, pull the most recent output
-	___ on close in the parent, optionally kill the child process,
-		close both the read and write ends of the filehandle
-
     _o_ Tie all filehandles from _safeopen for improved debugging
 	in Forks::Super::Job::IPC. 
 	_x_ we are piling a lot of handle data into the symbol table now
 
     ___ block attribute or block value in child_fh attribute to
 	indicate whether blocking I/O is desired.
+
+	We'll streamline the way options are specified in 1.0
 
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
@@ -123,14 +131,15 @@ Possible TODOs:
 	___ we can spoof this information for some tests ...
 	___ signal list? trappable? "available"?
 
-    ___ Reimplement gensym() in Forks::Super::Job::Ipc to use
+    _X_ Reimplement gensym() in Forks::Super::Job::Ipc to use
 	safer 'Forks::Super::Symbol' package ?
 
     _X_ Forks::Super::Util::Time() is redundant. Replace with
 	Time::HiRes::gettimeofday().
 
-    ___ Support bg_qx on systems where YAML::Tiny is installed
+    _X_ Support bg_qx on systems where YAML::Tiny is installed
 	without YAML.
+	___ Support Data::Dumper? Storable? Are those core modules?
 
     _X_ Use Carp::Always in unit tests (if available). Um, but don't
 	ALWAYS use it.
@@ -140,8 +149,12 @@ Possible TODOs:
 
     ___ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
 
-    ___ Turn installation of bundled packages on by default for a couple
+    ___ Can we hijack  readline(;*)  and use a construction like  <$pid> ?
+
+    _X_ Turn installation of bundled packages on by default for a couple
 	of CPAN testing cycles. See what breaks.
+
+	_X_ Enabled in v0.39
 
     ___ Keep the pipes clear:
         ___ During productive pauses, read and buffer input from all pipes
@@ -153,6 +166,10 @@ Possible TODOs:
 	    to invoke the subroutine. During productive pauses in the
 	    parent process, signal the child processes to run these
 	    subroutines.
+
+	___ On the write end of the pipe, we can also save extra output
+	    in a buffer to be delivered at a more convenient time so that
+	    the write operation doesn't block.
 
     ___ The IPC module needs to create a temporary directory that will
         be deleted when the program ends. Is there another module that
@@ -180,3 +197,52 @@ Possible TODOs:
 	_X_ Vanilla utf8 seems ok. Running  t/forked_harness.pl  with
 	    -p -Mutf8  passes.
 
+    ___ IPC cleanup -- log fails and cleanse them off-line with
+        perl -MForks::Super=cleanse   or
+        perl -MForks::Super=cleanse=<directory>
+
+    ___ Forks::Super::Job->reuse(%options) method to reuse a job
+	object and its existing set of parameters; like calling
+	fork { %{all_of_jobs_previous_options($job)} } but reusing
+	the existing Forks::Super::Job object. It would be an
+	error to call this unless the $job was completed.
+
+    ___ Time::HiRes::setitimer can deliver <XXX>arbitrary signals</XXX>SIGALRM
+	at arbitrary times? Just what we need for dispatching the
+	queue, "cleaning pipes", handling the asynchronous headaches
+	of this module. Can we use this and retire the "queue monitor"?
+
+	Maybe.
+	___ _launch_queue_monitor() can set a SIGALRM handler and an itimer
+	___ _kill_queue_monitor() can kill the SIGALRM handler and unset 
+	    the itimer
+	___ in a child with a timeout and CHILD_FORK_OK, we need to be a
+	    little trickier.
+	    Consider a list of functions to run in a signal handler that
+	    can be added and removed at will.
+	    ___ 00-pause productive pause code
+	    ___ 01-runqueue check the queue
+	    ___ 99-timeout child timeout code
+	___ of course, verify that Time::HiRes::setitimer is available
+	    and keep the fallback queue monitor method around.
+	___ on solaris, we can only set one itimer.
+
+	"Use of interval times may interfere with alarm(), sleep(),
+	and usleep() ... anything may happen; it may work, it may not".
+
+    _x_ For clarity. separate F::S::C config_module, config_component,
+	config_external_program
+
+    ___ For organization, create F::S::XXX::Parent, F::S::XXX::Child
+        modules, with function that are only to be executed in the
+	parent or child.
+
+	Parent and child specific modules can be 'require'd after a
+	fork (or will this take too much time)? Parent modules can be
+	unimported by the child.
+
+	Since this looks like it might produce some overhead, make
+	it a toggleable feature? (So don't use it when there are lots
+	of small tasks?)
+
+    ___ Document how to use $ENV{FORKS_SUPER_CONFIG}

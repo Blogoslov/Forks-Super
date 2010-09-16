@@ -58,12 +58,12 @@ sub repeater {
     Forks::Super::debug("repeater: time expired. ",
 			"Not processing any more input");
     Forks::Super::debug("input was from file: $f_in");
-    open(F_IN, "<", $f_in);
-    while (<F_IN>) {
+    open(my $F_IN, "<", $f_in);
+    while (<$F_IN>) {
       s/\s+$//;
       Forks::Super::debug("    input $.: $_");
     }
-    close F_IN;
+    close $F_IN;
   }
   close STDOUT;
   close STDERR;

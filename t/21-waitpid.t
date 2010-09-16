@@ -4,7 +4,7 @@ use Test::More tests => 143;
 use strict;
 use warnings;
 
-if (Forks::Super::CONFIG("alarm")) {
+if (Forks::Super::Config::CONFIG_Perl_component("alarm")) {
   alarm 300;$SIG{ALRM}=sub{die "Timeout\n"};
 }
 
@@ -134,7 +134,7 @@ for (my $i=0; $i<20; $i++) {
 
 $t = Time::HiRes::gettimeofday();
 SKIP: {
-  if (!Forks::Super::CONFIG("getpgrp")) {
+  if (!Forks::Super::Config::CONFIG_Perl_component("getpgrp")) {
     skip "$^O,$]: Can't test waitpid on pgid", 44;
   }
 

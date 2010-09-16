@@ -21,6 +21,18 @@ our $DISABLE_INT = 0;
 our $TIMEDOUT = 0;
 our ($ORIG_PGRP, $NEW_PGRP, $NEW_SETSID, $NEWNEW_PGRP);
 
+# Signal to help terminate grandchildren on a timeout, for systems that
+# let you set process group ID. After a lot of replications I find that
+#   - SIGQUIT is not appropriate on Cygwin 5.10 (_cygtls exception msgs)
+#   - SIGINT,QUIT not appropriate on Cygwin 5.6.1 (t/40g#3-6 fail)
+#   - linux 5.6.2 intermittent problems with any signals
+our $TIMEOUT_SIG = $ENV{FORKS_SUPER_TIMEOUT_SIG} || 'HUP';
+
+sub Forks::Super::Job::_config_timeout_parent {
+  my $job = shift;
+  return;
+}
+
 #
 # If desired, set an alarm and alarm signal handler on a child process
 # to kill the child.
@@ -29,8 +41,12 @@ our ($ORIG_PGRP, $NEW_PGRP, $NEW_SETSID, $NEWNEW_PGRP);
 sub Forks::Super::Job::_config_timeout_child {
   my $job = shift;
   my $timeout = 9E9;
+
+  if (exists $SIG{$TIMEOUT_SIG}) {
+    $SIG{$TIMEOUT_SIG} = 'DEFAULT';
+  }
+
   if (defined $job->{timeout}) {
-    #$timeout = $job->{timeout};
     $timeout = _time_from_natural_language($job->{timeout}, 1);
     if ($job->{style} eq 'exec') {
       carp "Forks::Super: exec option used, timeout option ignored\n";
@@ -52,6 +68,12 @@ sub Forks::Super::Job::_config_timeout_child {
   }
   $job->{_timeout} = $timeout;
   $job->{_expiration} = $timeout + Time::HiRes::gettimeofday();
+
+  if (!Forks::Super::Config::CONFIG('alarm')) {
+    croak "Forks::Super: alarm() not available on this system. ",
+      "timeout,expiration options not allowed.\n";
+    return;
+  }
 
   # Un*x systems - try to establish a new process group for
   # this child. If this process times out, we want to have
@@ -93,72 +115,75 @@ sub Forks::Super::Job::_config_timeout_child {
     croak "Forks::Super::Job::_config_timeout_child(): quick timeout";
   }
 
-  $SIG{ALRM} = sub {
-    local *__ANON__ = 'the Forks::Super::Job::Timeout::SIGALRM handler';
-    warn "Forks::Super: child process timeout\n";
-    $TIMEDOUT = 1;
-    if (Forks::Super::Config::CONFIG('getpgrp')) {
-      if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
-	local $SIG{INT} = 'IGNORE';
-	$DISABLE_INT = 1;
-	my $SIGINT = $Forks::Super::Config::signo{'INT'} || 2;
-	CORE::kill -$SIGINT, getpgrp(0);
-	$DISABLE_INT = 0;
-      }
-    } elsif (&IS_WIN32) {
-      my $proc = Forks::Super::Job::get_win32_proc();
-      my $pid = Forks::Super::Job::get_win32_proc_pid();
-      if (defined $proc) {
-	if ($proc eq '__open3__') {
-	  # Win32::Process nice to have but not required.
-	  # TASKKILL is pretty standard on Windows systems, isn't it?
-	  # Maybe not completely standard :-(
+  $SIG{ALRM} = \&_child_sigalrm_handler;
+
+  alarm $timeout;
+  debug("Forks::Super::Job::_config_timeout_child(): ",
+	"alarm set for ${timeout}s in child process $$")
+    if $job->{debug};
+  return;
+}
+
+# to be run in a child if that child times out
+sub _child_sigalrm_handler {
+  warn "Forks::Super: child process timeout\n";
+  $TIMEDOUT = 1;
+
+  # we wish to kill not only this child process,
+  # but any other active processes that it has spawned.
+  # There are several ways to do this.
+
+  if (Forks::Super::Config::CONFIG('getpgrp')) {
+    if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
+      local $SIG{$TIMEOUT_SIG} = 'IGNORE';
+      $DISABLE_INT = 1;
+      my $SIG = $Forks::Super::Config::signo{$TIMEOUT_SIG} || 15;
+      CORE::kill -$SIG, getpgrp(0);
+      $DISABLE_INT = 0;
+    }
+  } elsif (&IS_WIN32) {
+    my $proc = Forks::Super::Job::get_win32_proc();
+    my $pid = Forks::Super::Job::get_win32_proc_pid();
+    if (defined $proc) {
+      if ($proc eq '__open3__') {
+	# Win32::Process nice to have but not required.
+	# TASKKILL is pretty standard on Windows systems, isn't it?
+	# Maybe not completely standard :-(
+	my $result = system("TASKKILL /F /T /PID $pid > nul");
+      } elsif ($proc eq '__system__') {
+	$proc = undef;
+	if (defined $Forks::Super::Job::self
+	    && $Forks::Super::Job::self->{debug}) {
+	  
+	  debug("Job ", $Forks::Super::Job::self->toShortString(),
+		" has timed out. The grandchildren from this process",
+		" are NOT being terminated.");
+	}
+      } elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
+	my ($ec,$exitCode);
+	$ec = $proc->GetExitCode($exitCode);
+	if ($exitCode == &Win32::Process::STILL_ACTIVE
+	    || $ec == &Win32::Process::STILL_ACTIVE) {
+
 	  my $result = system("TASKKILL /F /T /PID $pid > nul");
-	} elsif ($proc eq '__z__') {
-	  $proc = undef;
-	  if (defined $Forks::Super::Job::self
-	      && $Forks::Super::Job::self->{debug}) {
 
-	    debug("Job ", $Forks::Super::Job::self->toShortString(),
-		  " has timed out. The grandchildren from this process",
-		  " are NOT being terminated.");
-	  }
-	} elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
-	  my ($ec,$exitCode);
-	  $ec = $proc->GetExitCode($exitCode);
-	  if ($exitCode == &Win32::Process::STILL_ACTIVE
-	      || $ec == &Win32::Process::STILL_ACTIVE) {
-
-	    my $result = system("TASKKILL /F /T /PID $pid > nul");
-
-	    $proc->GetExitCode($exitCode);
-	    if ($DEBUG) {
-	      debug("Terminating active MSWin32 process result=$result ",
-		    "exitCode=$exitCode");
-	    }
+	  $proc->GetExitCode($exitCode);
+	  if ($DEBUG) {
+	    debug("Terminating active MSWin32 process result=$result ",
+		  "exitCode=$exitCode");
 	  }
 	}
-      } else {
-	$DISABLE_INT = 1;
-	Forks::Super::kill('INT', $$);
-	$DISABLE_INT = 0;
       }
+    } else {
+      $DISABLE_INT = 1;
+      Forks::Super::kill($TIMEOUT_SIG, $$);
+      $DISABLE_INT = 0;
     }
-    if (&IS_WIN32 && $DEBUG) {
-      debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
-    }
-    exit 255;
-  };
-  if (Forks::Super::Config::CONFIG('alarm')) {
-    alarm $timeout;
-    debug("Forks::Super::Job::_config_timeout_child(): ",
-	  "alarm set for ${timeout}s in child process $$")
-      if $job->{debug};
-  } else {
-    carp "Forks::Super: alarm() not available, ",
-      "timeout,expiration options ignored.\n";
   }
-  return;
+  if (&IS_WIN32 && $DEBUG) {
+    debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
+  }
+  exit 255;
 }
 
 sub _cleanup_child {

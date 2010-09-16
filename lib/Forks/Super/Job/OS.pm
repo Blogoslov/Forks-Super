@@ -8,7 +8,7 @@
 package Forks::Super::Job::OS;
 use Forks::Super::Config ':all';
 use Forks::Super::Debug qw(:all);
-use Forks::Super::Util qw(isValidPid :IS_OS);
+use Forks::Super::Util qw(isValidPid IS_WIN32 IS_CYGWIN);
 use Carp;
 use strict;
 use warnings;

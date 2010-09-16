@@ -6,7 +6,7 @@ package Forks::Super::Sigchld;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
 use POSIX ':sys_wait_h';
-use Time::HiRes;
+# use Time::HiRes;  # not installed on ActiveState 5.6 :-(
 use strict;
 use warnings;
 

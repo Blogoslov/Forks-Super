@@ -5,8 +5,11 @@
 #
 
 package Forks::Super::Util;
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+# use base 'Exporter';
+
 use Carp;
 use strict;
 use warnings;
@@ -14,16 +17,36 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
-our %EXPORT_TAGS = (all => \@EXPORT_OK, IS_OS => [ qw(IS_WIN32 IS_CYGWIN) ]);
+our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 our (%SIG_NO, @SIG_NAME, $Time_HiRes_avail,
     $something_productive, $something_else_productive);
 our ($DEFAULT_PAUSE, $_PAUSE) = (0.10, 0);
-$Time_HiRes_avail = eval "use Time::HiRes; 1" || 0;
 
+$Time_HiRes_avail = eval "use Time::HiRes; 1" || 0;
+if (!$Time_HiRes_avail) {
+  *Time::HiRes::gettimeofday = \&__fake_Time_HiRes_gettimeofday;
+  *Time::HiRes::sleep = \&__fake_Time_HiRes_sleep;
+}
+
+
+
+sub __fake_Time_HiRes_gettimeofday {
+  return wantarray ? (time,0) : time;
+}
+
+sub __fake_Time_HiRes_sleep {
+  my $delay = shift;
+  return 0.01 if $delay <= 0;
+  if ($delay > 0 && $delay <= 1) {
+    return CORE::sleep 1;
+  } else {
+    return CORE::sleep int($delay);
+  }
+}
 
 sub Ctime {
   my $t = Time::HiRes::gettimeofday(); #Time();

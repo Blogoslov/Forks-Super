@@ -60,7 +60,7 @@ my $ju = Forks::Super::Job::get($urgent);
 ok($jo->{state} eq "REAPED" && $jm->{state} eq "REAPED" &&
    $ju->{state} eq "REAPED",
    "deferred jobs reaped after waitall");
-if (Forks::Super::CONFIG("Time::HiRes")) {
+if (Forks::Super::Config::CONFIG_module("Time::HiRes")) {
   ok($jo->{start} > $ju->{start}, 
      "respect queue priority HR jm=" . ($jm->{start}-$^T)
      . ",jo=" . ($jo->{start}-$^T) . ",ju=" . ($ju->{start}-$^T));

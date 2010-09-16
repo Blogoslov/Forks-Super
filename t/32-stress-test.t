@@ -36,6 +36,9 @@ my $NN = 149;
 my $nn = $NN;
 SKIP: {
   $nn = int(0.85 * $Forks::Super::SysInfo::MAX_FORK) || 5;
+  if ($ENV{WRONG_MAKEFILE_OK}) {
+    $nn = 10;  # safe low number
+  }
   $nn = $NN if $nn > $NN;
 
   # solaris tends to barf on this test even though it passes the others.
@@ -63,7 +66,7 @@ for (my $i=0; $i<$nn; $i++) {
   if (!isValidPid($pid)) {
     croak "fork failed i=$i OS=$^O V=$]";
   }
-  if (Forks::Super::CONFIG("Time::HiRes")) {
+  if (Forks::Super::Config::CONFIG_module("Time::HiRes")) {
     Time::HiRes::sleep(0.001);
   }
 }
@@ -94,15 +97,15 @@ sub check_CHLD_handle_history_for_interleaving {
   ok($fail == 0, "CHLD_handle history consistent " . 
      scalar @Forks::Super::CHLD_HANDLE_HISTORY . " records fail=$fail");
 
-  $test::fail = $fail;
+  return $test::fail = $fail;
 }
 if ($test::fail > 0) {
   print STDERR "Errors in $0\n";
   print STDERR "Writing SIGCHLD handler history to\n";
   print STDERR "'t/out/sigchld.debug.$$' for analysis.\n";
-  open(D, ">", "t/out/sigchld.debug.$$");
-  print D @Forks::Super::CHLD_HANDLE_HISTORY;
-  close D;
+  open(my $D, ">", "t/out/sigchld.debug.$$");
+  print $D @Forks::Super::CHLD_HANDLE_HISTORY;
+  close $D;
 }
 
 

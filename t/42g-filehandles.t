@@ -25,7 +25,8 @@ my $pid = fork {
 };
 
 ok(isValidPid($pid), "$pid is valid pid");
-ok(!is_socket($pid->{child_stdout}) && !is_pipe($pid->{child_stdout}), "ipc with filehandles");
+ok(!is_socket($pid->{child_stdout}) && !is_pipe($pid->{child_stdout}), 
+   "ipc with filehandles");
 sleep 1;
 my $t0 = Time::HiRes::gettimeofday();
 my $err = Forks::Super::read_stderr($pid, "block" => 1);
@@ -41,8 +42,10 @@ ok($t2 > 3.5, "read blocked stdout ${t2}s, expected ~4s");
 $out = Forks::Super::read_stdout($pid, "block" => 0);
 my $t3 = Time::HiRes::gettimeofday() - $t0;
 my $t32 = $t3 - $t2;
-ok(!defined($out) || (defined($out) && $out eq ''), "non-blocking read on stdout returned empty");
-ok($t32 <= 1.0, "non-blocking read took ${t32}s, expected ~${Forks::Super::SOCKET_READ_TIMEOUT}s");
+ok(!defined($out) || (defined($out) && $out eq ''), 
+   "non-blocking read on stdout returned empty");
+ok($t32 <= 1.0, "non-blocking read took ${t32}s, "
+	      . "expected ~${Forks::Super::SOCKET_READ_TIMEOUT}s");
 
 $out = Forks::Super::read_stdout($pid, "block" => 1);
 my $t4 = Time::HiRes::gettimeofday() - $t0;
@@ -56,7 +59,8 @@ $err = Forks::Super::read_stderr($pid, "block" => 1);
 my $t5 = Time::HiRes::gettimeofday() - $t0;
 my $t54 = $t5 - $t4;
 ok(!defined($err), "blocking read on empty stderr returns empty");
-ok($t54 <= 5.0, "blocking read on empty stderr can take a moment ${t54}s, expected ~3s");
+ok($t54 <= 5.0, 
+   "blocking read on empty stderr can take a moment ${t54}s, expected ~3s");
 
 # print "\$err = $err, time = $t5, $t54\n";
 
@@ -64,7 +68,8 @@ $out = Forks::Super::read_stdout($pid, "block" => 0);
 my $t6 = Time::HiRes::gettimeofday() - $t0;
 my $t65 = $t6 - $t5;
 ok(!defined($out), "non-blocking read on empty stdout returns empty");
-ok($t65 <= 1.0, "non-blocking read on empty stdout fast ${t65}s, expected <1.0s");
+ok($t65 <= 1.3, 
+   "non-blocking read on empty stdout fast ${t65}s, expected <1.0s");
 
 # print "\$out = $out, time = $t6, $t65\n";
 

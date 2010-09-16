@@ -15,14 +15,14 @@ if (${^TAINT}) {
 }
 
 SKIP: {
-  if (!Forks::Super::CONFIG('alarm')) {
+  if (!Forks::Super::Config::CONFIG_Perl_component('alarm')) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 6;
   }
 
-  if (!Forks::Super::Config::CONFIG("getpgrp")) {
+  if (!Forks::Super::Config::CONFIG_Perl_component("getpgrp")) {
     if (!($^O eq 'MSWin32' 
-	  && Forks::Super::Config::CONFIG("Win32::Process"))) {
+	  && Forks::Super::Config::CONFIG_module("Win32::Process"))) {
 
       skip "Skipping tests about timing out grandchildren "
 	. "because setpgrp() and TASKKILL are unavailable", 6;
@@ -30,7 +30,9 @@ SKIP: {
   }
 
   # a child process that times out should clean up after
-  # itself (i.e., kill off its grandchildren). 
+  # itself (i.e., kill off its grandchildren).
+  #
+  # This is harder to do on some systems than on others.
 
   unlink "t/out/spawn.pids.$$";
   my $t = Time::HiRes::gettimeofday();
@@ -45,27 +47,30 @@ SKIP: {
   my $t4 = $j->{end} - $j->{start};
   ok($p == $pid && $t >= 5 && $t4 <= 10 && $t2 <= 10,  # was 8/9 obs 11.26
      "external prog took ${t}s ${t2}s ${t4}s, expected 5-7s");
+
   if ($t <= 14) {
     sleep 20 - $t;
   } else {
     sleep 1;
   }
-  open(PIDS, "<", "t/out/spawn.pids.$$");
-  my @pids = map { s/\s+$//; $_ } <PIDS>;
-  close PIDS;
+  open(my $PIDS, "<", "t/out/spawn.pids.$$");
+  my @pids = <$PIDS>;
+  for (@pids) { s/\s+$// }
+  close $PIDS;
   ok(@pids == 4, "spawned " . scalar @pids . " procs, Expected 4");
   for (my $i=0; $i<4 && $i<@pids; $i++) {
     my ($pid_i, $file_i) = split /,/, $pids[$i];
-    open(F_I, "<", $file_i);
-    my @data_i = <F_I>;
-    close F_I;
+    open(my $F_I, "<", $file_i);
+    my @data_i = <$F_I>;
+    close $F_I;
     my @orig_data_i = @data_i;
     pop @data_i while @data_i > 0 && $data_i[-1] !~ /\S/;
     my $last_count_i = $data_i[-1] + 0;
 
+    # failure point, Cygwin v5.6.1
     ok($last_count_i >= 5,
        "Last count from $file_i was $last_count_i, "
-       . "Expect >= 5");   ### 19,20,21,22 ###
+       . "Expect >= 5");   ### 3-6 ###
     if ($last_count_i < 5) {
       print STDERR "File contents were:\n", @orig_data_i, "\n";
     }
@@ -77,11 +82,11 @@ SKIP: {
 } # end SKIP
 
 SKIP: {
-  if (!Forks::Super::CONFIG('alarm')) {
+  if (!Forks::Super::Config::CONFIG_Perl_component('alarm')) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 4;
   }
-  if (!Forks::Super::Config::CONFIG("getpgrp")) {
+  if (!Forks::Super::Config::CONFIG_Perl_component("getpgrp")) {
     skip "setpgrp() unavailable, can't test process group manipulation", 4;
   }
   my ($job, $pgid, $ppgid);

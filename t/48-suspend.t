@@ -1,10 +1,10 @@
 use Forks::Super ':test';
-use Test::More tests => 13;
+use Test::More tests => 17;
 use strict;
 use warnings;
 
 SKIP: {
-  if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG("Win32::API")) {
+  if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG_module("Win32::API")) {
     skip "suspend/resume not supported on MSWin32", 13;
   }
 
@@ -67,11 +67,33 @@ ok($t > 1.95 && $t < 9,         ### 12 ###
    "job completes before wait timeout ${t}s, expected 3-4s");
 ok($j->{state} eq "REAPED", "job is complete");
 
+##################################################################
+
+# if you suspend a job more than once, and then resume it,
+# it should resume. In the basic Windows API, you'd need to 
+# call resume more than once, too.
+
+$pid = fork { sub => sub { sleep 1 for (1..4) } };
+$j = Forks::Super::Job::get($pid);
+sleep 1;
+ok($j->{state} eq 'ACTIVE', "created bg job, currently active");
+$j->suspend;
+ok($j->{state} eq 'SUSPENDED', "suspended bg job successfully");
+$j->suspend;  # re-suspending a job generates a warning.
+$j->suspend;
+$j->suspend;
+$j->suspend;
+ok($j->{state} eq 'SUSPENDED', "multiply-suspended bg job successfully");
+sleep 1;
+$j->resume;
+ok($j->{state} eq 'ACTIVE', "single resume reactivated bg job");
+waitall;
+
+
+
 }  # end SKIP
 
 #############################################################################
-
-# XXXXXX - Forks::Super::kill + suspend/resume.
 
 # ACTIVE + SIGSTOP --> SUSPENDED
 # DEFERRED + SIGSTOP --> SUSPENDED-DEFERRED

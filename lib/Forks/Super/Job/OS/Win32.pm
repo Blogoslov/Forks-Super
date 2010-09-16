@@ -13,9 +13,8 @@
 package Forks::Super::Job::OS::Win32;
 use Forks::Super::Config qw(:all);
 use Forks::Super::Debug qw(:all);
-use Forks::Super::Util ':IS_OS';
+use Forks::Super::Util qw(IS_WIN32 IS_CYGWIN);
 use Carp;
-use base 'Exporter';
 use strict;
 use warnings;
 
@@ -28,8 +27,6 @@ if (!&IS_WIN32 && !&IS_CYGWIN) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our @EXPORT = ();
-our %EXPORT_TAGS = ('all' => [ @EXPORT ]);
 our $VERSION = $Forks::Super::Job::VERSION;
 
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
@@ -313,6 +310,37 @@ sub get_system_info {
   return %SYSTEM_INFO;
 }
 
+###############################################################
+#
+# To spawn a new process in MSWin32, TMTOWTDI. Depending
+# on what  Win32::XXX  modules are available, some ways
+# suck less than the other ways.
+#
+# 1. Use  $pid=open $fh,"|$cmd", attach $pid to a
+#    Win32 handle with Win32::Process::Open.
+#    Wait on the process.
+#
+# 2. Like #1, but use  open $fh,"$cmd|"  construction
+#
+# 3. Use Win32::Process::Create, wait on the process. 
+#
+# 4. Just call  system() , which waits on the process
+#    for you.
+#
+# 5. Just call  open $fh,"|$cmd" and wait.
+#
+# #1,#2,#3 require Win32::Process module.
+#
+# #3 doesn't hand off redirected filehandles properly,
+# so that shouldn't be used when there is IPC.
+#
+# #4,#5 doesn't give you access to a Win32 handle, so you
+# can't set OS priority, CPU affinity, suspend/resume,
+# etc.
+#
+# And don't get me started on all the ways to kill a
+# Win32 process.
+
 sub open_win32_process {
   my ($job) = @_;
   my $cmd = join ' ', @{$job->{cmd}};
@@ -375,7 +403,7 @@ sub create_win32_process {
 
 sub system_win32_process {
   my ($job) = @_;
-  $Forks::Super::Job::WIN32_PROC = '__z__';
+  $Forks::Super::Job::WIN32_PROC = '__system__';
   $ENV{'__FORKS_SUPER_PARENT_THREAD'} = $$;
   # no way to update cpu affinity, priority with this method
   my $c1 = system( @{$job->{cmd}} );

@@ -52,7 +52,8 @@ $pid = fork { stdin => \@input , stdout => \$output,
 		} };
 ok($output eq $orig_output, "output not updated until child is complete");
 waitpid $pid, 0;
-ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", "read input from ARRAY ref");
+ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", 
+   "read input from ARRAY ref");
 
 
 # intermittent SIGSEGV occur during cleanup. Haven't been able to diagnose yet.

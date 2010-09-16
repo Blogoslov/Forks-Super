@@ -5,7 +5,7 @@ use warnings;
 
 SKIP: {
 
-  if (!Forks::Super::Config::CONFIG("DateTime::Format::Natural")) {
+  if (!Forks::Super::Config::CONFIG_module("DateTime::Format::Natural")) {
     skip "natural language test requires DateTime::Format::Natural module", 4;
   }
 

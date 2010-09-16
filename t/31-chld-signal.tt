@@ -130,7 +130,7 @@ ok($j->{state} eq 'COMPLETE', "complete state " . $j->{state});
 SKIP: {
   skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
-  # XXXXXX pass test (1) and fail test (2) would be ok
+  # XXXXXX - pass test (1) and fail test (2) would be ok
   ok(defined $LAST::COMPLETE{$j}, 
      "job in SIGCHLD handler/$j/" . $j->{pid});    ### 15 ###
   ok($LAST::COMPLETE eq $j,

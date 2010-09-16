@@ -1,18 +1,25 @@
 #
 # Forks::Super::Config package - determines what features and
 #         modules are available on the current system
+#         at run-time.
+#
+# Some useful system info is expensive to compute so it is
+# determined at build time and put into Forks/Super/SysInfo.pm
 #
 
 
 package Forks::Super::Config;
 use Forks::Super::Debug qw(debug);
 use Carp;
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use strict;
 use warnings;
 
-our @EXPORT_OK = qw(CONFIG);
+our @EXPORT_OK = qw(CONFIG CONFIG_module);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %signo);
 our $VERSION = $Forks::Super::Debug::VERSION;
@@ -28,6 +35,20 @@ sub init {
   my $i = 0;
   if (defined $Config::Config{'sig_name'}) {
     %signo = map { $_ => $i++ } split / /, $Config::Config{'sig_name'};
+  }
+
+  if (defined $ENV{FORKS_SUPER_CONFIG}) {
+    my @cfg_spec = split /,/, $ENV{FORKS_SUPER_CONFIG};
+    foreach my $spec (@cfg_spec) {
+      if ($spec =~ s/^!//) {
+	$CONFIG{$spec} = 0;
+      } elsif ($spec =~ s/^\?//) {
+	delete $CONFIG{$spec};
+	CONFIG($spec);
+      } else {
+	$CONFIG{$spec} = 1;
+      }
+    }
   }
 }
 
@@ -75,20 +96,22 @@ sub CONFIG {
       or $module eq 'SIGUSR1' or $module eq 'getpriority'
       or $module eq 'select4' or $module eq 'pipe') {
 
-    return $CONFIG{$module} = _CONFIG_Perl_component($module);
+    return $CONFIG{$module} = CONFIG_Perl_component($module);
   } elsif (substr($module,0,1) eq '/') {
-    return $CONFIG{$module} = _CONFIG_external_program($module);
+    return $CONFIG{$module} = CONFIG_external_program($module);
   } elsif ($module eq 'filehandles') {
-#   print STDERR "XXXXXX CONFIG(fh) enabled\n";
     return $CONFIG{$module} = 1; # available by default
   } else {
     return $CONFIG{$module} =
-      _CONFIG_module($module,$warn,@settings);
+      CONFIG_module($module,$warn,@settings);
   }
 }
 
-sub _CONFIG_module {
+sub CONFIG_module {
   my ($module,$warn, @settings) = @_;
+  if (defined $CONFIG{$module}) {
+    return $CONFIG{$module};
+  }
   my $zz = eval " require $module ";
   if ($@) {
     carp "Forks::Super::CONFIG: ",
@@ -110,44 +133,50 @@ sub _CONFIG_module {
   return 1;
 }
 
-sub _CONFIG_Perl_component {
+sub CONFIG_Perl_component {
   my ($component) = @_;
-  local $@;
+  if (defined $CONFIG{$component}) {
+    return $CONFIG{$component};
+  }
+
+  no warnings;
+  local $SIG{__DIE__} = sub{}; # I mean it! no warnings.
+
   if ($component eq 'getpgrp') {
-    undef $@;
-    my $z = eval { getpgrp(0) };
-    $CONFIG{'getpgrp'} = $@ ? 0 : 1;
+    $CONFIG{'getpgrp'} = eval { getpgrp(0); 1 } || 0;
   } elsif ($component eq 'getpriority') {
-    undef $@;
-    my $z = eval { getpriority(0,0) };
-    $CONFIG{'getpriority'} = $@ ? 0 : 1;
+    $CONFIG{'getpriority'} = eval { getpriority(0,0); 1 } || 0;
   } elsif ($component eq 'alarm') {
-    undef $@;
-    my $z = eval { alarm 0 };
-    $CONFIG{'alarm'} = $@ ? 0 : 1;
+    $CONFIG{'alarm'} = eval { alarm 0; 1 } || 0;
   } elsif ($component eq 'SIGUSR1') {
 
     # %SIG is a special hash -- defined $SIG{USR1} might be false
     # but USR1 might still appear in keys %SIG.
+    # XXX - but couldn't I just say  exists $SIG{USR1} ?
 
     my $SIG = join ' ', ' ', keys %SIG, ' ';
     my $target_sig = defined $Forks::Super::QUEUE_INTERRUPT
       ? $Forks::Super::QUEUE_INTERRUPT : '';
-    $CONFIG{'SIGUSR1'} =
-      $SIG =~ / $target_sig / ? 1 : 0;
+    $CONFIG{'SIGUSR1'} = $SIG =~ / $target_sig / ? 1 : 0;
   } elsif ($component eq 'select4') { # 4-arg version of select
-    undef $@;
-    my $z = eval { select undef,undef,undef,0.5 };
-    $CONFIG{'select4'} = $@ ? 0 : 1;
+    $CONFIG{'select4'} = eval { select undef,undef,undef,0.05 ; 1 } || 0;
   } elsif ($component eq 'pipe') {
-    undef $@;
-    eval {
+    $CONFIG{'pipe'} = eval {
       my ($read,$write);
       pipe $read, $write;
       close $read;
       close $write;
-    };
-    $CONFIG{'pipe'} = $@ ? 0 : 1;
+      1;
+    } || 0;
+  } elsif ($component eq 'socketpair') {
+    $CONFIG{'socketpair'} = eval {
+      use Socket;
+      my ($read,$write);
+      socketpair $read, $write, AF_UNIX, SOCK_STREAM, PF_UNSPEC;
+      close $read;
+      close $write;
+      1;
+    } || 0;
   }
 
   # getppid  is another OS-dependent Perl system call
@@ -162,8 +191,11 @@ sub _CONFIG_Perl_component {
   return $CONFIG{$component};
 }
 
-sub _CONFIG_external_program {
+sub CONFIG_external_program {
   my ($external_program) = @_;
+  if (defined $CONFIG{$external_program}) {
+    return $CONFIG{$external_program};
+  }
 
   if (-x $external_program) {
     if ($IS_TEST_CONFIG) {

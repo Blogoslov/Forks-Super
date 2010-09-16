@@ -1,5 +1,5 @@
 
-Forks::Super version 0.38
+Forks::Super version 0.39
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -60,6 +60,16 @@ and managing them, including:
       of the child processes can be set.
 
 
+RECOMMENDED PERL VERSION
+
+The Forks::Super module is recommended for versions of Perl
+later than 5.7.2 that implement "deferred" signals (See the 
+"Deferred Signals (Safe Signals)" section of any recent version 
+of perlipc), as the signal handlers used in the module are
+insufficiently paranoid. However the module will compile
+and run with Perl 5.6.
+
+
 INSTALLATION
 
 The typical installation recipe
@@ -88,28 +98,19 @@ parallel, using the Forks::Super module. Running
 
 DEPENDENCIES
 
-This module requires these other modules and libraries,
-all included with the standard distribution:
+Windows users must install the  Win32::API  module.
 
-    Carp
-    Exporter
-    POSIX
-    IO::Handle
+The  bg_eval  function for evaluating Perl code in a 
+background process requires either the YAML, YAML::Tiny,
+JSON, or Data::Dumper modules. It is a fatal error to use  bg_eval
+when at least one of these modules can not be found.
 
-Forks::Super recommends and will make use of the following 
-modules if they are installed, but will still be able
-to perform all of its functions without using them:
+Otherwise,  Forks::Super  recommends and will make
+use of the following modules if they are installed,
+but will still be able to perform most of its functions
+without them:
 
-    Time::HiRes
-
-The bg_eval function, to evaluate Perl code in the background,
-requires either YAML or JSON.
-
-Certain operating system dependent features may not work
-(usually failing silently) if these OS-specific modules
-are not installed:
-
-    Win32::API     [Windows]
+    DateTime::Format::Natural
     Win32::Process [Windows and Cygwin]
     Win32          [Windows]
     Sys::CpuAffinity 
@@ -120,6 +121,7 @@ Forks::Super module distribution, and may be installed at
 the same time. The Sys::CpuAffinity module is also
 available as a separate module on CPAN. See "BUNDLED
 MODULES", below.
+
 
 BUNDLED MODULES
 
@@ -144,6 +146,7 @@ available bundled with Forks::Super.
 Installation of these additional modules is optional. If the
 modules are not available, then certain features of the
 Forks::Super module may not work.
+
 
 WINDOWS
 

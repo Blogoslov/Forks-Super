@@ -8,7 +8,6 @@ use warnings;
 # result is a tie'd scalar, so exercise fetch/store
 #
 
-no warnings 'once';
 ok(!defined $Forks::Super::LAST_JOB, 
    "$$\\\$Forks::Super::LAST_JOB not set");
 ok(!defined $Forks::Super::LAST_JOB_ID, 
@@ -21,7 +20,7 @@ SKIP: {
   if ($ENV{NO_JSON}) {
     skip "NO_JSON specified, skipping bg_eval tests", 33;
   }
-  if (!Forks::Super::Config::CONFIG("JSON")) {
+  if (!Forks::Super::Config::CONFIG_module("JSON")) {
     skip "JSON module not available, skipping bg_eval tests", 33;
   }
 

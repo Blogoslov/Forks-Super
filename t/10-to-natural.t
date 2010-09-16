@@ -3,7 +3,7 @@ use POSIX ':sys_wait_h';
 use Test::More tests => 22;
 use strict;
 use warnings;
-$| = 1;
+local $| = 1;
 
 #
 # test that a "natural" fork call behaves the same way

@@ -32,24 +32,17 @@ ok(defined $pid->{child_stdin}, "\%CHILD_STDIN defined [exec,child_fh]");
 ok(defined $pid->{child_stdout}, "\%CHILD_STDOUT defined");
 ok(defined $pid->{child_stderr}, "\%CHILD_STDERR defined");
 $msg = sprintf "%x", rand() * 99999999;
-#$fh_in = $Forks::Super::CHILD_STDIN{$pid};
-#$z = print $fh_in "$msg\n";
 $z = $pid->write_stdin("$msg\n");
-#Forks::Super::close_fh($pid,'stdin');
 $pid->close_fh('stdin');
 ok($z > 0, "print to child STDIN successful [exec]");
 $t = time;
-#$fh_out = $Forks::Super::CHILD_STDOUT{$pid};
-#$fh_err = $Forks::Super::CHILD_STDERR{$pid};
 (@out, @err) = ();
 while (time < $t+6) {
-  push @out, $pid->read_stdout(); #Forks::Super::read_stdout($pid);
-  push @err, $pid->read_stderr(); #Forks::Super::read_stderr($pid);
+  push @out, $pid->read_stdout();
+  push @err, $pid->read_stderr();
   sleep 1;
 }
 
-# this is a failure point on many systems
-# perhaps some warning message is getting in the output stream?
 if (@out != 3 || @err != 1) {
   $Forks::Super::DONT_CLEANUP = 1;
   print STDERR "\nbasic ipc test [exec]: failure imminent\n";

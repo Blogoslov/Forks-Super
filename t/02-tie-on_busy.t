@@ -1,5 +1,7 @@
 use Forks::Super ':test', ON_BUSY => 'bogus';
 use Test::More tests => 6;
+use strict;
+use warnings;
 
 #
 # the value $Forks::Super::ON_BUSY is a tied scalar

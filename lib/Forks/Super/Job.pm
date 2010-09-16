@@ -13,14 +13,18 @@ use Forks::Super::Job::Timeout;
 use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
-use base 'Exporter';
+
+use Exporter;
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use Carp;
 use IO::Handle;
 use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -558,6 +562,11 @@ sub _preconfig_style {
   ###################
   # set up style.
   #
+
+  if (0 && defined $job->{run}) {   # not enabled
+    $job->_preconfig_style_run;
+  }
+
   if (defined $job->{cmd}) {
     if (ref $job->{cmd} ne 'ARRAY') {
       $job->{cmd} = [ $job->{cmd} ];
@@ -582,6 +591,27 @@ sub _preconfig_style {
     $job->{style} = 'natural';
   }
   return;
+}
+
+sub _preconfig_style_run {
+  my $job = shift;
+  if (ref $job->{run} ne 'ARRAY') {
+    $job->{run} = [ $job->{run} ];
+  }
+
+  return;
+
+  # How will we use or emulate the rich functionality
+  # of IPC::Run?
+  #
+  # inputs are a "harness specification"
+  # build a harness
+  # on "launch", call $harness->start
+  # when the job is reaped, call $harness->finish
+
+  # one feature of IPC::Run harnesses is that they
+  # may be reused!
+
 }
 
 sub _preconfig_busy_action {
@@ -689,6 +719,7 @@ sub _resolve_names {
 sub _config_parent {
   my $job = shift;
   $job->_config_fh_parent;
+  $job->_config_timeout_parent;
   if (Forks::Super::Config::CONFIG('getpgrp')) {
     $job->{pgid} = getpgrp($job->{real_pid});
 
@@ -732,7 +763,12 @@ END {
     # disable SIGCHLD handler during cleanup. Hopefully this will fix
     # intermittent test failures where all subtests pass but the
     # test exits with non-zero exit status (e.g., t/42d-filehandles.t)
-    delete $SIG{CHLD};
+
+    if ($] >= 5.007003) {
+      delete $SIG{CHLD};
+    } else {
+      $SIG{CHLD} = 'IGNORE';
+    }
 
     Forks::Super::Queue::_cleanup();
     Forks::Super::Job::Ipc::_cleanup();
@@ -953,7 +989,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.38
+0.39
 
 =head1 SYNOPSIS
 

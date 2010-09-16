@@ -1,11 +1,17 @@
 use Forks::Super ':test';
 use Test::More tests => 8;
+use IO::Handle;
 use strict;
 use warnings;
 
 # test global and job-specific debugging settings.
 # longer PAUSE means fewer spurious _reap messages
 # and smaller chance of false negative result
+
+# false negative is still possible, especially test #4,
+# if the second run gets in one extra _reap call than
+# the first run.
+
 if ($Forks::Super::Util::DEFAULT_PAUSE < 0.5) {
     $Forks::Super::Util::DEFAULT_PAUSE = 0.5;
 }
@@ -17,10 +23,6 @@ if (-f $debug_file) {
 if (!open($Forks::Super::Debug::DEBUG_fh, ">", $debug_file)) {
   die "$debug_file open failed $!";
 }
-
-my $fh = select Forks::Super::DEBUG;
-$| = 1;
-select $fh;
 
 $Forks::Super::DEBUG = 0;
 my $X;

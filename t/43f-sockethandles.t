@@ -21,9 +21,9 @@ sub _read_socket {
 
 # this is a subroutine that copies STDIN to STDOUT and optionally STDERR
 sub repeater {
-  Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
-
   my ($n, $e) = @_;
+
+  Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
   my $end_at = time + 6;
   my ($input_found, $input) = 1;
   my $curpos;
@@ -63,6 +63,7 @@ sub repeater {
     }
     Forks::Super::pause();
   }
+  return;
 }
 
 #######################################################

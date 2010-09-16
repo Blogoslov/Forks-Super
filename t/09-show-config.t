@@ -1,5 +1,7 @@
 use Forks::Super ':test_config';
 use Test::More tests => 1;
+use strict;
+use warnings;
 
 # show some items and modules that could be configured on this system.
 # This test is included mostly so that I can get more detail about
@@ -9,18 +11,21 @@ if (${^TAINT}) {
   $ENV{PATH} = "";
 }
 
-ok(1);
 
 print STDERR "\n";
-Forks::Super::CONFIG("Time::HiRes");
-Forks::Super::CONFIG("Win32");
-Forks::Super::CONFIG("Win32::API");
-Forks::Super::CONFIG("Win32::Process");
-Forks::Super::CONFIG("SIGUSR1");
-Forks::Super::CONFIG("getpgrp");
-Forks::Super::CONFIG("alarm");
-Forks::Super::CONFIG("Sys::CpuAffinity");
-Forks::Super::CONFIG("Sys::CpuLoadX");
-Forks::Super::CONFIG("/uptime");
-print STDERR "\$ENV{PERL_SIGNALS} = $ENV{PERL_SIGNALS}\n";
+Forks::Super::Config::CONFIG_module("Time::HiRes");
+Forks::Super::Config::CONFIG_module("Win32");
+Forks::Super::Config::CONFIG_module("Win32::API");
+Forks::Super::Config::CONFIG_module("Win32::Process");
+Forks::Super::Config::CONFIG_Perl_component("SIGUSR1");
+Forks::Super::Config::CONFIG_Perl_component("getpgrp");
+Forks::Super::Config::CONFIG_Perl_component("alarm");
+Forks::Super::Config::CONFIG_module("Sys::CpuAffinity");
+Forks::Super::Config::CONFIG_module("Sys::CpuLoadX");
+Forks::Super::Config::CONFIG_external_program("/uptime");
 
+my $ps = $ENV{PERL_SIGNALS} || "";
+print STDERR "\$ENV{PERL_SIGNALS} = $ps\n";
+
+print STDERR "\n";
+ok(1);

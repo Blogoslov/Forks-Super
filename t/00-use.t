@@ -1,3 +1,4 @@
+#! perl -T
 #
 # test that Forks module loads and that the expected
 # functions are exported to the calling package

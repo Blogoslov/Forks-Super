@@ -4,7 +4,10 @@
 
 package Forks::Super::LazyEval;
 
-use base 'Exporter';
+use Exporter;
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use Forks::Super::Config qw(:all);
 use Carp; 
 use strict; 
@@ -14,11 +17,25 @@ our @EXPORT = qw(bg_eval bg_qx);
 
 $Forks::Super::LazyEval::USE_ZCALAR = 0;   # enable experimental feature
 
+sub _choose_protocol {
+  if (CONFIG_module('YAML')) {
+    return 'YAML';
+  }
+  if (CONFIG_module('JSON')) {
+    return $JSON::VERSION >= 2.0 ? 'JSON2' : 'JSON1';
+  }
+  if (CONFIG_module('YAML::Tiny')) {
+    return 'YAML::Tiny';
+  }
+  if (CONFIG_module('Data::Dumper')) {
+    return 'Data::Dumper';
+  }
+  return;
+}
+
 sub bg_eval (&;@) {
-  my $useYAML = CONFIG('YAML');
-  my $useJSON2 = CONFIG('JSON') && $JSON::VERSION >= 2.0;
-  my $useJSON1 = CONFIG('JSON') && $JSON::VERSION < 2.0;
-  if (!($useYAML || $useJSON2 || $useJSON1)) {
+  my $proto = _choose_protocol();
+  if (!defined $proto) {
     croak "Forks::Super: bg_eval call requires either YAML or JSON\n";
   }
   my ($code, @other_options) = @_;
@@ -31,10 +48,7 @@ sub bg_eval (&;@) {
     require Forks::Super::Tie::BackgroundArray;
     tie @result, 'Forks::Super::Tie::BackgroundArray',
       'eval', $code, 
-      use_YAML => $useYAML, 
-      use_JSON => $useJSON2, 
-      use_JSON2 => $useJSON2,
-      use_JSON1 => $useJSON1,
+      protocol => $proto,
       @other_options;
     return @result;
   } elsif ($Forks::Super::LazyEval::USE_ZCALAR) {
@@ -46,10 +60,7 @@ sub bg_eval (&;@) {
     require Forks::Super::Tie::BackgroundZcalar;
     $result = new Forks::Super::Tie::BackgroundZcalar
       'eval', $code, 
-      use_YAML => $useYAML, 
-      use_JSON => $useJSON2,
-      use_JSON2 => $useJSON2,
-      use_JSON1 => $useJSON1,
+      protocol => $proto,
       @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows
@@ -61,10 +72,7 @@ sub bg_eval (&;@) {
     require Forks::Super::Tie::BackgroundScalar;
     tie $result, 'Forks::Super::Tie::BackgroundScalar',
       'eval', $code, 
-      use_YAML => $useYAML, 
-      use_JSON => $useJSON2,
-      use_JSON2 => $useJSON2,
-      use_JSON1 => $useJSON1,
+      protocol => $proto,
       @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows

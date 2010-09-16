@@ -1,4 +1,6 @@
 
+$Forks::Super::LazyEval::USE_ZCALAR = 0;
+
 #
 # tests (33) for exercising bg_eval. This code should
 # not be run by itself, but should be <require>'d by

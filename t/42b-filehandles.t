@@ -71,9 +71,9 @@ if (@out != 4
 
   my $file = $job->{fh_config}->{f_out};
   print STDERR "Output file was \"$file\"\n";
-  open(F, "<", $file);
-  print STDERR "File contents:\n------------\n",<F>,"------------\n";
-  close F;
+  open(my $F, "<", $file);
+  print STDERR "File contents:\n------------\n",<$F>,"------------\n";
+  close $F;
 
 }
 

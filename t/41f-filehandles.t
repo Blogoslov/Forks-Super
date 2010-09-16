@@ -79,21 +79,17 @@ ok(defined $pid->{child_stdin}, "found stdin fh");
 ok(defined $pid->{child_stdout},"found stdout fh");
 ok(defined $pid->{child_stderr},"found stderr fh");
 my $msg = sprintf "%x", rand() * 99999999;
-#my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
-#my $z = print $fh_in "$msg\n";
 my $z = $pid->write_stdin("$msg\n");
-$pid->close_fh('stdin');
+
 ok($z > 0, "print to child stdin successful");
 my $t = time;
-#my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
-#my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
 while (time < $t+10) {
   push @out, $pid->read_stdout();
   push @err, $pid->read_stderr();
   sleep 1;
-# print "\@out:\n------\n@out\n\@err:\n-------\n@err\n";
 }
+$pid->close_fh('stdin');
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 

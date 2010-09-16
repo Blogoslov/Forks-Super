@@ -32,6 +32,7 @@ sub compute_checksums_in_child {
     last if $_ eq "__END__";
     print "$_\\", unpack("%32C*",$_)%65535,"\n";
   }
+  return;
 }
 
 my @pids = ();

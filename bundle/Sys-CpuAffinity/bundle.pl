@@ -18,11 +18,11 @@ if ($^O =~ /solaris/i) {
 
 my $TargetModulePitch = qq[
 
-Sys::CpuAffinity is a module for manipulating CPU affinities
+Sys::CpuAffinity is a module for manipulating the CPU affinities
 of processes. If Sys::CpuAffinity is available, Forks::Super can
 use it to set the CPU affinities of the background processes
-it launches. Without Sys::CpuAffinity, this feature probably
-won't work.
+it launches. Without Sys::CpuAffinity, this feature will not
+be available.
 
 Installation of this module is entirely optional. The  Module::Build
 module is required to install this module. The installation of
@@ -30,8 +30,10 @@ Forks::Super will proceed even if the installation of Sys::CpuAffinity
 is unsuccessful.
 ];
 
-my $TargetModulePrompt = "Do you want to attempt to install Sys::CpuAffinity v$version?";
-my $TargetModulePromptDefault = 'n';
+my $TargetModulePrompt 
+  = "Do you want to attempt to install Sys::CpuAffinity v$version?";
+
+my $TargetModulePromptDefault = 'y'; # was 'n' until Forks::Super v0.39
 my $TargetModuleDeclineMessage =
   qq[Some features of $SuperModule may not be available.\n];
 
@@ -85,7 +87,7 @@ do '../conditionally-install-submodule.pl';
   minVersion => $TargetModuleMinVersion,
   pitch => $TargetModulePitch,
   prompt => $TargetModulePrompt,
-  promptDefault => 'n',
+  promptDefault => $TargetModulePromptDefault,
   declineMessage => "Some features of Forks::Super may not be available",
   force => scalar(grep { /force/ } @ARGV),
   reinstall => $ENV{BUNDLE_REINSTALL}

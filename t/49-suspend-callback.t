@@ -9,10 +9,24 @@ eval { alarm 45 };
 
 my $file = "t/out/49.$$.out";
 $Forks::Super::Util::DEFAULT_PAUSE = 0.5;
+
+our ($DEBUG, $DEVNULL);
+
 if ($ENV{DEBUG}) {
-  *DEBUG = *STDERR;
+  $DEBUG = *STDERR;
 } else {
-  *DEBUG = *DEVNULL;
+  open($DEVNULL, ">", "$file.debug");
+  $DEBUG = $DEVNULL;
+}
+
+END {
+  if ($$ == $Forks::Super::MAIN_PID) {
+    unlink $file, "$file.tmp", "$file.debug";
+    unless ($ENV{DEBUG}) {
+      close $DEVNULL;
+      unlink "$file.debug";
+    }
+  }
 }
 
 #
@@ -25,24 +39,24 @@ sub child_suspend_callback_function {
   my ($job) = @_;
   my $d = (time - $::T) % 20;
   no warnings 'unopened';
-  print DEBUG "callback: \$d=$d ";
+  print $DEBUG "callback: \$d=$d ";
   if ($d < 5) {
-    print DEBUG " :  noop\n";
+    print $DEBUG " :  noop\n";
     return 0;
   }
   if ($d < 10) {
     while (-f "$file.block-suspend") {
-      print DEBUG "::: suspend - wait for child to be in good state\n";
+      print $DEBUG "::: suspend - wait for child to be in good state\n";
       Time::HiRes::sleep 0.25;
     }
-    print DEBUG " :  suspend\n";
+    print $DEBUG " :  suspend\n";
     return -1;
   }
   if ($d < 15) {
-    print DEBUG " :  noop\n";
+    print $DEBUG " :  noop\n";
     return 0;
   }
-  print DEBUG " :  resume\n";
+  print $DEBUG " :  resume\n";
   return +1;
 }
 
@@ -55,91 +69,90 @@ sub read_value {
   }
   my $F = <$fh>;
   close $fh;
-  print DEBUG "read_value is $F\n";
+  print $DEBUG "read_value is $F\n";
   return $F;
 }
 
 sub write_value {
-  no warnings 'unopened';
   my ($value) = @_;
+
+  no warnings 'unopened';
 
   # don't suspend while we're in the middle of changing the ipc file
   open my $xx, '>>', "$file.block-suspend";
   close $xx;
 
   open my $fh, '>', "$file.tmp";
-  print DEBUG "write_value $value\n";
+  print $DEBUG "write_value $value\n";
   print $fh $value;
   close $fh;
   rename "$file.tmp", $file;
-  print DEBUG "write_value: sync\n";
+  print $DEBUG "write_value: sync\n";
   unlink "$file.block-suspend";
+  return;
 }
 
 $Forks::Super::Queue::QUEUE_MONITOR_FREQ = 2;
 
 
 SKIP: {
-  if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG("Win32::API")) {
+  if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG_module("Win32::API")) {
     skip "suspend/resume not supported on MSWin32", 9;
   }
 
-my $t0 = $::T = Time::HiRes::gettimeofday();
-my $pid = fork { 
-  suspend => 'child_suspend_callback_function',
-  sub => sub {
-    for (my $i = 1; $i <= 8; $i++) {
-      Time::HiRes::sleep(0.5);
-      write_value($i);
-      Time::HiRes::sleep(0.5);
-    }
-  },
-  timeout => 45
-};
-my $t1 = 0.5 * ($t0 + Time::HiRes::gettimeofday());
-my $job = Forks::Super::Job::get($pid);
+  my $t0 = $::T = Time::HiRes::gettimeofday();
+  my $pid = fork { 
+    suspend => 'child_suspend_callback_function',
+      sub => sub {
+	for (my $i = 1; $i <= 8; $i++) {
+	  Time::HiRes::sleep(0.5);
+	  write_value($i);
+	  Time::HiRes::sleep(0.5);
+	}
+      },
+	timeout => 45
+      };
+  my $t1 = 0.5 * ($t0 + Time::HiRes::gettimeofday());
+  my $job = Forks::Super::Job::get($pid);
 
-# sub should proceed normally for 5 seconds
-# then process should be suspended
-# process should stay suspended for 10 seconds
-# then process should resume and run for 5-10 seconds
+  # sub should proceed normally for 5 seconds
+  # then process should be suspended
+  # process should stay suspended for 10 seconds
+  # then process should resume and run for 5-10 seconds
 
-Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::gettimeofday());
-ok($job->{state} eq 'ACTIVE', "job has started");
-my $w = read_value();
-ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
+  Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::gettimeofday());
+  ok($job->{state} eq 'ACTIVE', "job has started");
+  my $w = read_value();
+  ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
 
-Forks::Super::Util::pause($t1 + 8.0 - Time::HiRes::gettimeofday());
-ok($job->{state} eq 'SUSPENDED', "job is suspended");
-$w = read_value();
-if (!defined $w) {
-  warn "read_value() did not return a value. Retrying ...\n";
-  sleep 1;
+  Forks::Super::Util::pause($t1 + 8.0 - Time::HiRes::gettimeofday());
+  ok($job->{state} eq 'SUSPENDED', "job is suspended");
   $w = read_value();
-}
+  if (!defined $w) {
+    warn "read_value() did not return a value. Retrying ...\n";
+    sleep 1;
+    $w = read_value();
+  }
 
-ok($w >= 4, "job is incrementing value, expect val:$w >= 4");
+  ok($w >= 4, "job is incrementing value, expect val:$w >= 4");
 
-Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::gettimeofday());
-ok($job->{state} eq 'SUSPENDED', "job is still suspended");
-my $x = read_value();
-ok($x == $w, "job has stopped increment value, expect val:$x == $w");
+  Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::gettimeofday());
+  ok($job->{state} eq 'SUSPENDED', "job is still suspended");
+  my $x = read_value();
+  ok($x == $w, "job has stopped increment value, expect val:$x == $w");
 
-Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::gettimeofday());
-ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',
-   "job has resumed state=" . $job->{state});
-$x = read_value();
-if (!defined $x) {
-  warn "read_value() did not return a value. Retrying ...\n";
-  sleep 1;
+  Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::gettimeofday());
+  ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',
+     "job has resumed state=" . $job->{state});
   $x = read_value();
-}
-ok($x > $w, "job has resumed incrementing value, expect val:$x > $w");
+  if (!defined $x) {
+    warn "read_value() did not return a value. Retrying ...\n";
+    sleep 1;
+    $x = read_value();
+  }
+  ok($x > $w, "job has resumed incrementing value, expect val:$x > $w");
 
-my $p = wait 4.0;
-if (!isValidPid($p)) {
-  $job->resume;
-  $p = wait 2.0;
+  my $p = wait 4.0;
   if (!isValidPid($p)) {
     $job->resume;
     $p = wait 2.0;
@@ -149,14 +162,15 @@ if (!isValidPid($p)) {
       if (!isValidPid($p)) {
 	$job->resume;
 	$p = wait 2.0;
+	if (!isValidPid($p)) {
+	  $job->resume;
+	  $p = wait 2.0;
+	}
       }
     }
   }
-}
 
-ok($p == $pid, "job has completed");
-unlink $file, "$file.tmp";
-
+  ok($p == $pid, "job has completed");
 }
 
 eval { alarm 0 };

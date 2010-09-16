@@ -12,8 +12,11 @@ use Forks::Super::Config;
 use Forks::Super::Queue;
 use Forks::Super::Tie::Enum;
 use POSIX ':sys_wait_h';
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use Carp;
 use strict;
 use warnings;

@@ -86,11 +86,11 @@ sub check_install_is_desired {
     print "\n";
     $answer = $TargetModulePromptDefault eq 'always' 
       ? 'yes' : prompt($TargetModulePrompt, $TargetModulePromptDefault);
-    last if $answer =~ /^[yn]/i;
+    last if $answer =~ /^[ynq]/i;
   }
 
   print "\n";
-  if ($answer =~ /^n/i) {
+  if ($answer =~ /^n/i || $answer =~ /^q/i) {
     return 0;
   }
   return 1;

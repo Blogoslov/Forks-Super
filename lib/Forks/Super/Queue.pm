@@ -9,8 +9,11 @@ use Forks::Super::Debug qw(:all);
 use Forks::Super::Tie::Enum;
 use Forks::Super::Util qw(IS_WIN32);
 use Carp;
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use strict;
 use warnings;
 
@@ -126,6 +129,7 @@ sub _launch_queue_monitor {
     close STDIN;
     close STDOUT;
     close STDERR unless $DEBUG || $QUEUE_DEBUG;
+    $SIG{'TERM'} = 'DEFAULT';
 
     # three (normal) ways the queue monitor can die:
     #  1. (preferred) killed by the calling process (_kill_queue_monitor)
@@ -159,7 +163,9 @@ sub _kill_queue_monitor {
       if ($DEBUG || $QUEUE_DEBUG) {
 	debug("killing queue monitor $QUEUE_MONITOR_PID");
       }
-      CORE::kill 'INT', $QUEUE_MONITOR_PID;
+
+      CORE::kill 'TERM', $QUEUE_MONITOR_PID;
+
       my $z = CORE::waitpid $QUEUE_MONITOR_PID, 0;
       if ($DEBUG || $QUEUE_DEBUG) {
 	debug("kill queue monitor result: $z");

@@ -64,16 +64,27 @@ if ($pid) {
 open(LOCK, ">>", "t/out/.lock-flim");
 flock LOCK, 2;
 
+our $MAIN_PID = $$;
+END {
+  if ($$ == $MAIN_PID) {
+    close LOCK;
+    unlink "t/out/.lock-flim";
+  }
+}
+
 #my %LIMITS = ();
 #$LIMITS{file} = $ARGV[0] || "t/out/limits.$^O.$]";
 $LIMITS{system} = $^O;
 $LIMITS{version} = $];
 
+# XXX - what else is interesting? max pending signals?
+
 &count_number_of_cpus;
-&find_max_open_filehandles;
+&find_max_open_filehandles;     # on some systems:  ulimit -n
 &find_max_open_sockets;
-&find_pipe_capacity;
 &find_socket_capacity;
+&find_pipe_capacity;            # on some systems:  512 * ulimit -p
+
 &find_max_fork(200);  # run last because it might crash the program
 print "Created system limitations file in: $limits_file\n";
 
@@ -283,6 +294,7 @@ sub _get_capacity {
 sub __get_capacity {
   my ($packetsize, $timeout, $create_WRITER, $output_file) = @_;
   $output_file ||= "./test-capacity.out";
+  my $pid_file = "./test-capacity.pid";
   if ($packetsize < 1) {
     $packetsize = 1;
   }
@@ -293,17 +305,10 @@ sub __get_capacity {
   my $code = <<"__END_SLAVE_CODE__";
 use IO::Handle;
 use strict;
+\$| = 1;
 $create_WRITER;
 *WRITER->autoflush(1);
 binmode WRITER;
-my \$pid = \$\$;
-if (fork() == 0) {
-  sleep $timeout + 1;
-  kill('INT',\$pid) || kill('BREAK',\$pid)
-    || system "TASKKILL /f /pid \$pid > NUL 2> NUL"
-    || system "kill -INT \$pid";
-  exit 0;
-}
 my \$output = " " x $packetsize;
 my \$written = 0;
 for (;;) {
@@ -316,14 +321,36 @@ for (;;) {
 __END_SLAVE_CODE__
 ;
 
-  unlink $output_file;
+  unlink $output_file, $pid_file;
+
+  # moved process kill code here from <<__END_SLAVE_CODE__ block
+  # because the process wasn't getting killed in v5.6.1
+  # (v5.6.1 cygwin -- still not sure what MSWin32 5.6 would do here)
+  if (fork() == 0) {
+    sleep $timeout + 1;
+    open my $pf, '<', $pid_file;
+    my $pid = 0 + <$pf>;
+
+    kill 'TERM', $pid
+      || system "TASKKILL /f /pid $pid"
+      || system "kill -TERM $pid"
+      || kill 'BREAK', $pid;
+    exit 0;
+  }
+
   my $pid = open(SLAVE, "| $^X");
+
+  open my $pf, '>', $pid_file;
+  print $pf $pid;
+  close $pf;
+
   print SLAVE $code;
   close SLAVE;
+
   sleep 1;
   open(CAP, '<', $output_file);
   $capacity = (<CAP>)[-1];
   close CAP;
-  unlink $output_file;
+  unlink $output_file, $pid_file;
   return $capacity + 0;
 }

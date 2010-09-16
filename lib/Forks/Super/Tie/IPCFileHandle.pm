@@ -10,19 +10,24 @@
 # any other part of this module
 
 package Forks::Super::Tie::IPCFileHandle;
-use base qw(Exporter);
+
+use Exporter;
+our @ISA = qw(Exporter);
+# use base qw(Exporter);
+
 use strict;
 use warnings;
 use Carp;
 use IO::Handle;
-use Symbol qw(gensym);
-use Time::HiRes;
+# use Time::HiRes;
 
 our @EXPORT = qw(tieopen tiesocketpair);
 our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
 if ($DEBUG) {
   open TTY, '>&2';   # original STDERR
 }
+
+*_gensym = \&Forks::Super::Job::Ipc::_gensym;
 
 
 sub _printtty ($$;@) {
@@ -44,7 +49,7 @@ sub _printtty ($$;@) {
 
 sub TIEHANDLE {
   my ($class, %props) = @_;
-  my $self = bless gensym(), $class;
+  my $self = bless _gensym(), $class;
   $$self->{$_} = $props{$_} for keys %props;
   $$self->{created} = Time::HiRes::gettimeofday();
   return $self;
@@ -212,7 +217,7 @@ sub tieopen (*$;$@) {
   my ($glob, $mode, $expr, @list) = @_;
   my $result;
 
-  $glob = gensym() if !defined $glob;
+  $glob = _gensym() if !defined $glob;
 
   my ($pkg, $file, $line) = caller;
   my $tied;

@@ -14,13 +14,16 @@ package Forks::Super::Job::Ipc;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(IS_WIN32 is_socket);
-use Symbol qw(gensym);
+# use Symbol qw(gensym);
 use IO::Handle;
 use File::Path;
-use Time::HiRes;
+# use Time::HiRes;  not installed on ActiveState 5.6 :-(
 use Carp;
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use strict;
 use warnings;
 
@@ -44,6 +47,31 @@ our $__MAX_OPEN_FH = do {
 
 
 
+{
+  # independent implementation of Symbol::gensym -- 
+
+  # IO handles from this package will follow certain conventions
+  #   1. created with _safeopen, _create_socket_pair, or _create_pipe
+  #   2. attributes are set in the handle's namespace (glob, is_socket, 
+  #      opened, etc.)
+  #   3. fileno() stored in %Forks::Super::Job::Ipc::FILENO
+  #
+  # Another one of these conventions will be that all such handles will
+  # be registered in the same namespace, so we can tell whether
+  # an arbitrary handle was created by this module.
+
+  my $pkg = "Forks::Super::IOHandles::";
+  my $seq = 1000;
+
+  sub _gensym () {
+    no strict 'refs';
+    my $name = "IO" . $$ . "_" . $seq++;
+    my $ref = \*{$pkg . $name};
+    delete $$pkg{$name};
+    $ref;
+  }
+}
+
 # open a filehandle with (a little) protection
 # against "Too many open filehandles" error
 sub _safeopen (*$$;$) {
@@ -58,15 +86,12 @@ sub _safeopen (*$$;$) {
 
   my $result;
   if (!defined $fh) {
-    $fh = gensym();
+    $fh = _gensym();
   }
   for (my $try = 1; $try <= 10; $try++) {
 
     if ($try == 10) {
       carp "Failed to open $mode $expr after 10 tries. Giving up.\n";
-      #$open3 ||= '';
-      #Carp::cluck "Failed to open [$mode $expr] [$open2 $open3] ",
-      #	  "after 10 tries. Giving up. $!\n";
       return 0;
     }
 
@@ -116,16 +141,17 @@ sub _safeopen (*$$;$) {
     }
 
     if ($! =~ /too many open filehandles/i) {
-      carp "$! while opening $mode $expr. ",
+#     carp "$! while opening $mode $expr. ",
+      carp "$! while opening $open2 $expr. ",
 	"[openfh=$__OPEN_FH/$__MAX_OPEN_FH] Retrying ...\n";
       Forks::Super::pause(0.1 * $try);
-    } elsif ($robust && $! =~ /no such file or directory/i) {
+    } elsif (defined($robust) && $! =~ /no such file or directory/i) {
       if ($DEBUG || (ref $robust eq 'Forks::Super::Job' && $robust->{debug})) {
-	debug("$! while opening $mode $expr in $$. Retrying ...");
+	debug("$! while opening $open2 $expr in $$. Retrying ...");
       }
       Forks::Super::Util::pause(0.1 * $try);
     } else {
-      carp_once [$!], "$! while opening $mode $expr in $$ ",
+      carp_once [$!], "$! while opening $open2 $expr in $$ ",
 	"[openfh=$__OPEN_FH/$__MAX_OPEN_FH]. Retrying ...\n";
     }
   }
@@ -173,11 +199,13 @@ sub Forks::Super::Job::_preconfig_fh {
 	$fh_spec =~ s/pipe/socket/i;
       }
 
+      if (0) {
       if ($] < 5.007) {
 	if ($fh_spec =~ s/socke?t?//i + $fh_spec =~ s/pipe//i) {
 	  carp_once "Forks::Super::_preconfig_fh: ",
 	    "socket/pipe not allowed on Win32 v<5.7\n";
 	}
+      }
       }
     }
 
@@ -401,6 +429,9 @@ sub _create_socket_pair {
 				Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     }
   } else {
+
+    # socketpair not supported on MSWin32 5.6
+
     my $z = socketpair($s_child, $s_parent, Socket::AF_UNIX(),
 		       Socket::SOCK_STREAM(), Socket::PF_UNSPEC());
     if ($z == 0) {
@@ -450,7 +481,7 @@ sub _create_pipe_pair {
     croak "Forks::Super::Job::_create_pipe_pair(): no pipe\n";
   }
 
-  my ($p_read, $p_write) = (gensym(), gensym());
+  my ($p_read, $p_write) = (_gensym(), _gensym());
   local $! = undef;
 
   pipe $p_read, $p_write or croak "Forks::Super::Job: create pipe failed $!\n";
@@ -710,6 +741,9 @@ sub END_cleanup {
   # daemonize
   return if CORE::fork();
   exit 0 if CORE::fork();
+
+  # rename process, if supported by the OS, to note that we are cleaning up
+  # not everyone will like this "feature"
   $0 = "cleanup:$0";
   sleep 3;
 
@@ -780,27 +814,28 @@ sub END_cleanup {
       warn "Forks::Super::END_cleanup: ",
 	"rmdir $Forks::Super::FH_DIR failed. $!\n";
 
-      if(1){
-	opendir(_Z, $Forks::Super::FH_DIR);
-	my @g = grep { !/^\.nfs/ } readdir(_Z);
-        closedir _Z;
-        foreach my $g (@g) {
-	  my $gg = "$Forks::Super::FH_DIR/$g";
-	  if (defined $G{$gg} && $G{$gg}) {
-	    my %gg = @{$G{$gg}};
-	    unless ($_SIGNAL_TRAPPED_SO_SUPPRESS_INFO) {
-	      print STDERR "\t$gg ==> ";
-	      foreach my $key (keys %gg) {
-		if ($key eq 'job') {
-		  print STDERR "\t\t",$gg{$key}->toString(),"\n";
-		} else {
-		  print STDERR "\t\t$key => ", $gg{$key}, "\n";
-		}
+      opendir(_Z, $Forks::Super::FH_DIR);
+      my @g = grep { !/^\.nfs/ } readdir(_Z);
+      closedir _Z;
+
+      foreach my $g (@g) {
+	my $gg = "$Forks::Super::FH_DIR/$g";
+	if (defined $G{$gg} && $G{$gg}) {
+	  my %gg = @{$G{$gg}};
+	  if ($Forks::Super::DEBUG) {
+	    print STDERR "\t$gg ==> ";
+	    foreach my $key (keys %gg) {
+	      if ($key eq 'job') {
+		print STDERR "\t\t",$gg{$key}->toString(),"\n";
+	      } else {
+		print STDERR "\t\t$key => ", $gg{$key}, "\n";
 	      }
 	    }
 	  }
 	}
-	if (@g) { print STDERR join "\t", @g, "\n"; }
+      }
+      if (@g) { 
+	print STDERR join "\t", @g, "\n"; 
       }
     }
   }
@@ -888,7 +923,7 @@ sub _config_fh_parent_stdin {
     debug("Passing STDIN from parent to child in scalar variable")
       if $job->{debug};
   } elsif ($fh_config->{in} and defined $fh_config->{f_in}) {
-    my $fh = gensym();
+    my $fh = _gensym();
     local $! = 0;
     if (_safeopen $fh, '>', $fh_config->{f_in}) {
 
@@ -946,7 +981,7 @@ sub _config_fh_parent_stdout {
       if $job->{debug};
     local $! = 0;
 
-    if (_safeopen($fh, '<', $fh_config->{f_out}, $job||1)) {
+    if (_safeopen($fh, '<', $fh_config->{f_out}, $job)) {
 
       debug("Opened child STDOUT in parent") if $job->{debug};
       $job->{child_stdout} = $Forks::Super::CHILD_STDOUT{$job->{real_pid}}
@@ -1023,7 +1058,7 @@ sub _config_fh_parent_stderr {
     debug("Opening ", $fh_config->{f_err}, " in parent as child STDERR")
       if $job->{debug};
     local $! = 0;
-    if (_safeopen($fh, '<', $fh_config->{f_err}, $job||1)) {
+    if (_safeopen($fh, '<', $fh_config->{f_err}, $job)) {
 
       debug("Opened child STDERR in parent") if $job->{debug};
       $job->{child_stderr} 
@@ -1140,7 +1175,8 @@ sub _config_fh_child_stdin {
     my $fh;
     debug("Opening ", $fh_config->{f_in}, " in child STDIN") if $job->{debug};
 
-    if (_safeopen($fh, '<', $fh_config->{f_in}, $job||1)) {
+    # $job||1 idiom was failure point in v5.6.2
+    if (_safeopen($fh, '<', $fh_config->{f_in}, $job)) {
 
       close STDIN if &IS_WIN32;
       _safeopen(*STDIN, '<&', $fh)

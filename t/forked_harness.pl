@@ -55,7 +55,8 @@
 use lib qw(blib/lib blib/arch lib .);
 use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
 use Getopt::Long;
-use Time::HiRes;
+eval "use Time::HiRes;1" 
+  or do { *Time::HiRes::gettimeofday = sub { time } };
 use POSIX ':sys_wait_h';
 use strict;
 $| = 1;
@@ -81,13 +82,12 @@ my $check_endgame = $ENV{ENDGAME_CHECK} || 0;
 my $abort_on_first_error = '';
 my $debug = '';
 my $use_socket = '';
-my $logfile = "/tmp/forked_harness.log";
 $::fail35584 = '';
 
 # [-h] [-c] [-v] [-I lib [-I lib [...]]] [-p xxx [-p xxx [...]]] [-s] 
 # [-t nnn] [-r nnn] [-x nnn] [-m nnn] [-q] [-a] 
 # abcdefghijklmnopqrstuvwxyz
-# x s    x@  si  @xixi x i x 
+# x s    x@   i  @xixi x i x 
 my $result = GetOptions("harness" => \$use_harness,
 	   "C|color" => \$use_color,
 	   "verbose" => \$test_verbose,
@@ -100,7 +100,6 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "maxproc=i" => \$maxproc,
 	   "quiet" => \$quiet,
            "debug" => \$debug,
-           "logfile=s" => \$logfile,
 	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
 my %fail = ();
@@ -187,6 +186,9 @@ sub main {
   if ($debug) {
     print "Test files: @test_files\n";
   }
+  if (@test_files == 0) {
+    die "No tests specified.\n";
+  }
 
   for ($iteration = 1; $iteration <= $repeat; $iteration++) {
     color_print 'ITERATION', "Iteration #$iteration/$repeat\n" if $repeat>1;
@@ -241,6 +243,14 @@ sub main {
   return;
 }
 
+sub _get_perl_opts {
+  my ($file) = @_;
+  open my $ph, '<', $file or return ();
+  my $shebang = <$ph>;
+  close $ph;
+  return $shebang =~ /^#!/ ? grep { /^-/ } split /\s+/, $shebang : ();
+}
+
 sub launch_test_file {
   my ($test_file) = @_;
   my ($test_harness, @cmd);
@@ -254,15 +264,24 @@ sub launch_test_file {
     @cmd = ($^X, "-MExtUtils::Command::MM", "-e",
 	    $test_harness, $test_file);
   } else {
-    @cmd = ($^X, @perl_opts, (map{"-I$_"}@use_libs), $test_file);
+    my @extra_opts = _get_perl_opts($test_file);
+    @cmd = ($^X, @perl_opts, @extra_opts, (map{"-I$_"}@use_libs), $test_file);
   }
 
   if ($debug) {
     print "Launching test $test_file:\n";
   }
+  my $child_fh = "out,err";
+  $child_fh .= ",socket" if $use_socket;
+  if ($] < 5.007) {
+    # workaround for Cygwin 5.6.1 where sockets/pipes
+    # don't function right ...
+    $child_fh = "in,$child_fh";
+  }
+
   my $pid = fork {
     cmd => [ @cmd ],
-    child_fh => $use_socket ? "out,err,socket" : "out,err",
+    child_fh => $child_fh,
     timeout => $timeout
   };
 
@@ -301,7 +320,7 @@ sub process_test_output {
 
     # ExtUtils::MM::test_harness output
     elsif ($s =~ /Failed tests?:\s+(.+)/
-       || $s =~ /DIED. FAILED tests (.+)/) {
+       || $s =~ /DIED. FAILED tests? (.+)/) {
       my @failed_tests = split /\s*,\s*/, $1;
       foreach my $failed_test (@failed_tests) {
 	my ($test1,$test2) = split /-/, $failed_test;
@@ -317,6 +336,7 @@ sub process_test_output {
 	warn "Status $status from test $test_file does not match ",
 	  "reported exit status $expected_status\n";
       }
+      $fail{$test_file} ||= {"NZEC_$expected_status" => 1};
       $not_ok++;
     }
     elsif ($s =~ /Non-zero wait status: (\d+)/) {
@@ -326,6 +346,13 @@ sub process_test_output {
 	warn "Status $status from test $test_file does not match ",
 	  "reported wait status $expected_status\n";
       }
+      $fail{$test_file}{"NZWS_$expected_status"}++;
+      $not_ok++;
+    }
+    elsif ($s =~ /Result: FAIL/) {
+      # even if all tests pass, exit status is zero,
+      # test could fail if you didn't follow the plan
+      $fail{$test_file} ||= { "BadPlan" => 1 };
       $not_ok++;
     }
   }
@@ -333,13 +360,15 @@ sub process_test_output {
     # look for one of:
     #     t/nn-xxx.t .. ok
     #     t/nn-xxx.t....ok
-    my @stdout2 = grep { / ?\.+ ?ok$/ } @stdout;
+#   my @stdout2 = grep { / ?\.+ ?ok$/ } @stdout;
+    my @stdout2 = grep { / ?\.+ ?ok/ } @stdout;
     if (@stdout2 > 0) {
       @stdout = @stdout2;
     } else {
       # the output didn't say anything about test failures and
       # the exit code was zero, but the output also didn't say "ok" --
-      # this test is not quite right
+      # this test is not quite right.
+      # Could have timed out.
       $not_ok = 0.5;
       $status = 0.5;
 
@@ -411,14 +440,15 @@ sub process_test_output {
     # module and/or the perl interpreter are cleaning up,
     # and it causes the test to be marked as failed, even if
     # all of the individual tests were ok.
-    # Rerun this test if we trap the condition.
+    # <strike>Rerun this test if we trap the condition.</strike>
 
     print "Received status == $status for a test of $test_file, ",
       "possibly an intermittent segmentation fault. Rerunning ...\n";
     launch_test_file($test_file);
     $::fail35584++;
-    return $::fail35584 > 10 * $j{"$test_file:iteration"} 
-      ? "ABORT" : "CONTINUE";
+    #return $::fail35584 > 10 * $j{"$test_file:iteration"} 
+    #  ? "ABORT" : "CONTINUE";
+    return "ABORT";
   }
 
 
@@ -473,13 +503,6 @@ sub process_test_output {
 
 sub summarize {
   if (@result > 0) {
-    if ($logfile && open(LOG, '>>', $logfile)) {
-      print LOG $], " ", $^O, " ", scalar localtime, "\n";
-      print LOG @result;
-      print LOG "=====================================\n";
-      close LOG;
-    }
-
     print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
     print "=====================================\n";
     print scalar localtime, "\n";

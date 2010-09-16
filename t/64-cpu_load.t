@@ -5,7 +5,7 @@ use warnings;
 
 
 SKIP: {
-  if (!Forks::Super::Config::CONFIG("Sys::CpuLoadX")) {
+  if (!Forks::Super::Config::CONFIG_module("Sys::CpuLoadX")) {
     skip "cpu load test: requires Sys::CpuLoadX module", 1;
   }
   my $load = Forks::Super::Job::OS::get_cpu_load();

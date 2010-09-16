@@ -13,17 +13,19 @@ ok(!defined $Forks::Super::LAST_JOB,
 ok(!defined $Forks::Super::LAST_JOB_ID, 
    "\$Forks::Super::LAST_JOB_ID not set");
 
-delete $Forks::Super::Config::CONFIG{"JSON"};
+delete $Forks::Super::Config::CONFIG{"YAML::Tiny"};
+$Forks::Super::Config::CONFIG{"JSON"} = 0;
 $Forks::Super::Config::CONFIG{"YAML"} = 0;
+$Forks::Super::Config::CONFIG{"Data::Dumper"} = 0;
 
 SKIP: {
 
-  if ($ENV{NO_JSON}) {
-    skip "NO_JSON specified, skipping bg_eval tests", 33;
+  if ($ENV{NO_YAML} || !Forks::Super::Config::CONFIG_module("YAML::Tiny")) {
+    skip "YAML not available, skipping bg_eval tests", 33;
   }
-  if (!Forks::Super::Config::CONFIG_module("JSON")) {
-    skip "JSON not available, skipping bg_eval tests", 33;
-  }
-
   require "./t/62a-bg_eval.tt";
+
 }
+
+
+

@@ -6,8 +6,11 @@
 package Forks::Super::Debug;
 use Forks::Super::Util;
 use IO::Handle;
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use Carp;
 use strict;
 use warnings;
@@ -41,7 +44,7 @@ sub carp_once {
   my $z = '';
   if (ref $msg[0] eq 'ARRAY') {
     $z = join ';', @{$msg[0]};
-    shift;
+    shift @msg;
   }
   return if $_CARPED{"$p:$f:$l:$z"}++;
   carp @msg;
@@ -49,7 +52,8 @@ sub carp_once {
 
 # load or emulate Carp::Always for the remainder of the program
 sub _use_Carp_Always {
-  eval "use Carp::Always;1" || _emulate_Carp_Always();
+#  eval "use Carp::Always;1" || _emulate_Carp_Always();
+  _emulate_Carp_Always();
 }
 
 sub _emulate_Carp_Always {

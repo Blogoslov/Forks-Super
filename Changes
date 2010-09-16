@@ -1,6 +1,11 @@
 Revision history for Forks-Super
 
-0.38    2010-09-07
+0.39    2010-09-16
+	Support for YAML::Tiny, Data::Dumper in Forks::Super::LazyEval package.
+        Enable default install for bundled Sys::CpuAffinity, Sys::CpuLoadX mods
+        Some efforts toward backporting to 5.6.
+
+0.38    2010-09-08
         Removed redundant Forks::Super::Util::Time() call.
         Testing changes, including checking taint compatibility.
         Unregister SIGCHLD handler at END{} to fix intermittent errors.

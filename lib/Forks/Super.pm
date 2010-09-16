@@ -1,5 +1,10 @@
 package Forks::Super;
-use 5.007003;     # for "safe" signals -- see perlipc
+
+#                 "safe" signals ($] >= 5.7.3) are strongly recommended ...
+# use 5.007003;   ... but no longer required
+
+
+
 use Forks::Super::SysInfo;
 use Forks::Super::Job;
 use Forks::Super::Debug qw(:all);
@@ -10,7 +15,11 @@ use Forks::Super::Wait qw(:all);
 use Forks::Super::Tie::Enum;
 use Forks::Super::Sigchld;
 use Forks::Super::LazyEval;
-use base 'Exporter';
+
+use Exporter;
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use POSIX ':sys_wait_h';
 use Carp;
 $Carp::Internal{ (__PACKAGE__) }++;
@@ -32,7 +41,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars' => [ @export_ok_vars, @EXPORT ],
     'all' => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC);
@@ -79,13 +88,14 @@ sub import {
 	if ($args[$i] =~ /config/) {
 	  $Forks::Super::Config::IS_TEST_CONFIG = 1
 	}
-	if ($args[$i] =~ /CA/) {
-	  Forks::Super::Debug::_use_Carp_Always();
-	}
 
 	# preload some modules so lazy loading doesn't affect
 	# the timing in some unit tests
-	Forks::Super::Job::Timeout::warm_up();
+	### Forks::Super::Job::Timeout::warm_up();
+
+	if ($args[$i] =~ /CA/) {
+	  Forks::Super::Debug::_use_Carp_Always();
+	}
       }
     }
   }
@@ -322,7 +332,7 @@ sub kill {
 	$j->{status} = Forks::Super::Util::signal_number($signal) || -1;
 	$j->_mark_reaped;
 	$num_signalled++;
-      } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
+      } elsif ($signal eq 'STOP') {
 	$j->{state} = 'SUSPENDED-DEFERRED';
 	$num_signalled++;
       } elsif ($signal eq 'CONT') {
@@ -367,7 +377,7 @@ sub kill {
 	      $num_signalled++;;
 	      push @terminated, $pid;
 	    }
-	  } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
+	  } elsif ($signal eq 'STOP') {
 	    if (Forks::Super::Job::OS::Win32::suspend_thread(-$pid)) {
 	      $signalled = 1;
 	      $num_signalled++;
@@ -446,7 +456,7 @@ sub kill_all {
   my @all_jobs;
   if ($signal eq 'CONT') {
     @all_jobs = grep { $_->is_suspended } @Forks::Super::ALL_JOBS;
-  } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
+  } elsif ($signal eq 'STOP') {
     @all_jobs = grep { $_->is_active || $_->{state} eq 'DEFERRED' }
       @Forks::Super::ALL_JOBS;
   } else {
@@ -565,7 +575,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.38
+Version 0.39
 
 =head1 SYNOPSIS
 
@@ -2189,7 +2199,7 @@ as not an actual process ID.
 
 =item C<$Forks::Super::LAST_JOB>
 
-Calls to the C<bg_eval> and C<bg_qx> functions launch
+Calls to the L<"bg_eval"> and C<bg_qx> functions launch
 a background process and set the variables C<$Forks::Super::LAST_JOB_ID>
 to the job's process ID and C<$Forks::Super::LAST_JOB> to the job's
 L<Forks::Super::Job> object. These functions do not explicitly
@@ -2352,17 +2362,18 @@ something else.
 
 =head1 DEPENDENCIES
 
-The C<bg_eval> function requires either L<YAML> or L<JSON>.
-If neither module is available, then using C<bg_eval> will result in
-a fatal error.
+The L<Win32::API> module is required for Windows users.
 
-Otherwise, there are no hard dependencies
-on non-core modules. Some features, especially operating-system
-specific functions,
-depend on some modules (L<Win32::API> and L<Win32::Process>
-for Wintel systems, for example), but the module will
+The C<bg_eval> function requires either L<YAML>, L<YAML::Tiny>,
+L<JSON>, or L<Data::Dumper>. If none of these modules are available, 
+then using C<bg_eval> will result in a fatal error.
+
+Otherwise, there are no hard dependencies on non-core 
+modules. Some features, especially operating-system
+specific functions, depend on some modules (L<Win32::Process>
+and L<Win32> for Wintel systems, for example), but the module will
 compile without those modules. Attempts to use these features
-without the required modules will be silently ignored.
+without the necessary modules will be silently ignored.
 
 =head1 BUGS AND LIMITATIONS
 
@@ -2440,7 +2451,7 @@ There are reams of other modules on CPAN for managing background
 processes. See Parallel::*, L<Proc::Parallel>, L<Proc::Fork>, 
 L<Proc::Launcher>. Also L<Win32::Job>.
 
-Inspiration for C<bg_eval> function from L<Acme::Fork::Lazy>.
+Inspiration for L<"bg_eval"> function from L<Acme::Fork::Lazy>.
 
 =head1 AUTHOR
 

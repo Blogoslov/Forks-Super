@@ -19,7 +19,7 @@ The Sys::CpuLoadX module provides a (cross-fingers) portable way
 to access your system's current CPU load. The Forks::Super module
 can use this information to decide whether your system is too
 busy to launch more background processes. Without Sys::CpuLoadX,
-Forks::Super will not use CPU load information.
+Forks::Super will not make use of CPU load information.
 
 Installation of this module is entirely optional. The  Module::Build
 module is required to install this module. The installation of
@@ -27,8 +27,10 @@ Forks::Super will proceed even if the installation of Sys::CpuLoadX
 is unsuccessful.
 ]; 
 
-my $TargetModulePrompt = "Do you want to attempt to install Sys::CpuLoadX v$version?";
-my $TargetModulePromptDefault = 'n';
+my $TargetModulePrompt 
+  = "Do you want to attempt to install Sys::CpuLoadX v$version?";
+
+my $TargetModulePromptDefault = 'y'; # was 'n' before Forks::Super v0.39
 my $TargetModuleDeclineMessage =
   qq[Some features of $SuperModule may not be available.\n];
 
@@ -77,7 +79,7 @@ do '../conditionally-install-submodule.pl';
   minVersion => $TargetModuleMinVersion,
   pitch => $TargetModulePitch,
   prompt => $TargetModulePrompt,
-  promptDefault => 'n',
+  promptDefault => $TargetModulePromptDefault,
   declineMessage => "Some features of Forks::Super may not be available",
   force => scalar(grep { /force/ } @ARGV),
   reinstall => $ENV{BUNDLE_REINSTALL}

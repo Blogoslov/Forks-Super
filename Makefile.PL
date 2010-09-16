@@ -1,12 +1,26 @@
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
-use 5.007003;   # needs "safe signals" - see perlipc
+# use 5.007003;   # needs "safe signals" - see perlipc
 
 # command-line arguments "bundle=1" or "reinstall=1"
 # or environment var     "BUNDLE_REINSTALL=1"
 # will force attempt to install bundled modules,
 # even if they are already installed
+
+if ($] < 5.007003) {
+
+  warn qq{
+WARNING !!! The Forks::Super module makes heavy use of 
+insufficiently paranoid signal handlers (See "Deferred
+Signals (Safe Signals)" in a more recent version of perlipc) 
+and is not recommended on versions of perl older than
+v5.7.3. (Your version: $])
+};
+
+  sleep 1;
+
+}
 
 
 
@@ -49,6 +63,7 @@ sub probe_system {
 our %RECOMMENDED
   = ('YAML' => '0.62',
      'JSON' => '2.0',
+     'YAML::Tiny' => '1.39',
      'Sys::CpuAffinity' => '0.91',
      'Sys::CpuLoadX' => '0.02',
      'DateTime::Format::Natural' => '0.89');
@@ -57,10 +72,11 @@ our %REQUIRED = ('Test::More' => '0',
 
 if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
   $RECOMMENDED{'Win32::Process'} = '0.11';
-  $RECOMMENDED{'Win32::API'} = '0.43';
   if ($^O eq "MSWin32") {
     $RECOMMENDED{'Win32::Process::Kill'} = '2.64';
     $REQUIRED{'Win32::API'} = '0.43';
+  } else {
+    $RECOMMENDED{'Win32::API'} = '0.43';
   }
 }
 
@@ -71,8 +87,13 @@ if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {
   @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
 }
 
-# install bundled modules first so Sys::CpuAffinity is avail to system-limits.PL
-install_bundled_modules();
+# install bundled modules first so Sys::CpuAffinity
+# is available to system-limits.PL
+if (defined($ENV{BUNDLE}) && $ENV{BUNDLE} eq "0") {
+  print STDERR "Skip check and install for bundled modules.\n";
+} else {
+  install_bundled_modules();
+}
 probe_system();
 WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
@@ -130,6 +151,8 @@ sub MY::postamble {
   if ($^O =~ /solaris/i) {
     $stresstestargs = "-r 25 -x 4 -s -q";
   }
+  # $(PERLRUN) not avail in 5.6.1, ExtUtils::MakeMaker 5.45
+  my $PERLEXE = '$(FULLPERL)';  
   my $postamble = <<"__END_POSTAMBLE__";
 
 
@@ -142,12 +165,12 @@ sub MY::postamble {
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 
 fasttest :: pure_all
-	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) -h -q
+	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q
 
 # ------ stress test: run all tests in parallel 100 times
 
 stresstest :: pure_all
-	\$(PERLRUN) t/forked_harness.pl \$(TEST_FILES) $stresstestargs
+	$PERLEXE t/forked_harness.pl \$(TEST_FILES) $stresstestargs
 
 __END_POSTAMBLE__
 

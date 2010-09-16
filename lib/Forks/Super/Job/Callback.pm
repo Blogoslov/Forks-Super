@@ -10,8 +10,11 @@
 package Forks::Super::Job::Callback;
 use Forks::Super::Util qw(qualify_sub_name);
 use Forks::Super::Debug qw(:all);
+
 use Exporter;
-use base 'Exporter';
+our @ISA = qw(Exporter);
+#use base 'Exporter';
+
 use Carp;
 use strict;
 use warnings;

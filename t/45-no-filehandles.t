@@ -116,7 +116,8 @@ ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
 # account for possible different line endings from sockets
-grep { s/[\r\n]+$// } @out, @err;
+#grep { s/[\r\n]+$// } @out, @err;
+for (@out,@err) { s/[\r\n]+$// }
 
 ok($out[0] eq "0:$msg", "got Expected first line \"0:$msg\" from child output \"$out[0]\"");
 ok($out[1] eq "1:$msg", "got Expected second line from child output");
