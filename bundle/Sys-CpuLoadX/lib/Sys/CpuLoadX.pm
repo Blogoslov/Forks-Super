@@ -204,11 +204,20 @@ E<lt> kxj@hotmail.com E<gt>.
 
 Updates by Marty O'Brien, E<lt> mob@cpan.org E<gt>.
 
-=head1 COPYRIGHT
+=head1 LICENSE AND COPYRIGHT
 
 Copyright (c) 1999-2002, 2010 Clinton Wong and Marty O'Brien.
 All rights reserved.
+
 This program is free software; you can redistribute it
 and/or modify it under the same terms as Perl itself.
+
+See http://dev.perl.org/licenses/ for more information.
+
+=cut
+
+
+
+
 
 =cut

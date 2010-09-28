@@ -14,6 +14,7 @@ package Forks::Super::Job::Ipc;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(IS_WIN32 is_socket);
+use Forks::Super::Sighandler;
 # use Symbol qw(gensym);
 use IO::Handle;
 use File::Path;
@@ -667,14 +668,19 @@ sub _cleanup {
 sub _trap_signals {
   return if $SIGNALS_TRAPPED++;
   # return if &IS_WIN32;
-  foreach my $sig (qw(INT TERM HUP QUIT PIPE ALRM)) {
 
-    # don't trap if it looks like a signal handler is already installed.
-    next if defined $SIG{$sig};
-    next if !exists $SIG{$sig};
+  my $cleanup = \&Forks::Super::Job::Ipc::__cleanup__;
+  foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
 
-    $SIG_OLD{$sig} = $SIG{$sig};
-    $SIG{$sig} = \&Forks::Super::Job::Ipc::__cleanup__;
+    register_signal_handler($sig, 35, $cleanup);
+
+
+    ### don't trap if it looks like a signal handler is already installed.
+    ##next if defined $SIG{$sig};
+    ##next if !exists $SIG{$sig};
+
+    ##$SIG_OLD{$sig} = $SIG{$sig};
+    ##$SIG{$sig} = \&Forks::Super::Job::Ipc::__cleanup__;
   }
 }
 
@@ -696,8 +702,8 @@ sub __cleanup__ {
 }
 
 sub _untrap_signals {
-  foreach my $sig (keys %SIG_OLD) {
-    $SIG{$sig} = defined $SIG_OLD{$sig} ? $SIG_OLD{$sig} : 'DEFAULT';
+  foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
+    register_signal_handler($sig, 35, undef);
   }
 }
 
@@ -863,7 +869,8 @@ sub END_cleanup_MSWin32 {
 	local $! = undef;
 	if (!unlink $G) {
 	  undef $!;
-	  sleep 1;
+	  # sleep 1;
+	  select undef, undef, undef, 0.1;
 	  $G =~ s!/!\\!;
 	  my $c1 = system("CMD /C DEL /Q \"$G\" 2> NUL");
 	}
@@ -950,6 +957,16 @@ sub _config_fh_parent_stdin {
   return;
 }
 
+sub __ipc_debug {   # XXXXXX this is hacky
+  my $job = shift;
+  print STDERR "OPEN_FH => $__OPEN_FH / $__MAX_OPEN_FH\n";
+  print STDERR "FH_COUNT => $FH_COUNT\n";
+  print STDERR "FH_FILES => ", scalar @FH_FILES, "\n";
+  print STDERR "FILENO map:\n";
+  # print STDERR map "\t$_ => " . $FILENO{$_} . "\n", keys %FILENO;
+  Carp::confess "Child failed, wstatus = 139" if $job->{status} == 139;
+}
+
 sub _config_fh_parent_stdout {
   my $job = shift;
   my $fh_config = $job->{fh_config};
@@ -994,12 +1011,16 @@ sub _config_fh_parent_stdout {
       my $_msg = sprintf "%d: %s Failed to open f_out=%s: %s\n",
 	$$, Forks::Super::Util::Ctime(), $fh_config->{f_out}, $!;
 
-      if ($DEBUG) {
-	Carp::cluck "Forks::Super::Job::config_fh_parent(): \n    ",
+      if ($DEBUG || $ENV{IPC_DEBUG}) {
+	Forks::Super::Sigchld::handle_CHLD(-1);
+	Carp::cluck "\n\n\n\nForks::Super::Job::config_fh_parent(): \n    ",
 	    "could not open filehandle to read child STDOUT from ",
 	      $fh_config->{f_out}, "\n     for ",
 		$job->toString(),
 		  ": $!\n$_msg\n";
+	__ipc_debug($job);
+
+
       } else {
 	warn "Forks::Super::Job::config_fh_parent(): ",
 	  "could not open filehandle to read child STDOUT (from ",
@@ -1072,12 +1093,14 @@ sub _config_fh_parent_stderr {
     } else {
       my $_msg = sprintf "%d: %s Failed to open f_err=%s: %s\n",
 	  $$, Forks::Super::Util::Ctime(), $fh_config->{f_err}, $!;
-      if ($DEBUG) {
+      if ($DEBUG || $ENV{IPC_DEBUG}) {
+	Forks::Super::Sigchld::handle_CHLD(-1);
 	Carp::cluck "Forks::Super::Job::config_fh_parent(): \n    ",
 	    "could not open filehandle to read child STDERR from ",
 	      $fh_config->{f_err}, "\n    for ",
 		$job->toString(),
 		  ": $!\n";
+	__ipc_debug($job);
       } else {
 	warn "Forks::Super::Job::config_fh_parent(): ",
 	  "could not open filehandle to read child STDERR (from ",

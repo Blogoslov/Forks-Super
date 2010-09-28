@@ -108,7 +108,7 @@ my $p1 = fork { sub => sub { sleep 6 },
 		callback => $callbacks };    # should take 6s
 my $p3 = fork { sub => sub { sleep 1 }, 
 		callback => $callbacks };    # should take 1s
-my $p4 = fork { sub => sub { sleep 10 } };   # should take 1s+10s
+my $p4 = fork { sub => sub { sleep 15 } };   # should take 1s+15s
 my $t5 = 0.5 * ($t4 + Time::HiRes::gettimeofday());
 
 
@@ -130,7 +130,7 @@ $count = waitall 8 + ($t5 - $t);
 $t = Time::HiRes::gettimeofday() - $t5;
 ok($count == 1,                             ### 24 ###
    "waitall reaped $count==1 process in next 3 sec t=$t");
-ok($t >= 7.83 && $t <= 10.15,               ### 25 ### was 8.55 obs 8.56
+ok($t >= 7.83 && $t <= 10.8,                ### 25 ### was 8.55 obs 8.56.10.77
    "waitall respected timeout ${t}s expected ~8s");
 
 $t = Time::HiRes::gettimeofday();

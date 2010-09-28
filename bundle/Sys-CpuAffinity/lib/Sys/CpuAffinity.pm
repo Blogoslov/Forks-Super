@@ -1212,11 +1212,11 @@ the number of processors.
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010 Marty O'Brien.
+Copyright (c) 2010, Marty O'Brien.
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
 
 See http://dev.perl.org/licenses/ for more information.
 

@@ -26,7 +26,7 @@ our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our $VERSION = $Forks::Super::Util::VERSION;
 
 our ($productive_pause_code, $productive_waitpid_code);
-our $REAP_NOTHING_MSGS = 0;
+#our $REAP_NOTHING_MSGS = 0;
 
 tie our $WAIT_ACTION_ON_SUSPENDED_JOBS, 
   'Forks::Super::Tie::Enum', qw(wait fail resume);
@@ -179,14 +179,9 @@ sub _reap {
   my ($nactive1, $nalive, $nactive2)
       = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
 
-  if ($nactive1 > 0) {
-    ++$REAP_NOTHING_MSGS;
-    if ($REAP_NOTHING_MSGS % 10 == 0) {
-      if (defined $SIG{CHLD} && ref $SIG{CHLD} eq 'CODE') {
-	#$SIG{CHLD}->(-1);
-      }
-    }
-  }
+  #if ($nactive1 > 0) {
+  #  ++$REAP_NOTHING_MSGS; # I think this is obsolete
+  #}
 
   return -1 if not wantarray;
   if ($DEBUG) {
@@ -232,7 +227,7 @@ sub _active_one_suspended_job {
     @suspended = grep { $_->{state} =~ /SUSPENDED/ } @Forks::Super::ALL_JOBS;
   }
   @suspended = sort { 
-    $a->{queue_priority} <=> $b->{queue_priority} } @suspended;
+    $b->{queue_priority} <=> $a->{queue_priority} } @suspended;
   if (@suspended == 0) {
     warn "Forks::Super::_activate_one_suspended_job(): ",
       " can't find an appropriate suspended job to resume\n";
@@ -332,7 +327,7 @@ sub _waitpid_pgrp {
 #
 # bastards arise when a child finishes quickly and has been
 # reaped in the SIGCHLD handler before the parent has finished
-# initializing the job's state.   See  Forks::Super::Sigchld::handle_CHLD() .
+# initializing the job's state. See  Forks::Super::Sigchld::handle_CHLD() .
 #
 sub _handle_bastards {
   foreach my $pid (keys %Forks::Super::BASTARD_DATA) {

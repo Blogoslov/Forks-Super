@@ -17,9 +17,6 @@ Possible TODOs:
 	_X_ for Unixy systems
 	___ for MSWin32
 
-    ___ Support for launching tasks on remote hosts (maybe that's beyond
-        the scope of this module) See Paralell::PVM?
-
     ___	Forks::Super::Uninterruptable package for "uninterruptable" versions
 	of Perl system calls like  sleep , connect , select($$$$). Well,
         for interruption-resistant versions, anyway.
@@ -130,19 +127,9 @@ Possible TODOs:
 	___ "is Windows/Cygwin"
 	___ we can spoof this information for some tests ...
 	___ signal list? trappable? "available"?
-
-    _X_ Reimplement gensym() in Forks::Super::Job::Ipc to use
-	safer 'Forks::Super::Symbol' package ?
-
-    _X_ Forks::Super::Util::Time() is redundant. Replace with
-	Time::HiRes::gettimeofday().
-
-    _X_ Support bg_qx on systems where YAML::Tiny is installed
-	without YAML.
-	___ Support Data::Dumper? Storable? Are those core modules?
-
-    _X_ Use Carp::Always in unit tests (if available). Um, but don't
-	ALWAYS use it.
+        ___ can use Time::HiRes::setitimer and a map of which ITIMER_xxx
+            sets off which signal. We should use alternative to SIGALRM
+            if possible.
 
     _X_ Reimplement F::S::Tie::BackgroundScalar to not require
 	dereferencing. Say, by using overloading.
@@ -207,7 +194,7 @@ Possible TODOs:
 	the existing Forks::Super::Job object. It would be an
 	error to call this unless the $job was completed.
 
-    ___ Time::HiRes::setitimer can deliver <XXX>arbitrary signals</XXX>SIGALRM
+    _x_ Time::HiRes::setitimer can deliver <XXX>arbitrary signals</XXX>SIGALRM
 	at arbitrary times? Just what we need for dispatching the
 	queue, "cleaning pipes", handling the asynchronous headaches
 	of this module. Can we use this and retire the "queue monitor"?
@@ -233,7 +220,7 @@ Possible TODOs:
     _x_ For clarity. separate F::S::C config_module, config_component,
 	config_external_program
 
-    ___ For organization, create F::S::XXX::Parent, F::S::XXX::Child
+    _O_ For organization, create F::S::XXX::Parent, F::S::XXX::Child
         modules, with function that are only to be executed in the
 	parent or child.
 
@@ -246,3 +233,15 @@ Possible TODOs:
 	of small tasks?)
 
     ___ Document how to use $ENV{FORKS_SUPER_CONFIG}
+
+    _X_ stresstest issues -- children launched by t/forked_harness die
+	quickly (<0.1s) with status 139 (SIGSEGV + core dump) (Cygwin
+        5.10 -- new signal handler may be to blame?)
+	_x_ solution was don't erase the signal handlers in the child ...
+
+    ___ unbundle Sys::CpuAffinity. At CPAN it shows that Sys::CpuAffinity
+        module is part of Forks::Super distribution, which is true but
+        it deemphasizes that it is also has its own distribution. I think
+        the current configuration gets it less attention from
+	CPAN testers, too.
+

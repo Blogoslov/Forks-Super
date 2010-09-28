@@ -1,4 +1,7 @@
 
+use strict;
+use warnings;
+
 $Forks::Super::LazyEval::USE_ZCALAR = 0;
 
 #

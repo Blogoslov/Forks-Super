@@ -13,6 +13,7 @@ use Forks::Super::Job::Timeout;
 use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
+use Forks::Super::Sighandler;
 
 use Exporter;
 our @ISA = qw(Exporter);
@@ -24,7 +25,7 @@ use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -764,11 +765,13 @@ END {
     # intermittent test failures where all subtests pass but the
     # test exits with non-zero exit status (e.g., t/42d-filehandles.t)
 
+    untie %SIG;
     if ($] >= 5.007003) {
       delete $SIG{CHLD};
     } else {
       $SIG{CHLD} = 'IGNORE';
     }
+    register_signal_handler("CHLD", 10, undef);
 
     Forks::Super::Queue::_cleanup();
     Forks::Super::Job::Ipc::_cleanup();
@@ -941,6 +944,7 @@ sub count_processes {
 }
 
 sub init_child {
+  Forks::Super::Sighandler::init_child();
   Forks::Super::Job::Ipc::init_child();
   return;
 }
@@ -989,7 +993,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.39
+0.40
 
 =head1 SYNOPSIS
 
@@ -1449,5 +1453,7 @@ Copyright (c) 2009-2010, Marty O'Brien.
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.8.8 or,
 at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
 
 =cut

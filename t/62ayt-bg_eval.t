@@ -23,7 +23,7 @@ SKIP: {
   if ($ENV{NO_YAML} || !Forks::Super::Config::CONFIG_module("YAML::Tiny")) {
     skip "YAML not available, skipping bg_eval tests", 33;
   }
-  require "./t/62a-bg_eval.tt";
+  do "./t/62a-bg_eval.tt";
 
 }
 

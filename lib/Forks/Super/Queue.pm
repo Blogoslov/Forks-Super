@@ -8,6 +8,7 @@ use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Tie::Enum;
 use Forks::Super::Util qw(IS_WIN32);
+use Forks::Super::Sighandler;
 use Carp;
 
 use Exporter;
@@ -62,9 +63,6 @@ sub init {
 
 sub init_child {
   @QUEUE = ();
-  if (defined $SIG{'USR2'}) {
-    $SIG{'USR2'} = 'DEFAULT';
-  }
   undef $QUEUE_MONITOR_PID;
   if ($Forks::Super::QUEUE_INTERRUPT
       && Forks::Super::Config::CONFIG('SIGUSR1')) {
@@ -95,6 +93,33 @@ sub _launch_queue_monitor {
     debug("_lqm returning: \$QUEUE_MONITOR_PID defined") if $QUEUE_DEBUG;
     return;
   }
+
+  if (Forks::Super::Config::CONFIG_Perl_component("setitimer")) {
+    _launch_queue_monitor_setitimer();
+  } else {
+    _launch_queue_monitor_fork();
+  }
+}
+
+sub _check_queue {
+  # XXX - check_queue call triggered by a SIGALRM. 
+  #       do we want to log it or do any other special handling?
+  check_queue();
+}
+
+sub _launch_queue_monitor_setitimer {
+
+  $QUEUE_MONITOR_PPID = $$;
+  $QUEUE_MONITOR_PID = 'setitimer';
+  # $Forks::Super::Sighandler::DEBUG = 1;
+  register_signal_handler("ALRM", 12, \&_check_queue);
+						   
+  Time::HiRes::setitimer(
+	&Time::HiRes::ITIMER_REAL, $QUEUE_MONITOR_FREQ, $QUEUE_MONITOR_FREQ);
+}
+
+sub _launch_queue_monitor_fork {
+
   if (!(defined $Forks::Super::QUEUE_INTERRUPT
 	&& $Forks::Super::QUEUE_INTERRUPT)) {
     debug("_lqm returning: \$Forks::Super::QUEUE_INTERRUPT not set")
@@ -157,24 +182,35 @@ sub _launch_queue_monitor {
 }
 
 sub _kill_queue_monitor {
-  if (defined $QUEUE_MONITOR_PPID && $$ == $QUEUE_MONITOR_PPID) {
-    if (defined $QUEUE_MONITOR_PID && $QUEUE_MONITOR_PID > 0) {
-
+  if (defined($QUEUE_MONITOR_PPID) && $$ == $QUEUE_MONITOR_PPID) {
+    if (defined $QUEUE_MONITOR_PID) {
       if ($DEBUG || $QUEUE_DEBUG) {
 	debug("killing queue monitor $QUEUE_MONITOR_PID");
       }
+	
+      if ($QUEUE_MONITOR_PID eq 'setitimer') {
 
-      CORE::kill 'TERM', $QUEUE_MONITOR_PID;
+	register_signal_handler("ALRM", 10, undef);
+	register_signal_handler("ALRM", 12, undef);
+	Time::HiRes::setitimer(&Time::HiRes::ITIMER_REAL, 0);
+	undef $QUEUE_MONITOR_PID;
+	undef $QUEUE_MONITOR_PPID;
 
-      my $z = CORE::waitpid $QUEUE_MONITOR_PID, 0;
-      if ($DEBUG || $QUEUE_DEBUG) {
-	debug("kill queue monitor result: $z");
-      }
+      } elsif ($QUEUE_MONITOR_PID > 0) {
 
-      undef $QUEUE_MONITOR_PID;
-      undef $QUEUE_MONITOR_PPID;
-      if (defined $OLD_QINTERRUPT_SIG) {
-	$SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_QINTERRUPT_SIG;
+	# on linux x86_64-linux, is this the source of the t/42d failures?
+	CORE::kill 'TERM', $QUEUE_MONITOR_PID;
+
+	my $z = CORE::waitpid $QUEUE_MONITOR_PID, 0;
+	if ($DEBUG || $QUEUE_DEBUG) {
+	  debug("kill queue monitor result: $z");
+	}
+
+	undef $QUEUE_MONITOR_PID;
+	undef $QUEUE_MONITOR_PPID;
+	if (defined $OLD_QINTERRUPT_SIG) {
+	  $SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_QINTERRUPT_SIG;
+	}
       }
     }
   }
@@ -264,7 +300,9 @@ sub run_queue {
       defined $_->{state} && $_->{state} eq 'DEFERRED'
     } @Forks::Super::ALL_JOBS;
     @deferred_jobs = sort {
-      $b->{queue_priority} || 0 <=> $a->{queue_priority} || 0
+      ($b->{queue_priority} || 0) 
+	      <=> 
+      ($a->{queue_priority} || 0)
     } @deferred_jobs;
 
     foreach my $job (@deferred_jobs) {
@@ -423,8 +461,12 @@ sub Forks::Super::Queue::InhibitQueueMonitor::FETCH {
 sub Forks::Super::Queue::InhibitQueueMonitor::STORE {
   my ($self, $new_value) = @_;
   $new_value = 0+!!$new_value;
-  if ($$self != $new_value && $new_value) {
-    _kill_queue_monitor();
+  if ($$self != $new_value) {
+    if ($new_value) {
+      _kill_queue_monitor();
+    } else {
+      queue_job();
+    }
   }
   $$self = $new_value;
   return $$self;

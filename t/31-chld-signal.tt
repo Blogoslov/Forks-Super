@@ -11,7 +11,7 @@ use warnings;
 # the "REAPED" status.
 #
 
-our $_LOCK = 0;  # use same synchronization technique as F::S::Sigchld
+our $_LOCK = 0;  # use same synchronization technique as F::S::Sighandler
 
 sub child_signal_hijacker {
 # $SIGNAL::TIME = Time::HiRes::gettimeofday() if $_[0] =~ /^C/;

@@ -13,6 +13,7 @@ use Forks::Super::Config qw(:all);
 use Forks::Super::Queue qw(:all);
 use Forks::Super::Wait qw(:all);
 use Forks::Super::Tie::Enum;
+use Forks::Super::Sighandler;
 use Forks::Super::Sigchld;
 use Forks::Super::LazyEval;
 
@@ -41,7 +42,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars' => [ @export_ok_vars, @EXPORT ],
     'all' => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC);
@@ -157,7 +158,8 @@ sub _init {
 
   Forks::Super::Queue::init();
 
-  $SIG{CHLD} = \&Forks::Super::Sigchld::handle_CHLD;
+  # $SIG{CHLD} = \&Forks::Super::Sigchld::handle_CHLD;
+  register_signal_handler("CHLD", 10, \&Forks::Super::Sigchld::handle_CHLD);
   return;
 }
 
@@ -575,7 +577,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.39
+Version 0.40
 
 =head1 SYNOPSIS
 
@@ -2176,6 +2178,13 @@ You would only worry about resetting this variable
 if you (including other modules that you import) are
 making use of an existing C<SIGUSR1> handler.
 
+B<Since v0.40> this variable is generally not used unless
+
+1. your system has a POSIX-y signal framework, and
+
+2. C<Time::HiRes::setitimer> is B<not> implemented for your
+system.
+
 =head3 TIMEOUT
 
 =item C<Forks::Super::TIMEOUT>
@@ -2353,10 +2362,12 @@ undefined behavior. Systems and versions that do not
 implement the C<alarm> function (like MSWin32 prior to
 Perl v5.7) will not be able to use these features.
 
-The first time that a task is deferred, by default this
-module will try to install a C<SIGUSR1> handler. See
-the description of C<$Forks::Super::QUEUE_INTERRUPT>
-under L</"MODULE VARIABLES"> for changing this behavior
+On some systems that (1) have a POSIX-y signal framework,
+and (2) have B<not> implemented C<Time::HiRes::setitimer>,
+this module will also try to install a C<SIGUSR1>
+handler when there are deferred tasks. See the description
+of C<$Forks::Super::QUEUE_INTERRUPT> under
+L</"MODULE VARIABLES"> to use a different signal handler
 if you intended to use a C<SIGUSR1> handler for
 something else.
 
@@ -2464,6 +2475,8 @@ Copyright (c) 2009-2010, Marty O'Brien.
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,
 at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
 
 =cut
 

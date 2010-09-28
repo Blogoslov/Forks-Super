@@ -1,4 +1,5 @@
 use strict;
+use warnings;
 package A'Test'Package;
 use Forks::Super::Tie::Enum;
 use Test::More tests => 4;

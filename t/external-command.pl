@@ -35,6 +35,8 @@
 
 
 use strict;
+use warnings;
+no warnings;
 
 my $flag_on_error = 0;
 my $STATUS=0;

@@ -5,6 +5,7 @@
 package Forks::Super::Sigchld;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
+use Forks::Super::Sighandler;
 use POSIX ':sys_wait_h';
 # use Time::HiRes;  # not installed on ActiveState 5.6 :-(
 use strict;
@@ -103,5 +104,58 @@ sub handle_CHLD {
   return;
 }
 
-
 1;
+
+__END__
+
+
+Signal handling, since v0.40
+
+Where available, signals are used throughout Forks::Super.
+Where they are not available (MSWin32), we still try to run
+the "signal handlers" every once in a while.
+
+Parent SIGCHLD handler:
+
+    Indicates that a child process is finished. 
+    Call CORE::waitpid and do an "internal reap"
+
+Child SIGALRM handler:
+
+    Indicates that a child has "timed out" or expired.
+    Should cause a kill signal (HUP? TERM? QUIT? INT?) to be
+    sent to any grandchild processes.
+
+Parent SIGHUP|SIGINT|SIGTERM|SIGQUIT|SIGPIPE handlers
+
+    If parent process is interrupted, we still want the parent
+    to run "clean up" code, especially if IPC files 
+    were used.
+
+Parent periodic tasks [SIGUSR1 | SIGALRM]
+
+    Parent processes have some periodic tasks that they
+    should perform from time to time:
+      - Examine the job queue and dispatch jobs
+      - Clean the pipes -- do non-blocking read on any
+        open pipe/sockethandles and buffer the input
+      - Call SIGCHLD handler to reap jobs where we might
+        have missed a SIGCHLD
+
+Child periodic tasks
+
+    Periodic tasks in the child
+      - Clean pipes
+      - Check if command has timed out yet.
+      - See if a user's alarm has gone off
+
+We want a framework where we can add and remove jobs
+for the signal handlers to do at will. If end user
+also wishes to add a signal handler, the framework
+should be able to accomodate that, too. And transparently.
+
+Let's spike it out ...
+
+
+
+

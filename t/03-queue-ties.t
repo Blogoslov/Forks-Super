@@ -50,7 +50,8 @@ SKIP: {
   $Forks::Super::Queue::QUEUE_MONITOR_FREQ = 60;
   ok(defined $Forks::Super::Queue::QUEUE_MONITOR_PID,         ### 6 ###
      "Queue monitor still running after \$QUEUE_MONITOR_FREQ change");
-  ok($Forks::Super::Queue::QUEUE_MONITOR_PID != $qmpid,
+  ok($qmpid eq 'setitimer' 
+         || $Forks::Super::Queue::QUEUE_MONITOR_PID != $qmpid,
      "Queue monitor restarted after \$QUEUE_MONITOR_FREQ change");
 
   $qmpid = $Forks::Super::Queue::QUEUE_MONITOR_PID;
@@ -89,8 +90,12 @@ SKIP: {
       3;
   }
 
-  ok(defined($SIG{$Forks::Super::QUEUE_INTERRUPT}),
-     "\$QUEUE_INTERRUPT set to a valid signal name");
+  if (Forks::Super::Config::CONFIG("setitimer")) {
+    ok(1, "# \$Forks::Super::QUEUE_INTERRUPT not used in setitimer mode");
+  } else {
+    ok(defined($SIG{$Forks::Super::QUEUE_INTERRUPT}),
+       "\$QUEUE_INTERRUPT set to a valid signal name");
+  }
 
   my @sig = keys %SIG;
 

@@ -23,5 +23,5 @@ SKIP: {
     skip "Data::Dumper not available, skipping bg_eval tests", 33;
   }
 
-  require "./t/62a-bg_eval.tt";
+  do "./t/62a-bg_eval.tt";
 }

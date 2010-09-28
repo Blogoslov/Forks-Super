@@ -26,7 +26,7 @@ SKIP: {
   my $p1 = get_os_priority($pid1);
 
   if ($p1 == 20) { # min priority on Unix
-    skip "update priority test. Process is already at min priority", 1;
+    skip "update priority test. Process is already at min priority", 2;
   }
   # change of plus 1 from default should be meaningful 
   # and valid on both Win32, Unix

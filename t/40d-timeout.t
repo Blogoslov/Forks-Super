@@ -31,7 +31,7 @@ my $p = wait;
 $t = Time::HiRes::gettimeofday() - $t;
 ok($p == $pid, "$$\\wait successful");
 ok($t < 5.95, "wait took ${t}s, expected ~3s");  ### 11 ###
-ok($? != 0, "job expired with non-zero STATUS"); ### 12 ###
+ok($? != 0, "job expired with non-zero STATUS $? should be != 0"); ### 12 ###
 
 # script dies intermittently here?
 

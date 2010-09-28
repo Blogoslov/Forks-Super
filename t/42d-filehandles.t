@@ -32,8 +32,8 @@ use warnings;
 # the END queue call has started. In v0.38 we disable the SIGCHLD handler
 # in the END queue -- we'll see if that helps.</XXX> No, that didn't help.
 #
-# In v0.39 the default is to use SIGTERM instead of SIGINT to timeout
-# a child. If the problem persists but the exit code becomes 15 instead
+# In v0.39 the default is to use SIGHUP instead of SIGINT to timeout
+# a child. If the problem persists but the exit code becomes 1 instead
 # of 2, then the child killer is a likely culprit.
 #
 ##################################################################
@@ -66,6 +66,7 @@ if (-x '/bin/sort') {
 } else {
   open(my $POOR_MANS_SORT, '>', 't/poorsort.pl');
   print $POOR_MANS_SORT "#!$^X\n";
+  # print $POOR_MANS_SORT "use strict; use warnings;\n";
   print $POOR_MANS_SORT "print sort <>\n";
   close $POOR_MANS_SORT;
   @cmd = ($^X, "t/poorsort.pl");

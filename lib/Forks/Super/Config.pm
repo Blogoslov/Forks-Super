@@ -94,7 +94,8 @@ sub CONFIG {
   # check for OS-dependent Perl functionality
   if ($module eq 'getpgrp' or $module eq 'alarm'
       or $module eq 'SIGUSR1' or $module eq 'getpriority'
-      or $module eq 'select4' or $module eq 'pipe') {
+      or $module eq 'select4' or $module eq 'pipe'
+      or $module eq 'setitimer' or $module eq 'socketpair') {
 
     return $CONFIG{$module} = CONFIG_Perl_component($module);
   } elsif (substr($module,0,1) eq '/') {
@@ -176,6 +177,12 @@ sub CONFIG_Perl_component {
       close $read;
       close $write;
       1;
+    } || 0;
+  } elsif ($component eq 'setitimer') {
+    $CONFIG{'setitimer'} = eval {
+      use Time::HiRes;
+      Time::HiRes::setitimer(Time::HiRes::ITIMER_REAL(), 0);
+      1
     } || 0;
   }
 

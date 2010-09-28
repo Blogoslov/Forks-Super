@@ -16,6 +16,7 @@ lib/Forks/Super/Tie/Enum.pm
 lib/Forks/Super/Tie/IPCFileHandle.pm
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
+lib/Forks/Super/Sighandler.pm
 lib/Forks/Super/Util.pm
 lib/Forks/Super/Wait.pm
 Makefile.PL

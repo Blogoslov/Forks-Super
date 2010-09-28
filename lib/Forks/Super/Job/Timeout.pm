@@ -9,6 +9,7 @@ package Forks::Super::Job::Timeout;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(IS_WIN32);
+use Forks::Super::Sighandler;
 use POSIX;
 use Carp;
 use strict;
@@ -19,6 +20,7 @@ our $VERSION = $Forks::Super::Util::VERSION;
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
 our $TIMEDOUT = 0;
+my $EXPIRATION;
 our ($ORIG_PGRP, $NEW_PGRP, $NEW_SETSID, $NEWNEW_PGRP);
 
 # Signal to help terminate grandchildren on a timeout, for systems that
@@ -115,8 +117,10 @@ sub Forks::Super::Job::_config_timeout_child {
     croak "Forks::Super::Job::_config_timeout_child(): quick timeout";
   }
 
-  $SIG{ALRM} = \&_child_sigalrm_handler;
+  # $SIG{ALRM} = \&_child_timeout;
+  register_signal_handler("ALRM", 10, \&_child_timeout);
 
+  $EXPIRATION = Time::HiRes::gettimeofday() + $timeout - 1.0;
   alarm $timeout;
   debug("Forks::Super::Job::_config_timeout_child(): ",
 	"alarm set for ${timeout}s in child process $$")
@@ -125,7 +129,9 @@ sub Forks::Super::Job::_config_timeout_child {
 }
 
 # to be run in a child if that child times out
-sub _child_sigalrm_handler {
+sub _child_timeout {
+  return if Forks::Super::Config::CONFIG('setitimer')
+    && Time::HiRes::gettimeofday() < $EXPIRATION;
   warn "Forks::Super: child process timeout\n";
   $TIMEDOUT = 1;
 

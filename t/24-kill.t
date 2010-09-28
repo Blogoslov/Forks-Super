@@ -13,7 +13,9 @@ my $bgsub = sub {
 };
 
 SKIP: {
-  skip "kill is unsafe on MSWin32 without Win32::API", 8;
+  if ($^O eq "MSWin32" && !Forks::Super::Config::CONFIG("Win32::API")) {
+    skip "kill is unsafe on MSWin32 without Win32::API", 8;
+  }
 
   my $pid1 = fork { sub => $bgsub };
   my $pid2 = fork { sub => $bgsub };
@@ -50,10 +52,13 @@ SKIP: {
   $j1 = Forks::Super::Job::get($pid1);
   sleep 1;
   $y = Forks::Super::kill('INT', $pid1);
-  sleep 1;
+  sleep 2;
   Forks::Super::Queue::run_queue();
   ok($y == 1, "sent INT to $y==1 proc");
-  ok($j1->is_complete, "killed job is complete " . $j1->{state});
+
+  # fails in 5.6; job state is still ACTIVE.
+  # (fails under forked_harness, but passes as standalone?)
+  ok($j1->is_complete, "killed job is complete " . $j1->{state}); ### 7 ###
   waitall;
 
   $y = Forks::Super::kill('INT', $pid1, $pid2, $pid3);

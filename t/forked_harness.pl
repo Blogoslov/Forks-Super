@@ -1,3 +1,5 @@
+
+
 ##! /usr/bin/perl -w
 # forked_harness.pl [options] tests
 #
@@ -59,6 +61,7 @@ eval "use Time::HiRes;1"
   or do { *Time::HiRes::gettimeofday = sub { time } };
 use POSIX ':sys_wait_h';
 use strict;
+use warnings;
 $| = 1;
 $^T = Time::HiRes::gettimeofday();
 if (${^TAINT}) {
@@ -159,8 +162,11 @@ my %colors = (ITERATION => 'bold white',
 	      NORMAL => '');
 
 
-$SIG{SEGV} = \&handle_SIG;
-$SIG{SYS} = \&handle_SIG;
+#{
+#  no warnings 'signal';
+# $SIG{SEGV} = \&handle_SIG;
+  $SIG{SYS} = \&handle_SIG if exists $SIG{STS};
+#}
 &main;
 &summarize;
 &check_endgame if $check_endgame;
@@ -175,6 +181,7 @@ sub handle_SIG {
   my $name = shift;
   print STDERR "\n" x 10;
   Carp::confess "SIG$name caught in $0 @ARGV\n";
+  $SIG{$name} = 'DEFAULT';
 }
 
 #
@@ -261,8 +268,14 @@ sub launch_test_file {
     $test_harness = "test_harness($test_verbose";
     $test_harness .= ",'$_'" foreach @use_libs;
     $test_harness .= ")";
-    @cmd = ($^X, "-MExtUtils::Command::MM", "-e",
-	    $test_harness, $test_file);
+    if ($] < 5.007) {
+      @cmd = ($^X, "-Iblib/lib", "-Iblib/arch", "-e",
+	      'use Test::Harness qw(&runtests $verbose);$verbose=0;runtests @ARGV',
+	      $test_file);
+    } else {
+      @cmd = ($^X, "-MExtUtils::Command::MM", "-e",
+	      $test_harness, $test_file);
+    }
   } else {
     my @extra_opts = _get_perl_opts($test_file);
     @cmd = ($^X, @perl_opts, @extra_opts, (map{"-I$_"}@use_libs), $test_file);
@@ -479,7 +492,7 @@ sub process_test_output {
   my $num_terminated = 0;
   if ($total_status > 0 && $abort_on_first_error) {
     foreach my $j (@Forks::Super::Queue::QUEUE) {
-      $j->mark_complete;
+      $j->_mark_complete;
       $j->{status} = -1;
       $num_dequeued++;
       Forks::Super::Queue::queue_job();

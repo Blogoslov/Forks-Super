@@ -1,5 +1,5 @@
 
-Forks::Super version 0.39
+Forks::Super version 0.40
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -156,7 +156,7 @@ README.windows file included in this distribution
 for important information.
 
 
-COPYRIGHT AND LICENCE
+LICENSE AND COPYRIGHT
 
 Copyright (c) 2009-2010, Marty O'Brien.
 
@@ -164,4 +164,4 @@ This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,
 at your option, any later version of Perl 5 you may have available.
 
-
+See http://dev.perl.org/licenses/ for more information.
