@@ -4,19 +4,25 @@ use Carp;
 use strict;
 use warnings;
 
+# 
+# test that spawned jobs (grandchild processes)
+# also respect deadlines from the "timeout"
+# and "expiration" options
 #
-# test that jobs respect deadlines for jobs to
-# complete when the jobs specify "timeout" or
-# "expiration" options
-#
+
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 SKIP: {
   if (!Forks::Super::Config::CONFIG_Perl_component('alarm')) {
     skip "alarm function unavailable on this system ($^O,$]), "
+      . "can't test timeout feature", 6;
+  }
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm not compatible with sleep on this system ($^O,$]), "
       . "can't test timeout feature", 6;
   }
 
@@ -29,6 +35,9 @@ SKIP: {
     }
   }
 
+
+
+
   # a child process that times out should clean up after
   # itself (i.e., kill off its grandchildren).
   #
@@ -36,16 +45,20 @@ SKIP: {
 
   unlink "t/out/spawn.pids.$$";
   my $t = Time::HiRes::gettimeofday();
+
+  # set up a program to spawn many other processes and to run
+  # for about 15 seconds.
   my $pid = fork { timeout => 5, 
 		     cmd => [ $^X, "t/spawner-and-counter.pl",
 			      "t/out/spawn.pids.$$", "3", "15" ] };
   my $t2 = Time::HiRes::gettimeofday();
+
   my $p = wait;
   my $t3 = Time::HiRes::gettimeofday();
   ($t,$t2) = ($t3-$t,$t3-$t2);
   my $j = Forks::Super::Job::get($pid);
   my $t4 = $j->{end} - $j->{start};
-  ok($p == $pid && $t >= 5 && $t4 <= 10 && $t2 <= 10,  # was 8/9 obs 11.26
+  ok($p == $pid && $t >= 4.5 && $t4 <= 10 && $t2 <= 10,  # was 8/9 obs 11.26
      "external prog took ${t}s ${t2}s ${t4}s, expected 5-7s");
 
   if ($t <= 14) {
@@ -53,6 +66,7 @@ SKIP: {
   } else {
     sleep 1;
   }
+
   open(my $PIDS, "<", "t/out/spawn.pids.$$");
   my @pids = <$PIDS>;
   for (@pids) { s/\s+$// }
@@ -74,7 +88,10 @@ SKIP: {
     if ($last_count_i < 5) {
       print STDERR "File contents were:\n", @orig_data_i, "\n";
     }
-    unlink $file_i if  $last_count_i > 5;
+    ($file_i) = $file_i =~ /(.*)/;
+    if ($last_count_i > 5) {
+      unlink $file_i;
+    }
   }
   unlink "t/out/spawn.pids.$$";
   

@@ -7,9 +7,6 @@ use warnings;
 # test $Forks::Super::Config::CONFIG{'filehandles'} = 0 --
 # force Forks::Super to use sockets/pipes exclusively
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 sub _read_socket {
   my $handle = shift;
   return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
@@ -124,5 +121,3 @@ ok($out[1] eq "1:$msg", "got Expected second line from child output");
 ok($out[2] eq "2:$msg", "got Expected third line from child output");
 ok($err[-1] eq "$msg", "got Expected line from child error");
 waitall;
-
-eval { alarm 0 };

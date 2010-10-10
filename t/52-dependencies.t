@@ -4,9 +4,6 @@ use Carp;
 use strict;
 use warnings;
 
-$SIG{ALRM} = sub { die "Timeout\n" };
-eval { alarm 120 };
-
 #
 # test that jobs respect their dependencies.
 # a job won't start before another job starts that
@@ -94,4 +91,3 @@ ok($j4->{start} >= $j2->{start}, "job 4 respected depend_start for job2");
 ok($j3->{start} >= $j2->{end}, "job 3 respected depend_on for job2");
 ok($j4->{start} < $j3->{start}, "low priority job 4 start before job 3");
 
-eval { alarm 0 };

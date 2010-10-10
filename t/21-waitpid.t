@@ -4,10 +4,6 @@ use Test::More tests => 143;
 use strict;
 use warnings;
 
-if (Forks::Super::Config::CONFIG_Perl_component("alarm")) {
-  alarm 300;$SIG{ALRM}=sub{die "Timeout\n"};
-}
-
 #
 # tests the Forks::Super::waitpid call.
 #

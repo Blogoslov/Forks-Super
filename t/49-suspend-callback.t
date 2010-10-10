@@ -4,9 +4,6 @@ use strict;
 use warnings;
 no warnings 'once';
 
-$SIG{ALRM} = sub { die "Timeout\n" };
-eval { alarm 45 };
-
 my $file = "t/out/49.$$.out";
 $Forks::Super::Util::DEFAULT_PAUSE = 0.5;
 
@@ -173,4 +170,3 @@ SKIP: {
   ok($p == $pid, "job has completed");
 }
 
-eval { alarm 0 };

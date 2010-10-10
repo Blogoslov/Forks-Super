@@ -6,6 +6,7 @@ use warnings;
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 my @cmd = ($^X, "t/external-command.pl",
@@ -70,7 +71,9 @@ SKIP: {
   if (!Forks::Super::Config::CONFIG_Perl_component("alarm")) {
     skip "no alarm(), can't test additional option", 7;
   }
-
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm(), sleep() incompatible, can't test additional options", 7;
+  }
 
   $cmd[3] = "-s=5";
   ($fh_in, $fh_out, $fh_err, $pid, $job) 

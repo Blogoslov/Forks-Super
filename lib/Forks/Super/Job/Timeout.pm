@@ -130,8 +130,15 @@ sub Forks::Super::Job::_config_timeout_child {
 
 # to be run in a child if that child times out
 sub _child_timeout {
+
+  # the SIGALRM handler in the child might be used for
+  # several purposes, so the fact that this function is
+  # called does not necessarily mean it is time for the
+  # child to exit.
+
   return if Forks::Super::Config::CONFIG('setitimer')
     && Time::HiRes::gettimeofday() < $EXPIRATION;
+
   warn "Forks::Super: child process timeout\n";
   $TIMEDOUT = 1;
 

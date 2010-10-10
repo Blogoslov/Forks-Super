@@ -9,22 +9,14 @@ use Forks::Super::Util;
 use strict;
 use warnings;
 
-if (-r 'system-limits') {
-  my %info = load_limits_file('system-limits');
-  if ($info{system} ne $^O || $info{version} ne $]) {
-    print STDERR "system-limits file is outdated.\n";
-    print STDERR "system-limits => system-limits.$info{system}.$info{version}\n";
-    rename 'system-limits', "system-limits.$info{system}.$info{version}";
-  }
-}
+my $limits_file = "t/out/limits.$^O.$]";
 
-
-if (! -r 'system-limits') {
+if (! -r $limits_file) {
   print STDERR "$0: creating system-limits file.\n";
-  system($^X, "system-limits.PL", "system-limits");
+  system($^X, "system-limits.PL", $limits_file);
 }
 
-my %info = load_limits_file('system-limits');
+my %info = load_limits_file($limits_file);
 
 open F, '>', $ARGV[0] || 'lib/Forks/Super/SysInfo.pm';
 print F <<"____;";
@@ -48,6 +40,7 @@ printF('MAX_FORK', $info{maxfork}, '12.345');
 printF('MAX_OPEN_FH', $info{maxfilehandle}, '123.456');
 printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
+printF('SLEEP_ALARM_COMPATIBLE', $info{sleep_alarm_compat}, '""');
 if (defined $info{ncpu}) {
   printF('NUM_PROCESSORS', $info{ncpu}, '1');
 }
@@ -60,6 +53,7 @@ sub printF {
   my ($varName, $value, $defaultValue) = @_;
   $value = $defaultValue if $value eq "''";
   $value ||= $defaultValue;
+  $value = "0" if $value eq "000";
 
   print F "\r\n";
   print F 'our $', $varName, " = $value;", "\r\n";

@@ -27,5 +27,8 @@ Forks::Super::Config::CONFIG_external_program("/uptime");
 my $ps = $ENV{PERL_SIGNALS} || "";
 print STDERR "\$ENV{PERL_SIGNALS} = $ps\n";
 
+print STDERR "Forks::Super::Job is overloaded: ",
+	$Forks::Super::Job::OVERLOAD_ENABLED, "\n";
+
 print STDERR "\n";
 ok(1);

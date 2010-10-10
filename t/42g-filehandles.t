@@ -6,9 +6,6 @@ use warnings;
 
 Forks::Super::Debug::_use_Carp_Always();
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 $Forks::Super::SOCKET_READ_TIMEOUT = 0.25;
 
 # test blocked and unblocked reading for file handles.

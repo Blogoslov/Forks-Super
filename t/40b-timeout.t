@@ -12,6 +12,7 @@ Forks::Super::Job::Timeout::warm_up();
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 

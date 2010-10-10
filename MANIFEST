@@ -13,7 +13,7 @@ lib/Forks/Super/Tie/BackgroundArray.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/BackgroundZcalar.pm          # experimental v0.38
 lib/Forks/Super/Tie/Enum.pm
-lib/Forks/Super/Tie/IPCFileHandle.pm
+lib/Forks/Super/Tie/IPCFileHandle.pm             # experimental, not used
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Sighandler.pm
@@ -29,9 +29,9 @@ t/00-use.t
 t/01a-import.t
 t/01b-import.t
 t/01c-import.t
-t/01d-import.t
 t/02-tie-on_busy.t
 t/03-queue-ties.t
+t/04-ipc-dir.t
 t/09-show-config.t
 t/10-to-natural.t
 t/11-to-command.t
@@ -44,7 +44,9 @@ t/17-retries.t
 t/20-wait.t
 t/21-waitpid.t
 t/22-waitall.t
-t/23-wait-timeout.t
+t/23a-wait-timeout.t
+t/23b-waitpid-timeout.t
+t/23c-waitall-timeout.t
 t/24-kill.t
 t/25-open.t
 t/30-child-fork-behavior.t
@@ -94,7 +96,9 @@ t/51a-delayed.t
 t/51b-delayed.t
 t/51c-delayed.t
 t/52-dependencies.t
-t/53-name.t
+t/53a-name.t
+t/53b-name.t
+t/53c-name.t
 t/60-os.t
 t/61-callbacks.t
 t/62a-bg_eval.tt
@@ -160,5 +164,5 @@ bundle/Sys-CpuLoadX/README
 bundle/Sys-CpuLoadX/t/00-load.t
 bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
-TODO-1.0
+TODO-1.0                                 # roadmap for major release
 META.yml                                 Module meta-data (added by MakeMaker)

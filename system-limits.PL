@@ -26,13 +26,9 @@ use strict;
 use warnings;
 
 
-
-
-
-
-
-my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
+my $limits_file = "t/out/limits.$^O.$]";
 my %LIMITS = (file => $limits_file);
+our $MAIN_PID = $$;
 
 if ($^O eq 'cygwin') {
   print STDERR qq!
@@ -64,7 +60,6 @@ if ($pid) {
 open(LOCK, ">>", "t/out/.lock-flim");
 flock LOCK, 2;
 
-our $MAIN_PID = $$;
 END {
   if ($$ == $MAIN_PID) {
     close LOCK;
@@ -79,6 +74,7 @@ $LIMITS{version} = $];
 
 # XXX - what else is interesting? max pending signals?
 
+&checkif_sleep_alarm_compatible;
 &count_number_of_cpus;
 &find_max_open_filehandles;     # on some systems:  ulimit -n
 &find_max_open_sockets;
@@ -102,6 +98,28 @@ sub write_limits {
   }
   close $lhf;
   
+}
+
+sub checkif_sleep_alarm_compatible {
+  my $compatible = -1;
+  eval {
+    local $SIG{ALRM} = sub { die "Timeout\n" };
+    alarm 2;
+    $compatible = 1;
+    sleep 4;
+    $compatible = "000";
+    alarm 0;
+  };
+  if ($compatible > 0) {
+    print STDERR "sleep and alarm are compatible on this system\n";
+  } else {
+    # either "alarm" isn't implemented, or
+    # "alarm" or "sleep" are implemented in terms of each other,
+    # and can't be used together
+    # AFAICT Strawberry Perl 5.8 suffers from this
+    print STDERR "sleep and alarm are *not* compatible on this system\n";
+  }
+  write_limits(sleep_alarm_compat => $compatible);
 }
 
 #
@@ -224,13 +242,13 @@ sub count_number_of_cpus {
     $ncpu = grep /\d+.+processors?$/i, qx(hinv -c processor 2>/dev/null);
   }
   if ($ncpu == 0) {
-    $ncpu = qx(bindprocessor -q 2>/dev/null);
+    $ncpu = () = qx(bindprocessor -q 2>/dev/null);
   }
   if ($ncpu == 0) {
     $ncpu = grep /^hw.ncpu:/, qx(sysctl -a 2>/dev/null);
   }
   if ($ncpu == 0) {
-    $ncpu = (qx(psrinfo 2> /dev/null));
+    $ncpu = () = qx(psrinfo 2> /dev/null);
   }
   if ($ncpu == 0) {
     $ncpu = qx(hwprefs cpu_count 2>/dev/null);
@@ -244,12 +262,13 @@ sub count_number_of_cpus {
     print STDERR "of processors on your system. Consider\n";
     print STDERR "installing the  Sys::CpuAffinity  module\n";
     print STDERR "before running this script.\n";
+    write_limits( ncpu => "1.0" );
   }
 }
 
 sub find_socket_capacity {
   my $socket_capacity = 
-    _get_capacity(16384, 5,
+    _get_capacity(16384, 1,
 		  qq[use Socket;
 		     socketpair DUMMY,WRITER,AF_UNIX,SOCK_STREAM,PF_UNSPEC]);
   print STDERR "Default socket capacity is about $socket_capacity bytes\n";
@@ -258,7 +277,7 @@ sub find_socket_capacity {
 
 sub find_pipe_capacity {
   my $pipe_capacity =
-    _get_capacity(256, 10, qq[pipe DUMMY,WRITER]);
+    _get_capacity(256, 2, qq[pipe DUMMY,WRITER]);
   print STDERR "Default pipe capacity is about $pipe_capacity bytes\n";
   &write_limits('pipe_capacity' => $pipe_capacity);
 }
@@ -266,12 +285,14 @@ sub find_pipe_capacity {
 sub _get_capacity {
   my ($packetsize, $timeout, $create_WRITER) = @_;
   my $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
-  while ($capacity < 0) {
-    if ($capacity == -1) {
+  while ($capacity <= 0) {
+    if ($capacity > -2) {
       return 0 if $packetsize <= 1;
+      print STDERR "Packet size of $packetsize was too large. Retrying\n";
       $packetsize = int($packetsize / 64);
     } elsif ($capacity == -2) {
       return 0 if $timeout > 300;
+      print STDERR "Capacity not found with timeout=$timeout. Retrying\n";
       $timeout *= 2;
     }
     $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
@@ -312,7 +333,8 @@ binmode WRITER;
 my \$output = " " x $packetsize;
 my \$written = 0;
 for (;;) {
-  print WRITER \$output;
+  # print WRITER \$output;
+  syswrite WRITER, \$output;
   \$written += length \$output;
   open F, ">", \"$output_file\";
   print F time - \$^T >= $timeout ? -2 : \$written;
@@ -322,19 +344,17 @@ __END_SLAVE_CODE__
 ;
 
   unlink $output_file, $pid_file;
-
-  # moved process kill code here from <<__END_SLAVE_CODE__ block
-  # because the process wasn't getting killed in v5.6.1
-  # (v5.6.1 cygwin -- still not sure what MSWin32 5.6 would do here)
   if (fork() == 0) {
     sleep $timeout + 1;
     open my $pf, '<', $pid_file;
     my $pid = 0 + <$pf>;
 
-    kill 'TERM', $pid
-      || system "TASKKILL /f /pid $pid"
-      || system "kill -TERM $pid"
-      || kill 'BREAK', $pid;
+    # hopefully, one of these will do the job on your system
+    kill ('TERM', $pid)
+      || kill ('HUP', $pid)
+      || system ("TASKKILL /f /pid $pid")
+      || system ("kill -TERM $pid") 
+      || kill ('BREAK', $pid);
     exit 0;
   }
 

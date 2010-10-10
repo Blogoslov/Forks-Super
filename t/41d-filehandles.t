@@ -3,9 +3,6 @@ use Test::More tests => 6;
 use strict;
 use warnings;
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 #
 # test whether a parent process can have access to the
 # STDIN, STDOUT, and STDERR filehandles of a child
@@ -59,6 +56,3 @@ ok($output eq "11dlrow olleH\n16?gniog ti si woH\n",
 # intermittent SIGSEGV occur during cleanup. Haven't been able to diagnose yet.
 use Carp;
 $SIG{SEGV} = sub { Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" };
-
-
-eval { alarm 0 };

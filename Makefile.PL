@@ -3,33 +3,101 @@ use warnings;
 use ExtUtils::MakeMaker;
 # use 5.007003;   # needs "safe signals" - see perlipc
 
-# command-line arguments "bundle=1" or "reinstall=1"
-# or environment var     "BUNDLE_REINSTALL=1"
-# will force attempt to install bundled modules,
-# even if they are already installed
+our %RECOMMENDED
+  = ('YAML' => '0.62',
+     'JSON' => '2.0',
+     'YAML::Tiny' => '1.39',
+     'Sys::CpuAffinity' => '0.91',
+     'Sys::CpuLoadX' => '0.02',
+     'DateTime::Format::Natural' => '0.89',
+     'Win32::API' => '0.43',
+     'Win32::Process' => '0.11',
+     'Win32::Process::Kill' => '2.64');
+
+our %REQUIRED 
+  = ('Test::More' => '0',
+     'Time::HiRes' => '1.30');
+if ($^O eq 'MSWin32') {
+  $REQUIRED{'Win32::API'} = '0.43';
+}
+
+# files that may exist and be nice to clean up with a  make clean
+our $FILES_TO_CLEAN 
+  = join " ", qw(Forks-Super-* system-limits system-limits.lock
+		 lib/Forks/Super/SysInfo.pm t/out/spawn*
+		 t/out/sigchld.debug t/out/test* t/out/.lock-*
+		 t/out/49.* t/out/debug1-*
+		 t/out/ipc* t/out/new-ipc*
+		 lib/_Inline *.stackdump _Inline);
+
+our %META_MERGE
+  = (recommends => \%RECOMMENDED,
+     no_index => { 'package' => ['Sys::CpuAffinity'] });
+
+######################################################################
 
 if ($] < 5.007003) {
-
   warn qq{
+
 WARNING !!! The Forks::Super module makes heavy use of 
 insufficiently paranoid signal handlers (See "Deferred
 Signals (Safe Signals)" in a more recent version of perlipc) 
 and is not recommended on versions of perl older than
 v5.7.3. (Your version: $])
+
 };
-
   sleep 1;
-
 }
 
+if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {
+  $ENV{BUNDLE_REINSTALL} = 1;
+  @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
+}
+if (defined($ENV{BUNDLE}) && $ENV{BUNDLE} eq "0") {
+  print STDERR "Skip check and install for bundled modules.\n";
+} else {
+  install_bundled_modules();
+}
+probe_system();
+
+WriteMakefile(
+
+    NAME                => 'Forks::Super',
+    AUTHOR              => q[Marty O'Brien <mob\@cpan.org>],       #'],
+    VERSION_FROM        => 'lib/Forks/Super.pm',
+    ABSTRACT_FROM       => 'lib/Forks/Super.pm',
+    PL_FILES            => {},
+    PREREQ_PM => \%REQUIRED,
+
+    ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
+     ? ('META_MERGE' => \%META_MERGE ) : ()),
+    ($ExtUtils::MakeMaker::VERSION+0 >= 6.3002
+     ? ('LICENSE'    => 'perl')        : ()),
+
+    dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+    clean               => { FILES => $FILES_TO_CLEAN },
+
+);
 
 
+print STDERR q[
+
+"Makefile.PL" complete. After you run "make", you can run "make test"
+to run the Forks::Super unit tests in series, or "make fasttest" to use
+the Forks::Super framework to run the tests in parallel.
+
+
+];
+
+#############################################################################
+#
 # run installer for the additional modules
 # that were included with this distribution.
 #
 # run  perl Makefile.PL BUNDLE=1
 # or   BUNDLE_REINSTALL=1 perl Makefile.PL
 # to allow re-installation of bundled modules
+#
 sub install_bundled_modules {
   if (-d 'bundle') {
     chdir 'bundle';
@@ -59,91 +127,14 @@ sub probe_system {
   system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
 }
 
-# Construct %REQUIRED, %RECOMMENDED. We currently don't use %RECOMMENDED.
-our %RECOMMENDED
-  = ('YAML' => '0.62',
-     'JSON' => '2.0',
-     'YAML::Tiny' => '1.39',
-     'Sys::CpuAffinity' => '0.91',
-     'Sys::CpuLoadX' => '0.02',
-     'DateTime::Format::Natural' => '0.89');
-our %REQUIRED = ('Test::More' => '0',
-		'Time::HiRes' => '1.30');
 
-if ($^O eq "MSWin32" || $^O =~ /cygwin/i) {
-  $RECOMMENDED{'Win32::Process'} = '0.11';
-  if ($^O eq "MSWin32") {
-    $RECOMMENDED{'Win32::Process::Kill'} = '2.64';
-    $REQUIRED{'Win32::API'} = '0.43';
-  } else {
-    $RECOMMENDED{'Win32::API'} = '0.43';
-  }
-}
-
-######################################################################
-
-if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {
-  $ENV{BUNDLE_REINSTALL} = 1;
-  @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
-}
-
-# install bundled modules first so Sys::CpuAffinity
-# is available to system-limits.PL
-if (defined($ENV{BUNDLE}) && $ENV{BUNDLE} eq "0") {
-  print STDERR "Skip check and install for bundled modules.\n";
-} else {
-  install_bundled_modules();
-}
-probe_system();
-WriteMakefile(
-    ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
-         ? ('META_MERGE' => { 'recommends' => \%RECOMMENDED })
-	 : ()),
-    NAME                => 'Forks::Super',
-    AUTHOR              => q[Marty O'Brien <mob@cpan.org>],
-    VERSION_FROM        => 'lib/Forks/Super.pm',
-    ABSTRACT_FROM       => 'lib/Forks/Super.pm',
-    ($ExtUtils::MakeMaker::VERSION+0 >= 6.3002
-      ? ('LICENSE'=> 'perl')
-      : ()),
-    PL_FILES            => {},
-
-    PREREQ_PM => \%REQUIRED,
-
-    dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean               => { FILES => join (" ",'Forks-Super-*',
-					    'system-limits',
-					    'system-limits.lock',
-					    'lib/Forks/Super/SysInfo.pm',
-					    't/out/spawn*',
-					    't/out/sigchld.debug',
-					    't/out/test*',
-					    't/out/.lock-*',
-					    'lib/_Inline', 
-					    'perl.exe.stackdump', # #$@^!cygwin
-					    '_Inline') },
-);
-
-
-print STDERR q[
-
-"Makefile.PL" complete. After you run "make", you can run "make test"
-to run the Forks::Super unit tests in series, or "make fasttest" to use
-the Forks::Super framework to run the tests in parallel.
-
-
-];
-
-
-
-
-
+#############################################################################
 
 package MY;
 
-######################################################################
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # additional testing targets
-######################################################################
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 sub MY::postamble {
 
@@ -155,12 +146,11 @@ sub MY::postamble {
   my $PERLEXE = '$(FULLPERL)';  
   my $postamble = <<"__END_POSTAMBLE__";
 
-
-#################################################
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #
-# Additional targets for Forks::Super module.
+# Additional testing targets for Forks::Super module.
 #
-#
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 

@@ -3,9 +3,6 @@ use Test::More tests => 9;
 use strict;
 use warnings;
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 sub _read_socket {
   my $handle = shift;
   return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
@@ -169,5 +166,3 @@ ok($err[0] =~ /the message is/, "got Expected first line from child error");
 ok($err[-1] =~ /a test/, "got Expected second line from child error");
 waitall; 
 $Forks::Super::DEBUG = 0;
-
-eval { alarm 0 };

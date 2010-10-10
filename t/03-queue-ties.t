@@ -1,4 +1,4 @@
-use Test::More tests => 15;
+use Test::More tests => 18;
 use Forks::Super;
 use strict;
 use warnings;
@@ -11,7 +11,7 @@ Forks::Super::Queue::init();
 SKIP: {
 
   if ($Forks::Super::Queue::INHIBIT_QUEUE_MONITOR) {
-    skip "queue monitor disabled", 15;
+    skip "queue monitor disabled", 18;
   }
 
   # $Forks::Super::Queue::QUEUE_MONITOR_FREQ
@@ -20,6 +20,8 @@ SKIP: {
   #    3. on change, restarts the queue monitor
 
   $Forks::Super::Queue::QUEUE_MONITOR_FREQ = 30;
+  ok(tied $Forks::Super::Queue::QUEUE_MONITOR_FREQ,
+     "\$QUEUE_MONITOR_FREQ is tied");
   ok($Forks::Super::Queue::QUEUE_MONITOR_FREQ == 30, 
      "\$QUEUE_MONITOR_FREQ init");
 
@@ -63,6 +65,8 @@ SKIP: {
   ok($Forks::Super::Queue::INHIBIT_QUEUE_MONITOR == 0
      || $Forks::Super::Queue::INHIBIT_QUEUE_MONITOR == 1,
      "\$INHIBIT_QUEUE_MONITOR has a boolean value");
+  ok(tied $Forks::Super::Queue::INHIBIT_QUEUE_MONITOR,
+     "\$INHIBIT_QUEUE_MONITOR is tied");
 
   @Forks::Super::Queue::QUEUE = ();
   $Forks::Super::Queue::INHIBIT_QUEUE_MONITOR = "";
@@ -87,7 +91,7 @@ SKIP: {
 
   if (0 == keys %SIG) {
     skip "\%SIG not initialized. Can't test \$Forks::Super::QUEUE_INTERRUPT",
-      3;
+      4;
   }
 
   if (Forks::Super::Config::CONFIG("setitimer")) {
@@ -107,6 +111,8 @@ SKIP: {
   $Forks::Super::QUEUE_INTERRUPT = 'not a signal name';
   ok($Forks::Super::QUEUE_INTERRUPT eq $sig[0],
      "\$QUEUE_INTERRUPT not set to bogus signal name");
+  ok(tied $Forks::Super::QUEUE_INTERRUPT,
+     "\$QUEUE_INTERRUPT is tied");
 
 
   

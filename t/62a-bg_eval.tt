@@ -33,12 +33,20 @@ ok($t0 >= 2.95 && $t <= 7.95,     ### 10 ### was 3.85, obs 3.97,5.11,7.39
 $$x = 19;
 ok($$x == 19, "result is not read only");
 
-$x = bg_eval { sleep 10; return 19 } { timeout => 2 };
-$t = Time::HiRes::gettimeofday();
-ok(!defined $$x, "scalar bg_eval undef on failure");
-$t = Time::HiRes::gettimeofday() - $t;
-ok($t <= 3.95,                    ### 13 ### was 3.25, obs 3.41
-   "scalar bg_eval respected timeout, took ${t}s expected ~2s");
+SKIP: {
+
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm and sleep are incompatible on this system; "
+      . "can't test bg_eval with a timeout", 2;
+  }
+
+  $x = bg_eval { sleep 10; return 19 } { timeout => 2 };
+  $t = Time::HiRes::gettimeofday();
+  ok(!defined $$x, "scalar bg_eval undef on failure");
+  $t = Time::HiRes::gettimeofday() - $t;
+  ok($t <= 3.95,                    ### 13 ### was 3.25, obs 3.41
+     "scalar bg_eval respected timeout, took ${t}s expected ~2s");
+}
 
 ### list context ###
 #

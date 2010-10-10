@@ -42,6 +42,18 @@ sub bg_eval (&;@) {
   if (@other_options > 0 && ref $other_options[0] eq 'HASH') {
     @other_options = %{$other_options[0]};
   }
+
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    # timeout, expiration are incompatible with bg_eval
+    foreach (@other_options) {
+      if ($_ eq "timeout" || $_ eq "expiration") {
+	croak "Forks::Super::bg_eval: ",
+	  "$_ option not allowed because ",
+	  "alarm/sleep are not compatible on this system.\n";
+      }
+    }
+  }
+
   my $p = $$;
   my ($result, @result);
   if (wantarray) {
@@ -88,6 +100,18 @@ sub bg_qx {
   if (@other_options > 0 && ref $other_options[0] eq 'HASH') {
     @other_options = %{$other_options[0]};
   }
+
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    # timeout, expiration are incompatible with bg_eval
+    foreach (@other_options) {
+      if ($_ eq "timeout" || $_ eq "expiration") {
+	croak "Forks::Super::bg_eval: ",
+	  "$_ option not allowed because ",
+	  "alarm/sleep are not compatible on this system.\n";
+      }
+    }
+  }
+
   my $p = $$;
   my (@result, $result);
   if (wantarray) {

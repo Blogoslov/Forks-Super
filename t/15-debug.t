@@ -72,7 +72,10 @@ if ($out2 >= $out1) {
   print STDERR "    ------------------------------\n\n";
 }
 
-ok($out2 < $out1, "but job debugging off $out1 > $out2");
+ok($out2 < $out1, 
+   "but job debugging off $out1 > $out2"
+   . " [this test is subject to a race condition. If you observe"
+   . " it failing, you might have success if you try it again.]");
 sleep 1;
 
 $Forks::Super::DEBUG = 0;

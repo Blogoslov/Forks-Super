@@ -108,9 +108,27 @@ sub waitall {
     if ($DEBUG) {
       debug("Forks::Super::waitall: caught pid $pid");
     }
-  } while isValidPid($pid) && ++$waited_for && Time::HiRes::gettimeofday() < $expire;
-  # $waited_for = -1 * ($waited_for + 0.5) if Time::HiRes::gettimeofday() < $expire;
+  } while isValidPid($pid,1) 
+    && ++$waited_for 
+    && Time::HiRes::gettimeofday() < $expire;
+
   return $waited_for;
+}
+
+# is return value from _reap/waitpid/wait a simple scalar or an
+# overloaded Forks::Super::Job object?
+
+our $OVERLOAD_RETURN;
+sub _reap_return {
+  my ($job) = @_;
+  if (!defined $OVERLOAD_RETURN) {
+    $OVERLOAD_RETURN = $Forks::Super::Job::OVERLOAD_ENABLED;
+  }
+
+# return $OVERLOAD_RETURN ? $job : $job->{real_pid};
+
+  my $pid = $job->{real_pid};
+  return $OVERLOAD_RETURN ? Forks::Super::Job::get($pid) : $pid;
 }
 
 #
@@ -157,7 +175,7 @@ sub _reap {
       debug("Forks::Super::_reap(): reaping $pid/$real_pid.");
     }
     if (not wantarray) {
-      return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $real_pid;
+      return _reap_return($job);
     }
     # return $real_pid if not wantarray;
 
@@ -165,11 +183,7 @@ sub _reap {
       = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
     debug("Forks::Super::_reap():  $nalive remain.") if $DEBUG;
     $job->_mark_reaped;
-    if ($Forks::Super::Job::OVERLOAD_ENABLED) {
-      return ($job, $nactive1, $nalive, $nactive2);
-    } else {
-      return ($real_pid, $nactive1, $nalive, $nactive2);
-    }
+    return (_reap_return($job), $nactive1, $nalive, $nactive2);
   }
 
 
@@ -198,7 +212,7 @@ sub _waitpid_any {
   my $expire = Time::HiRes::gettimeofday() + ($timeout || 9E9);
   my ($pid, $nactive2, $nalive, $nactive) = _reap($reap_bg_ok);
   unless ($no_hang) {
-    while (!isValidPid($pid) && $nalive > 0) {
+    while (!isValidPid($pid,1) && $nalive > 0) {
       if (Time::HiRes::gettimeofday() >= $expire) {
 	return TIMEOUT;
       }
@@ -250,7 +264,7 @@ sub _waitpid_target {
   }
   if ($job->{state} eq 'COMPLETE') {
     $job->_mark_reaped;
-    return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $job->{real_pid};
+    return _reap_return($job);
   } elsif ($no_hang  or
 	   $job->{state} eq 'REAPED') {
     return -1;
@@ -264,7 +278,7 @@ sub _waitpid_target {
       Forks::Super::Queue::check_queue() if $job->{state} =~ /DEFER|SUSPEND/;
     }
     $job->_mark_reaped;
-    return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $job->{real_pid};
+    return _reap_return($job);
   }
 }
 
@@ -279,7 +293,7 @@ sub _waitpid_name {
   foreach my $job (@jobs) {
     if ($job->{state} eq 'COMPLETE') {
       $job->_mark_reaped;
-      return $Forks::Super::Job::OVERLOAD_ENABLED ? $job : $job->{real_pid};
+      return _reap_return($job);
     } elsif ($job->{state} ne 'REAPED' && $job->{state} ne 'DEFERRED') {
       push @jobs_to_wait_for, $job;
     }
@@ -302,7 +316,7 @@ sub _waitpid_name {
     @jobs = grep { $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED'} @jobs_to_wait_for;
   }
   $jobs[0]->_mark_reaped;
-  return $Forks::Super::Job::OVERLOAD_ENABLED ? $jobs[0] : $jobs[0]->{real_pid};
+  return _reap_return($jobs[0]);
 }
 
 # wait on any process from a specific process group
@@ -311,7 +325,7 @@ sub _waitpid_pgrp {
   my $expire = Time::HiRes::gettimeofday() + ($timeout || 9E9);
   my ($pid, $nactive) = _reap($reap_bg_ok,$target);
   unless ($no_hang) {
-    while (!isValidPid($pid) && $nactive > 0) {
+    while (!isValidPid($pid,1) && $nactive > 0) {
       if (Time::HiRes::gettimeofday() >= $expire) {
 	return TIMEOUT;
       }

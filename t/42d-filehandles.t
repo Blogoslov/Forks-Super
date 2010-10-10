@@ -10,31 +10,11 @@ use warnings;
 
 ##################################################################
 #
-# this particular test is a failure point in v0.35 through v0.38
-# In about 10-20% of CPAN tester results,
-#     -- all 6 tests are ok
-#     -- the exit code of the test is 2
-#        From test summary report: (Wstat: 512 Tests: 6 Failed: 0)
-#     -- or sometimes the "status" is 139 (SIGSEGV + core dump)
-#     -- affects Linux and netbsd more than other archs
-#     -- affects archname =~ /x86_64-linux/ more than other archs
-#
-# The CPAN testers seem to reproduce it pretty easily, but
-# I have not been able to (even though I have x86_64-linux
-# and x86_64-linux-thread-multi versions of perl.
-#     -- Is there a stray SIGINT somewhere?
-#        -- v0.39 fork with timeout now sends SIGTERM instead of SIGINT.
-#           if we now observe spurious exit code 15, this is a likely
-#           culprit
-#     -- Does perl interpreter exit with code 2 under some conditions?
-# 
-# <XXX>This may be a consequence of the SIGCHLD handler running after
-# the END queue call has started. In v0.38 we disable the SIGCHLD handler
-# in the END queue -- we'll see if that helps.</XXX> No, that didn't help.
-#
-# In v0.39 the default is to use SIGHUP instead of SIGINT to timeout
-# a child. If the problem persists but the exit code becomes 1 instead
-# of 2, then the child killer is a likely culprit.
+# this particular test is a failure point in v0.35 through v0.39,
+# mainly x86_64-linux systems. It seems to be fixed since 0.40, 
+# when we try to use  Time::HiRes::setitimer  to trigger queue
+# checks instead of using a separate process which must occasionally
+# be restarted and killed.
 #
 ##################################################################
 
@@ -50,6 +30,7 @@ use warnings;
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 Forks::Super::Debug::_use_Carp_Always();

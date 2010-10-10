@@ -10,6 +10,7 @@
 
 package Forks::Super::Config;
 use Forks::Super::Debug qw(debug);
+use Forks::Super::SysInfo;
 use Carp;
 
 use Exporter;

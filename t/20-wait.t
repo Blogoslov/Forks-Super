@@ -41,12 +41,20 @@ for (my $i=0; $i<20; $i++) {
   $x{$pid} = $i;
 }
 $t = Time::HiRes::gettimeofday();
+
+my $waitfail = 0;
 while (0 < scalar keys %x) {
   my $p = wait;
   ok(isValidPid($p), "waited on arbitrary pid $p");
   ok(defined $x{$p}, "return value from wait was valid pid");
   ok($?>>8 == $x{$p}, "wait returned correct exit STATUS");
-  delete $x{$p};
+  if (defined $x{$p}) {
+    delete $x{$p};
+  } elsif (++$waitfail > 20) {
+    print STDERR "\nSomething is wrong -- return values from wait\n";
+    print STDERR "\nare not recognized.\nAborting.\n\n";
+    last;
+  }
 }
 $t = Time::HiRes::gettimeofday() - $t;
 ok($t <= 10.5,        ### 88 ### was 8 obs 10.23,10.40

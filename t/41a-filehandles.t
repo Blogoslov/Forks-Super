@@ -3,9 +3,6 @@ use Test::More tests => 11;
 use strict;
 use warnings;
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 #
 # test whether a parent process can have access to the
 # STDIN, STDOUT, and STDERR filehandles of a child
@@ -107,5 +104,3 @@ ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
 ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
 ok($err[-1] eq "$msg\n", "got Expected line from child error");
 waitall;
-
-eval { alarm 0 };

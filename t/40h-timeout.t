@@ -12,6 +12,7 @@ Forks::Super::Job::Timeout::warm_up();
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 #
@@ -24,6 +25,10 @@ SKIP: {
 
   if (!Forks::Super::Config::CONFIG_Perl_component("alarm")) {
     skip "alarm function unavailable on this system ($^O,$]), "
+      . "can't test timeout feature", 2;
+  }
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm incompatible with sleep on this system ($^O,$]), "
       . "can't test timeout feature", 2;
   }
 

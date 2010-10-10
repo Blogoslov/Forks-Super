@@ -20,6 +20,10 @@ SKIP: {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 3;
   }
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm/sleep incompatible on this system ($^O,$]), "
+      . "can't test timeout feature", 3;
+  }
 
 #######################################################
 

@@ -3,9 +3,6 @@ use Test::More tests => 2;
 use strict;
 use warnings;
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 #
 # test whether a parent process can have access to the
 # STDIN, STDOUT, and STDERR filehandles of a child
@@ -69,5 +66,3 @@ ok($pc_equal, "parent/child agree on output");
 use Carp;$SIG{SEGV} = sub {
   Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
 };
-
-eval { alarm 0 };

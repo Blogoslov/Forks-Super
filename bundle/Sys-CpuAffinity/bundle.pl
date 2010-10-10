@@ -1,6 +1,7 @@
 # bundle.pl to conditionally install a bundled submodule
 
-package Sys::CpuAffinity;
+package # hide from PAUSE
+Sys::CpuAffinity;
 use ExtUtils::MakeMaker;
 use strict;
 use warnings;

@@ -1,5 +1,3 @@
-
-
 ##! /usr/bin/perl -w
 # forked_harness.pl [options] tests
 #
@@ -65,8 +63,14 @@ use warnings;
 $| = 1;
 $^T = Time::HiRes::gettimeofday();
 if (${^TAINT}) {
-  $ENV{PATH} = "/bin:/usr/bin:/usr/local/bin";
+  if ($^O eq 'MSWin32') {
+    ($ENV{PATH}) = $ENV{PATH} =~ /(.*)/;
+  } else {
+    $ENV{PATH} = "/bin:/usr/bin:/usr/local/bin";
+  }
   ($^X)=$^X=~/(.*)/;
+  ($ENV{HOME})=$ENV{HOME}=~/(.*)/;
+  @ARGV = map /(.*)/, @ARGV;
 }
 
 my $timeout = 120;
@@ -106,6 +110,9 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
 my %fail = ();
+if (${^TAINT}) {
+  @perl_opts = map { /(.*)/ } @perl_opts;
+}
 
 $test_verbose ||= 0;
 $repeat = 1 if $repeat < 1;
@@ -170,7 +177,8 @@ my %colors = (ITERATION => 'bold white',
 &main;
 &summarize;
 &check_endgame if $check_endgame;
-exit $total_status >> 8;
+
+exit +($total_status > 254 ? 254 : $total_status) >> 8;
 
 #
 # handle some signals that might be generated in a test or by the
@@ -226,7 +234,8 @@ sub main {
 
       if (rand() > 0.95 || @Forks::Super::Queue::QUEUE > 0) {
 	my $reap = waitpid -1, WNOHANG;
-	while (Forks::Super::isValidPid($reap)) {
+#	while (Forks::Super::Util::isValidPid($reap, 1)) {
+	while (Forks::Super::Util::isValidPid($reap)) {
 	  return if process_test_output($reap) eq "ABORT";
 	  $reap = -1;
 	  $reap = waitpid -1, WNOHANG;
@@ -238,10 +247,13 @@ sub main {
       print "All tests launched for this iteration, waiting for results.\n";
     }
 
-    while (Forks::Super::Util::isValidPid(my $pid = wait)) {
+    my $pid = wait;
+#   while (Forks::Super::Util::isValidPid($pid, 1)) {
+    while (Forks::Super::Util::isValidPid($pid)) {
 
       return if process_test_output($pid) eq "ABORT";
 
+      $pid = wait;
     }
     if ($total_status > 0) {
       last;
@@ -292,10 +304,17 @@ sub launch_test_file {
     $child_fh = "in,$child_fh";
   }
 
+  @cmd = map /(.*)/, @cmd if ${^TAINT};
+#use Scalar::Util qw(tainted);
+#foreach my $cmd (@cmd) {
+#  warn "$cmd: ", tainted($cmd) ? "tainted\n" : "not tainted\n";
+#}
+
   my $pid = fork {
     cmd => [ @cmd ],
     child_fh => $child_fh,
-    timeout => $timeout
+    timeout => $timeout,
+    # callback => sub { print "XXXXXX Finished job $_[0] $_[1]\n" },
   };
 
   $j{$pid} = $test_file;
@@ -501,7 +520,7 @@ sub process_test_output {
       next if ref $j ne "Forks::Super::Job";
       next if not defined $j->{status};
       if ($j->{status} eq "ACTIVE" 
-	  && Forks::Super::isValidPid($j->{real_pid})) {
+	  && Forks::Super::Util::isValidPid($j->{real_pid})) {
 	$num_terminated += kill 'TERM', $j->{real_pid};
       }
     }
@@ -551,7 +570,7 @@ sub summarize {
 # This is mainly helpful for testing the Forks::Super module.
 #
 sub check_endgame {
-  print "Checking endgame $Forks::Super::FH_DIR\n";
+  print "Checking endgame $Forks::Super::IPC_DIR\n";
 
   # fork so the main process can exit and the Forks::Super
   # module can start cleanup.
@@ -559,11 +578,11 @@ sub check_endgame {
   # Forks::Super shouldn't leave temporary dirs/files around
   # after testing, but it might
 
-  my $x = $Forks::Super::FH_DIR;
+  my $x = $Forks::Super::IPC_DIR;
   if (!defined $x) {
     my $p = fork { child_fh => "out", sub => {} };
     waitpid $p, 0;
-    $x = $Forks::Super::FH_DIR;
+    $x = $Forks::Super::IPC_DIR;
   }
 
   CORE::fork() && return;

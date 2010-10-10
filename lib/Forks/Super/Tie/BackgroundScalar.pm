@@ -101,7 +101,7 @@ sub _retrieve_value {
   my $self = shift;
   if (!$self->{job}->is_complete) {
     my $pid = Forks::Super::waitpid $self->{job_id}, WREAP_BG_OK;
-    if ($pid != $self->{job}->{real_pid}) {
+    if ($pid != $self->{job}->{real_pid} && $pid != $self->{job}->{pid}) {
       carp "Forks::Super::bg_eval: failed to retrieve result from process!\n";
       $self->{value_set} = 1;
       return;

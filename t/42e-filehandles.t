@@ -11,6 +11,7 @@ use warnings;
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 
@@ -51,7 +52,8 @@ ok(@out == 15,                             ### 7 ###
 # stderr could receive 2 or 3 lines, depending on whether 
 # error from $command1 is concatenated to $command2 or
 # goes to actual standard error.
-ok(@err == 2 || @err == 3, "expect 2-3, got " . scalar @err . " lines of error");
+ok(@err == 2 || @err == 3, 
+   "expect 2-3, got " . scalar @err . " lines of error");
 
 if (@out != 15 || (@err != 2 && @err != 3)) {
   print STDERR "\@out:\n @out\n-----------------\nerr:\n @err\n----------\n";
@@ -59,4 +61,8 @@ if (@out != 15 || (@err != 2 && @err != 3)) {
 
 ok($out[0] eq "$msg\n", "got expected output from child");
 ok($err[0] =~ /received message $msg/, "got expected error from child");
+
+#############################################################################
+
+waitall;
 

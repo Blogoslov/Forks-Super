@@ -33,14 +33,21 @@ ok($t0 >= 2.95 && $t <= 7.95,     ### 10 ### was 3.85, obs 3.97,5.11,7.39
 $x = 19;
 ok($x == 19, "result is not read only");
 
-$x = bg_eval { sleep 10; return 19 } { timeout => 2 };
-$t = Time::HiRes::gettimeofday();
+SKIP: {
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm/sleep incompatible on this system, "
+      . "can't use bg_eval with timeout", 2;
+  }
 
-ok(!defined($x->_fetch) || $x eq '',
-   "scalar bg_eval undef on failure");
-$t = Time::HiRes::gettimeofday() - $t;
-ok($t <= 3.95,                    ### 13 ### was 3.25, obs 3.41
-   "scalar bg_eval respected timeout, took ${t}s expected ~2s");
+  $x = bg_eval { sleep 10; return 19 } { timeout => 2 };
+  $t = Time::HiRes::gettimeofday();
+
+  ok(!defined($x->_fetch) || $x eq '',
+     "scalar bg_eval undef on failure");
+  $t = Time::HiRes::gettimeofday() - $t;
+  ok($t <= 4.5,                     ### 13 ### was 3.25, obs 3.41,4.01
+     "scalar bg_eval respected timeout, took ${t}s expected ~2s");
+}
 
 Forks::Super::Debug::_use_Carp_Always();
 

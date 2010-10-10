@@ -17,7 +17,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -69,7 +69,24 @@ sub is_number {
 # results in a "deferred" job, this function will
 # return zero.
 sub isValidPid {
-  my ($pid) = @_;
+  my ($pid, $is_wait) = @_;
+
+  if (ref $pid eq 'Forks::Super::Job') {
+    # DWIM - if the job is completed, isValidPid() was probably called from
+    #    the output of a waitpid/wait call, so test {real_pid} and not {pid}
+    #    DWIM behavior can be overridden with $is_wait argument.
+
+    $is_wait ||= 0;
+    if ($is_wait < 0) {
+      $pid = $pid->{pid};
+    } elsif ($is_wait > 0) {
+      $pid = $pid->{real_pid};
+    } elsif ($pid->is_complete) {
+      $pid = $pid->{real_pid} || $pid->{pid}
+    } else {
+      $pid = $pid->{pid};
+    }
+  }
   return 0 if !defined $pid || !is_number($pid);
   return &IS_WIN32 ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
 }

@@ -1,5 +1,6 @@
 Thoughts about future releases, in no particular order.
-Feel free to share your thoughts with me at  mob@cpan.org .
+Feel free to share your thoughts with me at  mob@cpan.org 
+or through  http://rt.cpan.org/NoAuth/Bugs.html?Dist=Forks-Super
 
 Possible TODOs:
 
@@ -7,11 +8,6 @@ Possible TODOs:
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
 		"non functional"). [Do I need to start putting
 		together a Sys::FreeMemory distribution, too?]
-
-    _X_ implement child handles through pipe objects
-	___ use IO::Pipe
-	_X_ document, extend file vs. socket discussion
-	    On MSWin32, for example, pipe capacity is 512 bytes?
 
     _x_ support sockets/pipes for cmd-style forks like IPC::Open3 does.
 	_X_ for Unixy systems
@@ -41,7 +37,7 @@ Possible TODOs:
 	    ___ No Cygwin::pid_to_winpid
 	_X_ linux 5.6.2, failures in 41f, 42f
 	___ linux make stresstest sometimes hangs
-	    ___ failures related to overloading!  $job||1 idiom looks
+	    _x_ failures related to overloading!  $job||1 idiom looks
                 like trouble in child
 	    I think we can live with intermittent failures for now.
 
@@ -76,13 +72,13 @@ Possible TODOs:
 	a small value when you have lots of short tasks, and
 	longer for longer tasks".
 
-    ___ Test needed, Win32+cmd, See Job.pm:344 (404?) 
+    ___ Test needed, Win32+cmd, See Job.pm:344 (416?) 
         (FSJO::Win32::openX_win32_process?)
 
     _x_ With cmd and child_fh => "in" where cmd has pipes (cmd1 | cmd2),
 	'<.fhfork/.fh_xxx' needs to go _before_ the first pipe
 	_X_ solve basic case
-	___ solve complicated case, where first pipe char might be a
+	_x_ solve complicated case, where first pipe char might be a
 	    quoted argument, or part of an argument.
 	    e.g., what if the external command is
 		perl -F/\\\|/ -ane 'BLOCK' < .fhforkXXX/.fh_XXX | ./other_prog
@@ -90,14 +86,6 @@ Possible TODOs:
     ___ fork { run => [ \@cmd, ... ] }
 	to invoke or emulate IPC::Run's rich feature set
 	___ What else can I learn by studying IPC::Run?
-
-    _X_ More tests from a child process and see what breaks.
-		use Forks::Super;
-		CORE::fork() && exit;
-		# now $$ != $MAIN_PID but this is the
-		# "parent" process of Forks::Super.
-		do_something_and_see_if_it_works();
-        _X_ works good. MAIN_PID doesn't get initialized until fork() call
 
     _o_ Investigate "filehandle leaks" in t/forked_harness.pl.
 
@@ -113,14 +101,6 @@ Possible TODOs:
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
 
-    _o_ fork { input_fh => [ 'X', 'Y', 'Z' ], output_fh => [ 'STDOUT', 'A' ] }
-
-		open input and output filehandles in the child with the given 
-		names, accessible in the parent at something like 
-		$Forks::Super::CHILD_FH{$pid}{X}
-
-	Plans for Forks::Super::IPCChannel in 1.0 should handle this.
-
     ___ what else to configure at build time?
 	___ e.g. "has Unixy signal framework"
 	___ "is Windows"
@@ -130,9 +110,6 @@ Possible TODOs:
         ___ can use Time::HiRes::setitimer and a map of which ITIMER_xxx
             sets off which signal. We should use alternative to SIGALRM
             if possible.
-
-    _X_ Reimplement F::S::Tie::BackgroundScalar to not require
-	dereferencing. Say, by using overloading.
 
     ___ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
 
@@ -158,7 +135,7 @@ Possible TODOs:
 	    in a buffer to be delivered at a more convenient time so that
 	    the write operation doesn't block.
 
-    ___ The IPC module needs to create a temporary directory that will
+    ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
         has solved this problem better than I did?
 
@@ -169,11 +146,6 @@ Possible TODOs:
 
     ___ Is it possible/desirable to use threads in place of "queue
 	monitor process", "productive pause"?
-
-    _X_ Does Forks::Super work in taint mode? Need some tests to make
-	sure.
-
-	Can run t/forked_harness.pl with  -p -t  or  -p -T  options.
 
     _x_ Make Win32::API a required module for MSWin32.
 
@@ -217,31 +189,75 @@ Possible TODOs:
 	"Use of interval times may interfere with alarm(), sleep(),
 	and usleep() ... anything may happen; it may work, it may not".
 
-    _x_ For clarity. separate F::S::C config_module, config_component,
-	config_external_program
+    _X_ Document how to use $ENV{FORKS_SUPER_CONFIG}
 
-    _O_ For organization, create F::S::XXX::Parent, F::S::XXX::Child
-        modules, with function that are only to be executed in the
-	parent or child.
-
-	Parent and child specific modules can be 'require'd after a
-	fork (or will this take too much time)? Parent modules can be
-	unimported by the child.
-
-	Since this looks like it might produce some overhead, make
-	it a toggleable feature? (So don't use it when there are lots
-	of small tasks?)
-
-    ___ Document how to use $ENV{FORKS_SUPER_CONFIG}
-
-    _X_ stresstest issues -- children launched by t/forked_harness die
-	quickly (<0.1s) with status 139 (SIGSEGV + core dump) (Cygwin
-        5.10 -- new signal handler may be to blame?)
-	_x_ solution was don't erase the signal handlers in the child ...
-
-    ___ unbundle Sys::CpuAffinity. At CPAN it shows that Sys::CpuAffinity
+    _X_ unbundle Sys::CpuAffinity. At CPAN it shows that Sys::CpuAffinity
         module is part of Forks::Super distribution, which is true but
         it deemphasizes that it is also has its own distribution. I think
         the current configuration gets it less attention from
 	CPAN testers, too.
+	_X_ bundling OK, just need to set "no_index" in META.yml
+
+    _X_ From Ed B. 2010-10-04, note in cmd/exec mode that output
+        may be buffered. Convention of F::S::J::read_stdXXX is to return
+        empty list/"" when we are waiting for output, undef when the
+        bg process has stopped producting output.
+
+    _X_ Also from Ed, 2010-10-04, allow user to specify the IPC
+        directory.
+        _X_ Maybe as both an import directive
+            use Forks::Super IPC_DIR => $directory
+        _X_ and as a subroutine
+            Forks::Super::Job::Ipc::set_ipc_dir()
+        _X_ and as a global variable to set directly
+            $Forks::Super::FH_DIR
+        _X_ and from environment variable
+          $ENV{IPC_DIR}
+        _X_ WARN when IPC_DIR is specified but not used.
+
+    _X_ $Forks::Super::IPC_DIR should be a tied scalar so that after a
+        direct assignment, a dedicated temporary directory
+        is created under the specified directory.
+
+    ___ Demos/examples/cookbook section.
+        ___ Perform 1000's of jobs, 20 at a time
+            ___ with queueing to perform other tasks
+            ___ example: web crawler
+	    ___ example: multi-threaded du
+        ___ timeout long running jobs
+        ___ manipulate CPU affinities
+        ___ dependencies
+        ___ interactive client/server example of IPC
+        ___ see t/forked_harness.pl
+        ___ load management
+            ___ block while system is busy
+            ___ suspend/resume
+        ___ bg_eval, bg_qx examples
+        ___ how to: use sleep with Forks::Super
+        ___ how to: use alarm with Forks::Super
+        ___ changing IPC_DIR
+        ___ tuning Forks::Super for fast jobs, slow jobs,
+	    memory intensive jobs, cpu intensive jobs,
+	    I/O bound jobs
+        ___ scheduler app, running for days at a time
+
+    ___ Forks::Super::Job::dispose( @jobs ) method
+        Closes all filehandles
+        Erases all temporary files
+        Removes entry from @ALL_JOBS, %ALL_JOBS
+        Erases hash
+        ___ test
+
+    _O_ Set $CHILD_FORK_OK from an environment variable? Nah.
+
+    _X_ overloading problems with 5.8?
+	_X_ add job to @ALL_JOBS *after* it is blessed
+	    fixes problems on 5.8.6, 5.8.5, 5.8.4
+	_X_ update doc
+
+    _x_ add to system-limits.PL - test if alarm and sleep 
+	are compatible.
+        _X_ $compatible = 0;
+            eval { alarm 1; sleep 3; $compatible = 1 };
+	___ Document
 

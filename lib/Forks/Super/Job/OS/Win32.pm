@@ -344,7 +344,13 @@ sub get_system_info {
 sub open_win32_process {
   my ($job) = @_;
   my $cmd = join ' ', @{$job->{cmd}};
-  my $pid = open my $proch, "-|", "$cmd";
+
+
+  # PIPE OPEN FAILS IN TAINT MODE -- WHY?
+
+  my $pid = open my $proch, "-|", "$cmd"; 
+  $Forks::Super::Job::WIN32_PROC = 0;
+
   Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
   $Forks::Super::Job::WIN32_PROC_PID = $pid;
 

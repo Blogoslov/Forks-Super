@@ -13,6 +13,7 @@ use warnings;
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 $SIG{SEGV} = sub { Carp::cluck "SIGSEGV caught!\n" };

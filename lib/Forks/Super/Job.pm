@@ -25,13 +25,21 @@ use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
 our $INSIDE_END_QUEUE = 0;
 
-enable_overload() if $ENV{"FORKS_SUPER_JOB_OVERLOAD"};
+my $use_overload = $ENV{FORKS_SUPER_JOB_OVERLOAD};
+if (!defined($use_overload)) {
+  $use_overload = 1;
+}
+if ($use_overload) {
+  enable_overload();
+} else {
+  disable_overload();
+}
 
 #############################################################################
 # Object methods (meant to be called as $job->xxx(@args))
@@ -51,8 +59,9 @@ sub new {
   if (!defined $this->{debug}) {
     $this->{debug} = $Forks::Super::Debug::DEBUG;
   }
-  push @ALL_JOBS, $this;
+  # 0.41: fix overload bug here by putting  bless  before  push @ALL_JOBS
   bless $this, 'Forks::Super::Job';
+  push @ALL_JOBS, $this;
   if ($this->{debug}) {
     debug("New job created: ", $this->toString());
   }
@@ -118,7 +127,8 @@ sub toString {
   my $job = shift;
   my @to_display = qw(pid state create);
   foreach my $attr (qw(real_pid style cmd exec sub args start end reaped
-		       status closure pgid child_fh queue_priority)) {
+		       status closure pgid child_fh queue_priority
+		       timeout expiration)) {
     push @to_display, $attr if defined $job->{$attr};
   }
   my @output = ();
@@ -406,10 +416,12 @@ sub launch {
   if ($job->{style} eq 'cmd') {
 
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
+
     my $c1;
     if (&IS_WIN32) {
       local $ENV{_FORK_PPID} = $$;
       local $ENV{_FORK_PID} = $$;
+
 
       # There are lots of ways to spawn a process in Windows
       if (1 && Forks::Super::Config::CONFIG('Win32::Process')) {
@@ -426,7 +438,7 @@ sub launch {
     } else {
       $c1 = system( @{$job->{cmd}} );
     }
-    debug("Exit code of $$ was $c1") if $job->{debug};
+    debug("Exit code of $$ was $c1 ", $c1>>8) if $job->{debug};
     deinit_child();
     exit $c1 >> 8;
   } elsif ($job->{style} eq 'exec') {
@@ -837,6 +849,9 @@ sub get {
   if (!defined $id) {
     Carp::cluck "undef value passed to Forks::Super::Job::get()";
   }
+  if (ref $id eq 'Forks::Super::Job') {
+    return $id;
+  }
   if (defined $ALL_JOBS{$id}) {
     return $ALL_JOBS{$id};
   }
@@ -993,7 +1008,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.40
+0.41
 
 =head1 SYNOPSIS
 
@@ -1104,12 +1119,21 @@ For jobs that are on the job queue and have not started yet.
 
 =item C<ACTIVE>
 
-For jobs that have started in a child process
+For jobs that have started in a child process and are,
+to the knowledge of the parent process, still running.
 
 =item C<COMPLETE>
 
 For jobs that have completed and caused the parent process to
 receive a C<SIGCHLD> signal, but have not been reaped.
+
+The difference between a C<COMPLETE> job and a C<REAPED> job
+is whether the job's process identifier has been returned in
+a call to C<Forks::Super::wait> or C<Forks::Super::waitpid>
+(or implicitly returned in a call to C<Forks::Super::waitall>).
+When the process gets reaped, the global variable C<$?>
+(see L<perlvar/"$CHILD_ERROR">) will contain the exit status
+of the process, until the next time a process is reaped.
 
 =item C<REAPED>
 
@@ -1121,7 +1145,7 @@ C<Forks::Super::waitpid>, or C<Forks::Super::waitall>.
 The job has started but it has been suspended (with a C<SIGSTOP>
 or other appropriate mechanism for your operating system) and
 is not currently running. A suspended job will not consume CPU
-resources but my tie up memory, I/O, and network resources.
+resources but my tie up memory resources.
 
 =item C<SUSPENDED-DEFERRED>
 
@@ -1219,9 +1243,9 @@ output and standard error from the child process, respectively.
 
 =head1 FUNCTIONS
 
-=over 4
-
 =head3 get
+
+=over 4
 
 =item C< $job = Forks::Super::Job::get($pidOrName) >
 
@@ -1257,9 +1281,9 @@ A C<Forks::Super::Job> object recognizes the following methods.
 In general, these methods should only be used from the foreground
 process (the process that spawned the background job).
 
-=over 4
-
 =head3 waitpid
+
+=over 4
 
 =item C<< $job->wait( [$timeout] ) >>
 
@@ -1268,21 +1292,33 @@ process (the process that spawned the background job).
 Convenience method to wait until or test whether the specified
 job has completed. See L<Forks::Super::waitpid|Forks::Super/"waitpid">.
 
+=back
+
 =head3 kill
+
+=over 4
 
 =item C<< $job->kill($signal) >>
 
 Convenience method to send a signal to a background job.
 See L<Forks::Super::kill|Forks::Super/"kill">.
 
+=back
+
 =head3 suspend
+
+=over 4
 
 =item C<< $job->suspend >>
 
 When called on an active job, suspends the background process with 
 C<SIGSTOP> or other mechanism appropriate for the operating system.
 
+=back
+
 =head3 resume
+
+=over 4
 
 =item C<< $job->resume >>
 
@@ -1290,7 +1326,11 @@ When called on a suspended job (see L<< suspend|"$job->suspend" >>,
 above), resumes the background process with C<SIGCONT> or other mechanism 
 appropriate for the operating system.
 
+=back
+
 =head3 is_E<lt>stateE<gt>
+
+=over 4
 
 =item C<< $job->is_complete >>
 
@@ -1311,7 +1351,11 @@ a background process.
 Indicates whether the specified job has started but is currently
 in a suspended state.
 
+=back
+
 =head3 toString
+
+=over 4
 
 =item C<< $job->toString() >>
 
@@ -1319,7 +1363,11 @@ in a suspended state.
 
 Outputs a string description of the important features of the job.
 
+=back
+
 =head3 write_stdin
+
+=over 4
 
 =item C<< $job->write_stdin(@msg) >>
 
@@ -1329,7 +1377,11 @@ input from interprocess communication. Writing to a closed
 handle or writing to a process that is not configured for IPC
 will result in a warning.
 
+=back
+
 =head3 read_stdXXX
+
+=over 4
 
 =item C<< $line = $job->read_stdout() >>
 
@@ -1355,7 +1407,11 @@ Reading from a closed handle, or calling these methods on a
 process that has not been configured for IPC will result in
 a warning.
 
+=back
+
 =head3 close_fh
+
+=over 4
 
 =item C<< $job->close_fh([@handle_id]) >>
 
@@ -1387,7 +1443,7 @@ a process ID (or job ID). The value can be passed to functions
 like C<kill> and C<waitpid>.
 
     if ($job_or_pid != $another_pid) { ... }
-    kill 'TERM', $job_or_pid;    
+    kill 'TERM', $job_or_pid;
 
 But you can also access the attributes and methods of the
 C<Forks::Super::Job> object.
@@ -1399,42 +1455,30 @@ Even when overloading is enabled, C<Forks::Super::fork()>
 still returns a simple scalar value of 0 to the child process
 (when a value is returned).
 
-B<Overloading is not enabled by default in this version
-of C<Forks::Super> >. There are two ways you can enable this
-feature:
+Since v0.41, this feature is enabled by default.
 
-When this feature is enabled, the return value of
-L<Forks::Super::wait()|Forks::Super/"wait"> and
-L<Forks::Super::waitpid()|Forks::Super/"waitpid"> might also
-be an overload C<Forks::Super::Job> object. (But if C<wait>/C<waitpid>
-is returning an indicator value like C<0> or C<-1>, then those
-return values are just simple scalars.)
+Whether the overloading is enabled by default or not, you can
+override the default behavior in three ways:
 
 =over 4
 
-=item 1. Pass the C<overload> parameter when C<Forks::Super> is loaded.
+=item 1. Set the environment variable C<FORKS_SUPER_JOB_OVERLOAD>
+to a true or false value
 
-    use Forks::Super 'overload';
-    $job = fork { sub => { sleep 5 } };
-    print "New job: ", $job->toString(), "\n";
+    $ FORKS_SUPER_JOB_OVERLOAD=0 perl a_script_that_uses_Forks_Super.pl ...
 
-=item 2. Call C<Forks::Super::Job::enable_overload()>.
+=item 2. Pass the parameter C<< overload >> to the module import function
+with a C<0> or C<1> value
 
-C<Forks::Super::Job::enable_overload()> enables this
-feature at run-time.
+    use Forks::Super overload => 1;  # always enable overload feature
 
-    use Forks::Super;
-    $pid = fork { cmd => [ "./mycommand.sh", "--42" ] };
-    print ref $pid;    # empty string
+=item 3. At runtime, call
 
     Forks::Super::Job::enable_overload();
-    $pid = fork { cmd => [ "./mycommand.sh", "--19" ] };
-    print ref $pid;    # Forks::Super::Job
+    Forks::Super::Job::disable_overload();
 
-There is also a C<Forks::Super::Job::disable_overload()> 
-function to disable this feature at run-time. In principle,
-you should be able to enable and disable this feature as
-often as you wish.
+In principle you may call these methods at any time and as often 
+as you wish.
 
 =back
 

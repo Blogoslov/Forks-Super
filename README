@@ -1,5 +1,5 @@
 
-Forks::Super version 0.40
+Forks::Super version 0.41
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -59,6 +59,12 @@ and managing them, including:
       On some operating systems, the priority and CPU affinity
       of the child processes can be set.
 
+   *  process identifier objects
+
+      Return values from fork/wait/waitpid calls are overloaded
+      objects with methods for process monitoring, signalling,
+      and interprocess communication.
+
 
 RECOMMENDED PERL VERSION
 
@@ -111,7 +117,7 @@ but will still be able to perform most of its functions
 without them:
 
     DateTime::Format::Natural
-    Win32::Process [Windows and Cygwin]
+    Win32::Process, Win32::API [Windows and Cygwin]
     Win32          [Windows]
     Sys::CpuAffinity 
     Sys::CpuLoadX

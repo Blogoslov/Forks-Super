@@ -13,11 +13,9 @@ our $TIMES_TO_FAIL = 0;
 
 sub mockfork {
   if ($TIMES_TO_FAIL-- > 0) {
-    # print STDERR "Mocking a failed fork ...\n";
     sleep 1;
     return undef;
   }
-  # print STDERR "Mock fork allowing fork to proceed ...\n";
   return CORE::fork();
 }
 

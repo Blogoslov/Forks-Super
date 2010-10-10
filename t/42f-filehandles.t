@@ -13,6 +13,7 @@ use warnings;
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
+  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 
@@ -59,6 +60,8 @@ ok(@err == 1, scalar @err . " == 1 line from STDERR [exec]");
 ok($out[0] eq "$msg\n", "got Expected first line from child [exec]");
 ok($out[1] eq "$msg\n", "got Expected second line from child [exec]");
 ok($out[2] eq "\n", "got Expected third line from child [exec]");
-ok($err[0] =~ /received message $msg/, "got Expected msg on child stderr [exec]");
+ok($err[0] =~ /received message $msg/, 
+   "got Expected msg on child stderr [exec]");
+
 waitall;
 

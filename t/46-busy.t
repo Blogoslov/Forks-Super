@@ -95,7 +95,8 @@ SKIP: {
     skip "test could not generate a cpu load on this machine", 1;
   }
   $pid2 = fork { sub => sub { sleep 4 } };
-  ok(isValidPid($pid) && !isValidPid($pid2), "$pid2 fail while system is loaded");
+  ok(isValidPid($pid) && !isValidPid($pid2), 
+     "$pid2 fail while system is loaded");
 }
 
 # on MSWin32 it is harder to gracefully kill a child process,
@@ -104,8 +105,9 @@ SKIP: {
 
 if ($^O eq 'MSWin32') {
   waitall;
+} elsif (ref $pid eq 'Forks::Super::Job') {
+  kill 'INT', $pid->{real_pid};
 } else {
   kill 'INT',$pid;
 }
 exit 0;
-

@@ -88,9 +88,9 @@ sub NEXTKEY { each %REGISTRY }
 sub UNTIE { }
 
 sub register_signal_handler ($$$) {
-  # XXX - assume (1) $index provided, (2) $signal is canonical signal name,
-  #       (3) $handler name is qualified correctly.  Signal::Handler::Super
-  #       can relax all three of those assumptions
+  # assume (1) $index provided, (2) $signal is canonical signal name,
+  # (3) $handler name is qualified correctly.  Signal::Handler::Super
+  # can relax all three of those assumptions
   my ($signal, $index, $handler) = @_;
 
   if ($signal !~ /__\w+__/ && defined $handler) {

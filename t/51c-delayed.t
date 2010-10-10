@@ -15,7 +15,7 @@ my $pp = waitpid $pid, 0;
 my $job = Forks::Super::Job::get($pid);
 my $elapsed = $job->{start} - $t;
 
-ok(!isValidPid($pid) && $pp == $pid || $pp == $job->{real_pid}, 
+ok(!isValidPid($pid,-1) && $pp == $pid || $pp == $job->{real_pid}, 
    "created task with natural language delay");
 ok($elapsed >= 4 && $elapsed <= 6, "natural language delay was respected");
 
@@ -31,7 +31,7 @@ $pid = fork { start_after => $future,
 $pp = waitpid $pid, 0;
 $job = Forks::Super::Job::get($pid);
 $elapsed = $job->{start} - $t;
-ok(!isValidPid($pid) && $pid == $pp || $pp == $job->{real_pid}, 
+ok(!isValidPid($pid,-1) && $pid == $pp || $pp == $job->{real_pid}, 
    "created another task with natural language start_after");
 ok($elapsed >= 5 && $elapsed <= 7, 
    "natural language start_after was respected");

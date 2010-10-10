@@ -31,7 +31,8 @@ use warnings;
 our @EXPORT = qw(close_fh);
 our $VERSION = $Forks::Super::Util::VERSION;
 
-our (%FILENO, %SIG_OLD, $FH_COUNT, $FH_DIR_DEDICATED, @FH_FILES, %FH_FILES);
+our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED, 
+     @IPC_FILES, %IPC_FILES);
 our ($SIGNALS_TRAPPED, $_CLEANUP, $_SIGNAL_TRAPPED_SO_SUPPRESS_INFO) = (0,0,0);
 our $MAIN_PID = $$;
 our $__OPEN_FH = 0; # for debugging, monitoring filehandle usage. Not ready.
@@ -41,12 +42,31 @@ our $__MAX_OPEN_FH = do {
 };
 
 
+our $_IPC_DIR;
+{
 
-# use $Forks::Super::FH_DIR instead of package scoped var --
-# make it easy for Forks::Super user to manually set this var.
+  package Forks::Super::Job::Ipc::Tie;
+  # attach special behavior to $Forks::Super::IPC_DIR ==>
+  # when this value is set, should call set_ipc_dir.
 
-
-
+  sub TIESCALAR {
+    return bless {}, __PACKAGE__;
+  }
+  sub FETCH {
+    my $self = shift;
+    return $_IPC_DIR;
+  }
+  sub STORE {
+    my ($self, $value) = @_;
+    my $old = $_IPC_DIR;
+    Forks::Super::Job::Ipc::set_ipc_dir($value, 1);
+    return $old;
+  }
+  sub DEFINED {
+    my $self = shift;
+    return defined $_IPC_DIR;
+  }
+}
 
 {
   # independent implementation of Symbol::gensym -- 
@@ -510,13 +530,12 @@ sub _choose_fh_filename {
   if (!Forks::Super::Config::CONFIG('filehandles')) {
     return;
   }
-  if (not defined $Forks::Super::FH_DIR) {
+  if (not defined $_IPC_DIR) {
     _identify_shared_fh_dir();
   }
 
-  $FH_COUNT++;
-  my $file = sprintf ("%s/%s%03d", $Forks::Super::FH_DIR,
-		      $basename, $FH_COUNT);
+  $IPC_COUNT++;
+  my $file = sprintf ("%s/%s%03d", $_IPC_DIR, $basename, $IPC_COUNT);
   if (defined $suffix) {
     $file .= $suffix;
   }
@@ -525,10 +544,10 @@ sub _choose_fh_filename {
     $file =~ s!/!\\!g;
   }
 
-  push @FH_FILES, $file;
-  $FH_FILES{$file} = [ @debug_info ];
+  push @IPC_FILES, $file;
+  $IPC_FILES{$file} = [ @debug_info ];
 
-  if (!$FH_DIR_DEDICATED && -f $file) {
+  if (!$IPC_DIR_DEDICATED && -f $file) {
     carp "Forks::Super::Job::_choose_fh_filename: ",
       "IPC file $file already exists!\n";
     debug("$file already exists ...") if $DEBUG;
@@ -541,7 +560,7 @@ sub _choose_fh_filename {
 # handle interprocess communication.
 #
 sub _identify_shared_fh_dir {
-  return if defined $Forks::Super::FH_DIR;
+  return if defined $_IPC_DIR;
   #Forks::Super::Config::unconfig('filehandles');
 
   # what are the good candidates ???
@@ -557,101 +576,105 @@ sub _identify_shared_fh_dir {
     unshift @search_dirs, '.';
     push @search_dirs, '/tmp', '/var/tmp';
   }
-  if ($ENV{FH_DIR}) {
-    unshift @search_dirs, $ENV{FH_DIR};
-  }
 
   foreach my $dir (@search_dirs) {
-
     next unless defined $dir && $dir =~ /\S/;
     debug("Considering $dir as shared filehandle dir ...") if $DEBUG;
-    next unless -d $dir;
-    next unless -r $dir && -w $dir && -x $dir;
     if (Forks::Super::Config::configif('filehandles')) {
-      _set_fh_dir($dir);
-      debug("Selected $Forks::Super::FH_DIR as shared filehandle dir ...")
-	if $DEBUG;
+      if (set_ipc_dir($dir,0)) {
+	debug("Selected $_IPC_DIR as shared filehandle dir ...")
+	  if $DEBUG;
+	last;
+      }
     }
-    last;
   }
   return;
 }
 
-sub _set_fh_dir {
-  my ($dir) = @_;
-  $Forks::Super::FH_DIR = $dir;
-  $FH_DIR_DEDICATED = 0;
-
-  my $dirname = ".fhfork$$";
-
-  if (-e "$dir/$dirname") {
-    my $n = 0;
-    while (-e "$dir/$dirname-$n") {
-      $n++;
-    }
-    if (mkdir "$dir/$dirname-$n"
-	and -r "$dir/$dirname-$n"
-	and -w "$dir/$dirname-$n"
-	and -x "$dir/$dirname-$n") {
-      $Forks::Super::FH_DIR = "$dir/$dirname-$n";
-      $FH_DIR_DEDICATED = 1;
-      debug("dedicated fh dir: $Forks::Super::FH_DIR") if $DEBUG;
-
-      my $readme = "$Forks::Super::FH_DIR/README.txt";
-      open my $readme_fh, '>', $readme;
-      my $localtime = scalar localtime;
-      print $readme_fh <<"____;";
-This directory was created by process $$ at $localtime
-running $0 @ARGV. 
-
-It should be/have been cleaned up when the process completes/completed.
-If that didn't happen for some reason, it is safe to delete
-this directory.
-
-____;
-      close $readme_fh; # ';
-      push @FH_FILES, $readme;
-      $FH_FILES{$readme} = [ purpose => 'README' ];
-
-    } elsif ($DEBUG) {
-      debug("failed to make dedicated fh dir: $dir/$dirname-$n");
-    }
-  } else {
-    if (mkdir "$dir/$dirname"
-	and -r "$dir/$dirname"
-	and -w "$dir/$dirname"
-	and -x "$dir/$dirname") {
-      $Forks::Super::FH_DIR = "$dir/$dirname";
-      $FH_DIR_DEDICATED = 1;
-      my $readme = "$Forks::Super::FH_DIR/README.txt";
-      open my $readme_fh, '>', $readme;
-      my $localtime = scalar localtime;
-      print $readme_fh <<"____;";
-This directory was created by process $$ at $localtime
-running $0 @ARGV. 
-
-It should be/have been cleaned up when the process completes/completed.
-If that didn't happen for some reason, it is safe to delete
-this directory.
-
-____;
-      close $readme_fh; # ';
-      push @FH_FILES, $readme;
-      $FH_FILES{$readme} = [ purpose => 'README' ];
-
-      if ($DEBUG) {
-	debug("dedicated fh dir: $Forks::Super::FH_DIR");
+# attempt to set $_IPC_DIR / $Forks::Super::IPC_DIR. Will fail if
+# input is not a good directory name.
+sub set_ipc_dir {
+  my ($dir, $carp) = @_;
+  return if !defined($dir) || $dir !~ /\S/;
+  if (-e $dir && ! -d $dir) {
+    carp "Forks::Super::set_ipc_dir: \"$dir\" is not a directory\n" if $carp;
+    return;
+  }
+  if (! -d $dir) {
+    if (mkdir($dir,0777)) {
+      if ($carp) {
+        carp "Forks::Super::set_ipc_dir: Created IPC directory \"$dir\"\n";
       }
-    } elsif ($DEBUG) {
-      debug("Failed to make dedicated fh dir: $dir/$dirname");
+    } else {
+      carp "Forks::Super::set_ipc_dir: ",
+        "IPC directory \"$dir\" does not exist and could not be created: $!\n"
+          if $carp;
+      return;
     }
   }
-  return;
+  if ((! -r $dir) || (! -w $dir) || (! -x $dir)) {
+    carp "Forks::Super::set_ipc_dir: ",
+      "Insufficient permission on IPC directory \"$dir\"\n" if $carp;
+    return;
+  }
+
+  my $dedicated_dirname = ".fhfork$$";
+  my $n = 0;
+  while (-e "$dir/$dedicated_dirname") {
+    $dedicated_dirname = ".fhfork$$-$n";
+    $n++;
+    if ($n > 10000) {
+      carp "Forks::Super::set_ipc_dir: ",
+        "Failed to created new dedicated IPC directory under \"$dir\"\n"
+          if $carp;
+      return;
+    }
+  }
+
+  unless (mkdir("$dir/$dedicated_dirname", 0777) # taint warning
+          && -r "$dir/$dedicated_dirname"
+          && -w "$dir/$dedicated_dirname"
+          && -x "$dir/$dedicated_dirname") {
+
+    carp "Forks::Super::set_ipc_dir: ",
+      "Could not created dedicated IPC directory \"$dir/$dedicated_dirname\"",
+        "under \"$dir\": $!\n" if $carp;
+    return;
+  }
+
+  # success.
+  $Forks::Super::FH_DIR = "$dir/$dedicated_dirname";   # deprecated
+
+  $_IPC_DIR = "$dir/$dedicated_dirname"; 
+  # $Forks::Super::IPC_DIR is tied to this variable
+
+  $IPC_DIR_DEDICATED = 1;
+  debug("dedicated IPC directory: $_IPC_DIR") if $DEBUG;
+
+  # create README
+  unless ($Forks::Super::Job::Ipc::NO_README) {
+    my $readme = "$_IPC_DIR/README.txt";
+    open my $readme_fh, '>', $readme;
+    my $localtime = scalar localtime;
+    print $readme_fh <<"____";
+This directory was created by process $$ at $localtime
+running $0 @ARGV.
+
+It should be/have been cleaned up when the process completes/completed.
+If that didn't happen for some reason, it is safe to delete
+this directory.
+
+____
+    close $readme_fh; # ';
+    push @IPC_FILES, $readme;
+    $IPC_FILES{$readme} = [ purpose => 'README' ];
+  }
+  return 1;
 }
 
 sub _cleanup {
   no warnings 'once';
-  if (defined $Forks::Super::FH_DIR
+  if (defined $_IPC_DIR
       && 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
     if (&IS_WIN32) {
       END_cleanup_MSWin32();
@@ -667,20 +690,10 @@ sub _cleanup {
 #
 sub _trap_signals {
   return if $SIGNALS_TRAPPED++;
-  # return if &IS_WIN32;
 
   my $cleanup = \&Forks::Super::Job::Ipc::__cleanup__;
   foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
-
     register_signal_handler($sig, 35, $cleanup);
-
-
-    ### don't trap if it looks like a signal handler is already installed.
-    ##next if defined $SIG{$sig};
-    ##next if !exists $SIG{$sig};
-
-    ##$SIG_OLD{$sig} = $SIG{$sig};
-    ##$SIG{$sig} = \&Forks::Super::Job::Ipc::__cleanup__;
   }
 }
 
@@ -733,13 +746,13 @@ sub END_cleanup {
   }
 
   # daemonize is there is anything to clean up
-  my @unused_files = grep { ! -e $_ } keys %FH_FILES;
-  delete $FH_FILES{$_} for @unused_files;
+  my @unused_files = grep { ! -e $_ } keys %IPC_FILES;
+  delete $IPC_FILES{$_} for @unused_files;
 
-  if (0 == scalar keys %FH_FILES) {
-    if (!defined $FH_DIR_DEDICATED
-	|| ! -d $Forks::Super::FH_DIR
-	|| rmdir $Forks::Super::FH_DIR) {
+  if (0 == scalar keys %IPC_FILES) {
+    if (!defined $IPC_DIR_DEDICATED
+	|| ! -d $_IPC_DIR
+	|| rmdir $_IPC_DIR) {
       return;
     }
   }
@@ -759,9 +772,9 @@ sub END_cleanup {
   # nothing more heroic than that.
 
   my %G = ();
-  foreach my $ipc_file (keys %FH_FILES) {
+  foreach my $ipc_file (keys %IPC_FILES) {
     if (! -e $ipc_file) {
-      $G{$ipc_file} = delete $FH_FILES{$ipc_file};
+      $G{$ipc_file} = delete $IPC_FILES{$ipc_file};
     } else {
       local $! = undef;
       if ($DEBUG) {
@@ -770,7 +783,7 @@ sub END_cleanup {
       my $z = unlink $ipc_file;
       if ($z && ! -e $ipc_file) {
 	print STDERR "Delete $ipc_file ok\n" if $DEBUG;
-	$G{$ipc_file} = delete $FH_FILES{$ipc_file};
+	$G{$ipc_file} = delete $IPC_FILES{$ipc_file};
       } else {
 	print STDERR "Delete $ipc_file not ok: $!\n" if $DEBUG;
 	warn "Forks::Super::END_cleanup: ",
@@ -779,9 +792,9 @@ sub END_cleanup {
     }
   }
 
-  if (0 == scalar keys %FH_FILES && defined $FH_DIR_DEDICATED) {
+  if (0 == scalar keys %IPC_FILES && defined $IPC_DIR_DEDICATED) {
 
-    my $zz = rmdir($Forks::Super::FH_DIR) || 0;
+    my $zz = rmdir($_IPC_DIR) || 0;
     if ($zz) {
       return;
     }
@@ -792,40 +805,40 @@ sub END_cleanup {
 
     # long sleep here for maximum portability.
     sleep 10;
-    my $z = rmdir($Forks::Super::FH_DIR) || 0;
+    my $z = rmdir($_IPC_DIR) || 0;
     if (!$z) {
-      unlink glob("$Forks::Super::FH_DIR/*");
+      unlink glob("$_IPC_DIR/*");
       sleep 5;
-      $z = rmdir($Forks::Super::FH_DIR) || 0;
+      $z = rmdir($_IPC_DIR) || 0;
     }
     if (!$z
-	&& -d $Forks::Super::FH_DIR
-	&& 0 < glob("$Forks::Super::FH_DIR/.nfs*")) {
+	&& -d $_IPC_DIR
+	&& 0 < glob("$_IPC_DIR/.nfs*")) {
 
       # Observed these files on Linux running from NSF mounted filesystem
       # .nfsXXX files are usually temporary (~30s) but hard to kill
       for (my $i=0; $i<10; $i++) {
 	sleep 5;
-	if (glob("$Forks::Super::FH_DIR/.nfs*") <= 0) {
+	if (glob("$_IPC_DIR/.nfs*") <= 0) {
 	  if ($DEBUG) {
 	    print STDERR "Temporary .nfsXXX files are gone.\n";
 	  }
 	  last;
 	}
       }
-      $z = rmdir($Forks::Super::FH_DIR) || 0;
+      $z = rmdir($_IPC_DIR) || 0;
     }
 
-    if (!$z && -d $Forks::Super::FH_DIR) {
+    if (!$z && -d $_IPC_DIR) {
       warn "Forks::Super::END_cleanup: ",
-	"rmdir $Forks::Super::FH_DIR failed. $!\n";
+	"rmdir $_IPC_DIR failed. $!\n";
 
-      opendir(_Z, $Forks::Super::FH_DIR);
+      opendir(_Z, $_IPC_DIR);
       my @g = grep { !/^\.nfs/ } readdir(_Z);
       closedir _Z;
 
       foreach my $g (@g) {
-	my $gg = "$Forks::Super::FH_DIR/$g";
+	my $gg = "$_IPC_DIR/$g";
 	if (defined $G{$gg} && $G{$gg}) {
 	  my %gg = @{$G{$gg}};
 	  if ($Forks::Super::DEBUG) {
@@ -860,7 +873,7 @@ sub END_cleanup_MSWin32 {
 		  values %Forks::Super::CHILD_STDOUT,
 		  values %Forks::Super::CHILD_STDERR);
 
-  my @G = grep { -e $_ } keys %FH_FILES;
+  my @G = grep { -e $_ } keys %IPC_FILES;
   FILE_TRY: for my $try (1 .. 3) {
       if (@G == 0) {
 	last FILE_TRY;
@@ -877,7 +890,7 @@ sub END_cleanup_MSWin32 {
       }
     } continue {
       # sleep 1;
-      @G = grep { -e $_ } keys %FH_FILES;
+      @G = grep { -e $_ } keys %IPC_FILES;
     }
 
   if (@G != 0) {
@@ -885,12 +898,12 @@ sub END_cleanup_MSWin32 {
     return;
   }
 
-  if (defined $FH_DIR_DEDICATED) {
+  if (defined $IPC_DIR_DEDICATED) {
     local $! = undef;
-    my $z = rmdir $Forks::Super::FH_DIR;
+    my $z = rmdir $_IPC_DIR;
     if (!$z) {
       warn "Forks::Super: failed to remove dedicated temp file directory ",
-	"$Forks::Super::FH_DIR: $!\n";
+	"$_IPC_DIR: $!\n";
     }
   }
   return;
@@ -960,8 +973,8 @@ sub _config_fh_parent_stdin {
 sub __ipc_debug {   # XXXXXX this is hacky
   my $job = shift;
   print STDERR "OPEN_FH => $__OPEN_FH / $__MAX_OPEN_FH\n";
-  print STDERR "FH_COUNT => $FH_COUNT\n";
-  print STDERR "FH_FILES => ", scalar @FH_FILES, "\n";
+  print STDERR "IPC_COUNT => $IPC_COUNT\n";
+  print STDERR "IPC_FILES => ", scalar @IPC_FILES, "\n";
   print STDERR "FILENO map:\n";
   # print STDERR map "\t$_ => " . $FILENO{$_} . "\n", keys %FILENO;
   Carp::confess "Child failed, wstatus = 139" if $job->{status} == 139;
@@ -1433,23 +1446,66 @@ sub _config_cmd_fh_child {
     # or command line argument? The shell can do it, obviously,
     # but there is probably lots and lots of code to do it right.
     # And probably regex != doing it right).
+    #
+    # e.g., want to be able to handle:
+    #    $^X -F/\\\|/ -alne '$_=$F[3]-$F[1]-$F[2]' | ./another_program
+    # and have input inserted after the SECOND |
+    # To solve this we need to parse the command as well as the
+    # shell does ...
 
-    $cmd[0] =~ s/(\s?\||$)/ <"$fh_config->{f_in}" $1/;
+    {
+      # a crude parser that looks for the first unescaped
+      # pipe char that is not inside single or double quotes, 
+      # or inside a () [] {} expression.
 
-    if (0 && $fh_config->{stdin}) {  # should be done in preconfig_fh
-      my $fhx;
-      if (_safeopen($fhx, '>', $fh_config->{f_in})) {
-	print $fhx $fh_config->{stdin};
-	_close($fhx);
-	if ($job->{debug}) {
-	  debug("Wrote ", length($fh_config->{stdin}), " bytes to ",
-		$fh_config->{f_in}, " as standard input to new job");
+      # XXX good enough to pass t/42h but I wonder what edge cases it misses.
+
+      my @chars = split //, $cmd[0];
+      my $result = "";
+      my $insert = 0;
+      my @group = ("");
+
+      while (@chars) {
+	my $char = shift @chars;
+	$result .= $char;
+
+	if ($char eq "\\") {
+	  $result .= shift @chars;
+	} elsif ($char eq '"') {
+	  if ($group[-1] eq '"') {
+	    pop @group;
+	  } elsif ($group[-1] ne "'") {
+	    push @group, '"';
+	  }
+	} elsif ($char eq "'") {
+	  if ($group[-1] eq "'") {
+	    pop @group;
+	  } elsif ($group[-1] ne '"') {
+	    push @group, "'";
+	  }
+	} elsif ($char eq "(" || $char eq "[" || $char eq "{") {
+	  push @group, $char;
+	} elsif ($char eq ")" && $group[-1] eq "(") {
+	  pop @group;
+	} elsif ($char eq "]" && $group[-1] eq "[") {
+	  pop @group;
+	} elsif ($char eq "}" && $group[-1] eq "{") {
+	  pop @group;
+	} elsif ($char eq "|" && @group <= 1) {
+	  chop $result;
+	  $result .= ' <"' . $fh_config->{f_in} . '" | ';
+	  $result .= join'', @chars;
+	  @chars = ();
+	  $insert = 1;
 	}
-      } else {
-	carp "Forks::Super::Job::Ipc::config_cmd_fh_child: ",
-	  "Can't initialize child stdin ...\n";
       }
+      if (!$insert) {
+	$result .= ' <"' . $fh_config->{f_in} . '"';
+      }
+      $cmd[0] = $result;
     }
+
+    # $cmd[0] =~ s/(\s?\||$)/ <"$fh_config->{f_in}" $1/;
 
     # external command must not launch until the input file has been created
 
@@ -1459,7 +1515,7 @@ sub _config_cmd_fh_child {
 	$try = 0;
 	last;
       }
-      Forks::Super::pause(0.1 * $try);
+      Forks::Super::pause(0.25 * $try);
     }
     if ($try >= 10) {
       warn 'Forks::Super::Job::config_cmd_fh_child(): ',
@@ -1895,18 +1951,18 @@ sub _readline {
 
 
 sub init_child {
-  $FH_DIR_DEDICATED = 0;
-  %FH_FILES = @FH_FILES = ();
+  $IPC_DIR_DEDICATED = 0;
+  %IPC_FILES = @IPC_FILES = ();
   # untie $__OPEN_FH;
   %SIG_OLD = ();
   return;
 }
 
 sub deinit_child {
-  if (@FH_FILES > 0) { 
-    Carp::cluck("Child $$ had temp files! @FH_FILES\n");
-    unlink @FH_FILES;
-    @FH_FILES = ();
+  if (@IPC_FILES > 0) { 
+    Carp::cluck("Child $$ had temp files! @IPC_FILES\n");
+    unlink @IPC_FILES;
+    @IPC_FILES = ();
   }
 }
 

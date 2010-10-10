@@ -40,37 +40,44 @@ ok($$x == 19, "result is not read only");
 
 ### interrupted bg_qx, scalar context ###
 
-my $j = $Forks::Super::LAST_JOB;
-$y = "";
-$z = sprintf "B%05d", 100000 * rand();
-my $x2 = bg_qx "$^X t/external-command.pl -s=10 -e=$z", timeout => 2;
-$t = Time::HiRes::gettimeofday();
-$y = $$x2;
+SKIP: {
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm/sleep incompatible on this system. "
+      . "can't use bg_qx with timeout.", 5;
+  }
 
-ok((!defined $y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure");
-ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
-if (defined $y && $y ne "" && $y ne "\n") {
-	print STDERR "Fail on test 5: \$y: ", hex_enc($y), "\n";
-}
-$t = Time::HiRes::gettimeofday() - $t;
-ok($t <= 5.95,                       ### 14 ### was 4 obs 4.92
-   "scalar bg_qx respected timeout, took ${t}s expected ~2s");
+  my $j = $Forks::Super::LAST_JOB;
+  $y = "";
+  $z = sprintf "B%05d", 100000 * rand();
+  my $x2 = bg_qx "$^X t/external-command.pl -s=10 -e=$z", timeout => 2;
+  $t = Time::HiRes::gettimeofday();
+  $y = $$x2;
+
+  ok((!defined $y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure");
+  ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
+  if (defined $y && $y ne "" && $y ne "\n") {
+    print STDERR "Fail on test 5: \$y: ", hex_enc($y), "\n";
+  }
+  $t = Time::HiRes::gettimeofday() - $t;
+  ok($t <= 5.95,                       ### 14 ### was 4 obs 4.92
+     "scalar bg_qx respected timeout, took ${t}s expected ~2s");
 
 ### interrupted bg_qx, capture existing output ###
 
-$z = sprintf "C%05d", 100000 * rand();
-$x = bg_qx "$^X t/external-command.pl -e=$z -s=10", timeout => 4;
-$t = Time::HiRes::gettimeofday();
-ok($$x eq "$z \n" || $$x eq "$z ",   ### 15 ###
-   "scalar bg_qx failed but retrieved output"); 
-if (!defined $$x) {
-  print STDERR "(output was: <undef>;target was \"$z \")\n";
-} elsif ($$x ne "$z \n" && $$x ne "$z ") {
-  print STDERR "(output was: $$x; target was \"$z \")\n";
+  $z = sprintf "C%05d", 100000 * rand();
+  $x = bg_qx "$^X t/external-command.pl -e=$z -s=10", timeout => 4;
+  $t = Time::HiRes::gettimeofday();
+  ok($$x eq "$z \n" || $$x eq "$z ",   ### 15 ###
+     "scalar bg_qx failed but retrieved output"); 
+  if (!defined $$x) {
+    print STDERR "(output was: <undef>;target was \"$z \")\n";
+  } elsif ($$x ne "$z \n" && $$x ne "$z ") {
+    print STDERR "(output was: $$x; target was \"$z \")\n";
+  }
+  $t = Time::HiRes::gettimeofday() - $t;
+  ok($t <= 7.5,                            ### 16 ### was 3 obs 3.62,5.88,7.34
+     "scalar bg_qx respected timeout, took ${t}s expected ~4s");
 }
-$t = Time::HiRes::gettimeofday() - $t;
-ok($t <= 7.5,                            ### 16 ### was 3 obs 3.62,5.88,7.34
-   "scalar bg_qx respected timeout, took ${t}s expected ~4s");
 
 ### list context ###
 
@@ -106,19 +113,28 @@ ok(@x == 0, "list bg_qx clear");
 
 ### partial output ###
 
-$t = Time::HiRes::gettimeofday();
-@x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=1 -e=World -s=12 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 6 };
-@tests = @x;
-$t = Time::HiRes::gettimeofday() - $t;
-ok($tests[0] eq "Hello \n", "list bg_qx first line ok");
-ok($tests[1] eq "World \n", "list bg_qx second line ok");    ### 30 ###
-ok(@tests == 2, "list bg_qx interrupted output had " 
+SKIP: {
+
+  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+    skip "alarm/sleep not compatible on this system, "
+      . "can't use timeout with bg_qx", 4;
+  }
+
+  $t = Time::HiRes::gettimeofday();
+  @x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=1 -e=World -s=12".
+    " -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 6 };
+  @tests = @x;
+  $t = Time::HiRes::gettimeofday() - $t;
+  ok($tests[0] eq "Hello \n", "list bg_qx first line ok");
+  ok($tests[1] eq "World \n", "list bg_qx second line ok");    ### 30 ###
+  ok(@tests == 2, "list bg_qx interrupted output had " 
 	        . scalar @tests . "==2 lines");              ### 31 ###
-if (@tests>2) {
-  print STDERR "output was:\n", @tests, "\n";
-}
-ok($t >= 5.5 && $t < 11.9,
+  if (@tests>2) {
+    print STDERR "output was:\n", @tests, "\n";
+  }
+  ok($t >= 5.5 && $t < 11.9,
 	"list bg_qx took ${t}s expected ~6-8s");             ### 32 ###
+}
 
 sub hex_enc{join'', map {sprintf"%02x",ord} split//,shift} # for debug
 

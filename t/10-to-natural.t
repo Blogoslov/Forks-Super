@@ -69,5 +69,6 @@ ok($j->{pid} == $p && $j->{real_pid} == $p, "pids match");
 $waitpid = waitpid $pid, &WNOHANG;
 ok(-1 == $waitpid, "non-blocking wait ok");
 $job = Forks::Super::Job::get($p);
-ok($j eq $job, "correct Forks::Super::Job object");
+ok($j eq $job, "correct Forks::Super::Job object "
+	. "$j eq $job , " . ref $j . " eq " . ref $job);
 waitall;

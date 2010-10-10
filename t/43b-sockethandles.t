@@ -3,9 +3,6 @@ use Test::More tests => 11;
 use strict;
 use warnings;
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 sub _read_socket {
   my $handle = shift;
   return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
@@ -106,5 +103,3 @@ ok($out[-3] eq "$msg\n", "first line matches Expected pattern");
 ok($out[-2] eq "0:$msg\n", "second line matches Expected pattern");
 ok($out[-1] eq "1:$msg\n", "third line matches Expected pattern");
 waitall;
-
-eval { alarm 0 };

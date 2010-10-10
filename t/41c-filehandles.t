@@ -5,9 +5,6 @@ use warnings;
 
 Forks::Super::Debug::_use_Carp_Always();
 
-$SIG{ALRM} = sub { die "Timeout $0 ran too long\n" };
-eval { alarm 150 };
-
 ##################################################
 
 #
@@ -62,5 +59,3 @@ for (my $i=0; $i<@pdata; $i++) {
 ok($pc_equal, "master/slave produced same data"); ### 22 ###
 
 ##########################################################
-
-eval { alarm 0 };

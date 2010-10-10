@@ -1,4 +1,5 @@
-package Sys::CpuAffinity;
+package # hide from PAUSE
+Sys::CpuAffinity;
 use Carp;
 use warnings;
 use strict;
