@@ -80,7 +80,7 @@ xs_setaffinity_processor_bind(pid,mask)
         int pid
 	int mask
     CODE:
-	RETVAL = setaffinity_processor_bind(pid,mask)
+	RETVAL = setaffinity_processor_bind(pid,mask);
     OUTPUT:
 	RETVAL
 
@@ -88,7 +88,7 @@ int
 xs_setaffinity_processor_unbind(pid)
 	int pid
     CODE:
-	RETVAL = setaffinity_processor_unbind(pid)
+	RETVAL = setaffinity_processor_unbind(pid);
     OUTPUT:
 	RETVAL
 

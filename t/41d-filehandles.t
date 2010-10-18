@@ -18,9 +18,11 @@ my $input = "Hello world\n";
 my $output = "";
 my $error = "overwrite me!";
 my $pid = fork { 
-  stdin => $input, stdout => \$output, stderr => \$error,
+    stdin => $input, 
+    stdout => \$output, 
+    stderr => \$error,
     sub => sub {
-      sleep 1;
+      sleep 2;
       while(<STDIN>) {
 	print STDERR "Got input: $_";
 	chomp;
@@ -30,7 +32,8 @@ my $pid = fork {
       sleep 2;
     } };
 ok($output eq "" && $error =~ /overwrite/,          ### 1d ###
-   "$$\\output($output)/error($error) not updated until child is complete");
+   "$$\\output($output)/error($error) not updated until child is complete "
+   ." (pid=$pid)");
 waitpid $pid, 0;
 ok($output eq "dlrow olleH\n", "updated output from stdout");
 ok($error !~ /overwrite/, "error ref was overwritten");
@@ -46,13 +49,13 @@ $pid = fork { stdin => \@input , stdout => \$output,
 		    my $a = reverse $_;
 		    print length($_), $a, "\n";
 		  }
+#		print STDERR "$$ is done...\n";
 		} };
-ok($output eq $orig_output, "output not updated until child is complete");
+ok($output eq $orig_output, 
+   "output not updated until child is complete (pid=$pid)");
 waitpid $pid, 0;
 ok($output eq "11dlrow olleH\n16?gniog ti si woH\n", 
    "read input from ARRAY ref");
+waitall;
 
-
-# intermittent SIGSEGV occur during cleanup. Haven't been able to diagnose yet.
-use Carp;
-$SIG{SEGV} = sub { Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" };
+# MSWin32: this script leaves one stray IPC file

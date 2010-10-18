@@ -25,7 +25,7 @@ use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.41';
+our $VERSION = '0.42';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -141,6 +141,24 @@ sub toString {
     }
   }
   return '{' . join ( ';' , @output), '}';
+}
+
+sub toFullString {
+  my $job = shift;
+  my @output = ();
+  foreach my $attr (sort keys %$job) {
+    next unless defined $job->{$attr};
+    if (ref $job->{$attr} eq 'ARRAY') {
+      push @output, "$attr=[" . join(',', @{$job->{$attr}}) . ']';
+    } elsif (ref $job->{$attr} eq 'HASH') {
+      push @output, "$attr={", 
+	join(',', map {"$_=>$job->{$attr}{$_}"
+		     } sort keys %{$job->{$attr}}), '}';
+    } else {
+      push @output, "$attr=$job->{$attr}";
+    }
+  }
+  return '{' . join(';', @output), '}';
 }
 
 sub toShortString {
@@ -395,13 +413,7 @@ sub launch {
     Forks::Super::Sigchld::handle_CHLD(-1);
 
     if ($OVERLOAD_ENABLED) {
-      if ($Forks::Super::SUPPORT_LIST_CONTEXT && wantarray) {
-	return ($job,$job);
-      } else {
-	return $job;
-      }
-    } elsif ($Forks::Super::SUPPORT_LIST_CONTEXT && wantarray) {
-      return ($pid,$job);
+      return $job;
     } else {
       return $pid;
     }
@@ -453,7 +465,7 @@ sub launch {
     deinit_child();
     exit 0;
   }
-  return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? (0) : 0;
+  return 0;
 }
 
 sub _launch_from_child {
@@ -478,9 +490,9 @@ sub _launch_from_child {
       } else {
 	init_child();
       }
-      return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($pid) : $pid;
+      return $pid;
     }
-    return $Forks::Super::SUPPORT_LIST_CONTEXT && wantarray ? ($pid) : $pid;
+    return $pid;
   }
   return;
 }
@@ -733,7 +745,7 @@ sub _config_parent {
   my $job = shift;
   $job->_config_fh_parent;
   $job->_config_timeout_parent;
-  if (Forks::Super::Config::CONFIG('getpgrp')) {
+  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     $job->{pgid} = getpgrp($job->{real_pid});
 
     # when  timeout =>   or   expiration =>  is used,
@@ -783,7 +795,7 @@ END {
     } else {
       $SIG{CHLD} = 'IGNORE';
     }
-    register_signal_handler("CHLD", 10, undef);
+    register_signal_handler("CHLD", 1, undef);
 
     Forks::Super::Queue::_cleanup();
     Forks::Super::Job::Ipc::_cleanup();
@@ -838,7 +850,8 @@ __enable_overload__
 sub disable_overload {
   if ($OVERLOAD_ENABLED) {
     $OVERLOAD_ENABLED = 0;
-    my $all_ops = join(",", map {'$_'} map {split/\s+/,$_} values %overload::ops);
+    my $all_ops = join(",", map {'$_'} map {split/\s+/,$_
+					  } values %overload::ops);
     eval "no overload $all_ops";
   }
 }
@@ -925,7 +938,7 @@ sub count_alive_processes {
 #
 # _reap should distinguish:
 #
-#    all alive jobs (ACTIVE + COMPLETE + SUSPENDED + DEFERRED + SUSPENDED-DEFERRED)
+#    all alive jobs (ACTIVE+COMPLETE+SUSPENDED+DEFERRED+SUSPENDED-DEFERRED)
 #    all active jobs (ACTIVE + COMPLETE + DEFERRED)
 #    filtered alive jobs (by optional pgid)
 #    filtered ACTIVE + COMPLETE + DEFERRED jobs
@@ -935,7 +948,8 @@ sub count_alive_processes {
 #
 sub count_processes {
   my ($count_bg, $optional_pgid) = @_;
-  my @alive = grep { $_->{state} ne 'REAPED' && $_->{state} ne 'NEW' } @ALL_JOBS;
+  my @alive = grep { $_->{state} ne 'REAPED' && $_->{state} ne 'NEW' 
+		   } @ALL_JOBS;
   if (!$count_bg) {
     @alive = grep { $_->{_is_bg} == 0 } @alive;
   }
@@ -979,6 +993,43 @@ sub get_cpu_load {
   return Forks::Super::Job::OS::get_cpu_load();
 }
 
+sub dispose {
+  foreach my $job (@_) {
+
+    my $pid = $job->{pid};
+    my $real_pid = $job->{real_pid} || $pid;
+
+    $job->close_fh('all');
+    delete $Forks::Super::CHILD_STDIN{$pid};
+    delete $Forks::Super::CHILD_STDIN{$real_pid};
+    delete $Forks::Super::CHILD_STDOUT{$pid};
+    delete $Forks::Super::CHILD_STDOUT{$real_pid};
+    delete $Forks::Super::CHILD_STDERR{$pid};
+    delete $Forks::Super::CHILD_STDERR{$real_pid};
+
+    foreach my $attr ('f_in','f_out','f_err') {
+      my $file = $job->{fh_config} && $job->{fh_config}->{$attr};
+      if (defined $file && -f $file) {
+	$! = 0;
+	if (unlink $file) {
+	  delete $Forks::Super::Job::Ipc::IPC_FILES{$file};
+	} elsif ($INSIDE_END_QUEUE) {
+	  warn "unlink failed for \"$file\": $! $^E\n";
+	  warn "@{$Forks::Super::Job::Ipc::IPC_FILES{$file}}\n";
+	}
+      }
+    }
+
+    my @k = grep { $ALL_JOBS{$_} eq $job } keys %ALL_JOBS;
+    delete $ALL_JOBS{$_} for @k;
+
+    delete $job->{$_} for keys %$job;
+    $job->{disposed} ||= time;
+  }
+  @ALL_JOBS = grep { !$_->{disposed} } @ALL_JOBS;
+  return;
+}
+
 #
 # Print information about all known jobs.
 #
@@ -1008,7 +1059,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.41
+0.42
 
 =head1 SYNOPSIS
 
@@ -1254,6 +1305,12 @@ or L<name|Forks::Super/"name"> attribute and returns the
 job object. Returns C<undef> for an unrecognized pid or
 job name.
 
+=back
+
+=head3 count_active_processes
+
+=over 4
+
 =item C< $n = Forks::Super::Job::count_active_processes() >
 
 Returns the current number of active background processes.
@@ -1379,7 +1436,9 @@ will result in a warning.
 
 =back
 
-=head3 read_stdXXX
+=head3 read_stdout
+
+=head3 read_stderr
 
 =over 4
 
@@ -1425,6 +1484,38 @@ On most systems, open filehandles are a scarce resource and it
 is a very good practice to close filehandles when the jobs that
 created them are finished running and you are finished processing
 input and output on those filehandles.
+
+=back
+
+=head3 dispose
+
+=over 4
+
+=item C<< $job->dispose() >>
+
+=item C<< Forks::Super::Job::dispose( @jobs ) >>
+
+Called on one or more job objects to free up any resources used
+by a job object. You may call this method on any job where you 
+have finished extracting all of the information that you need
+from the job. Or to put it another way, you should not call this
+method on a job if you still wish to access any information 
+about the job. After this method is invoked on a job, any
+information such as run times, status, and unread input from 
+interprocess communication handles will be lost.
+
+This method will
+
+=over 4
+
+=item * close any open filehandles
+
+=item * erase all information about the job
+
+=item * remove the job object from the C<@ALL_JOBS> and C<%ALL_JOBS> variables.
+
+=back
+
 
 =back
 

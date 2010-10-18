@@ -4,7 +4,7 @@ or through  http://rt.cpan.org/NoAuth/Bugs.html?Dist=Forks-Super
 
 Possible TODOs:
 
-    ___ incorporate free memory into system busy-ness calc 
+    _o_ incorporate free memory into system busy-ness calc 
 		(Parallel::ForkControl)	(Parallel::ForkControl says 
 		"non functional"). [Do I need to start putting
 		together a Sys::FreeMemory distribution, too?]
@@ -19,7 +19,6 @@ Possible TODOs:
 
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
 	Can test with  PERL_SIGNALS=unsafe make test .
-
 	___ cygwin 5.10: occassionally failure, IPC litter
 	___ linux: make test can hang
 
@@ -29,12 +28,7 @@ Possible TODOs:
 	___ MSWin32 5.6 ActiveState
 	    ___ No  alarm
 	    ___ No  socketpair
-        ___ cygwin 5.6.1, failures in 40g,43a-f,44a-f,45
-	    sockets and pipes work ok as standalone prog 
-            (perl56 -Ilib t/43a-sockethandles.t) but not as a child process 
-            (perl56 t/forked_harness.pl t/43a-sockethandles.t). So
-	    "make test" works but "make fasttest" does not. Curious.
-	    ___ No Cygwin::pid_to_winpid
+        ___ cygwin 5.6.1 24 fails in harness, passes standalone :-?
 	_X_ linux 5.6.2, failures in 41f, 42f
 	___ linux make stresstest sometimes hangs
 	    _x_ failures related to overloading!  $job||1 idiom looks
@@ -93,127 +87,67 @@ Possible TODOs:
 	in Forks::Super::Job::IPC. 
 	_x_ we are piling a lot of handle data into the symbol table now
 
-    ___ block attribute or block value in child_fh attribute to
+    _X_ block attribute or block value in child_fh attribute to
 	indicate whether blocking I/O is desired.
+	_X_ extend t/42g, 43g, 44g
+        _X_ document
 
 	We'll streamline the way options are specified in 1.0
 
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
-
-    ___ what else to configure at build time?
-	___ e.g. "has Unixy signal framework"
-	___ "is Windows"
-	___ "is Windows/Cygwin"
-	___ we can spoof this information for some tests ...
-	___ signal list? trappable? "available"?
-        ___ can use Time::HiRes::setitimer and a map of which ITIMER_xxx
-            sets off which signal. We should use alternative to SIGALRM
-            if possible.
+	___ timeout => max number of seconds to wait for input
 
     ___ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
-
-    ___ Can we hijack  readline(;*)  and use a construction like  <$pid> ?
 
     _X_ Turn installation of bundled packages on by default for a couple
 	of CPAN testing cycles. See what breaks.
 
 	_X_ Enabled in v0.39
+	_X_ Still enabled in v0.42
 
-    ___ Keep the pipes clear:
-        ___ During productive pauses, read and buffer input from all pipes
-            connected to child process output streams. IO handles in the parent
-	    are tied to some package that implements this functionality.
-
-        ___ Harder: child processes have a subroutine to read and buffer
-	    input from piped STDIN, and an out-of-the-way signal handler
-	    to invoke the subroutine. During productive pauses in the
-	    parent process, signal the child processes to run these
-	    subroutines.
-
-	___ On the write end of the pipe, we can also save extra output
-	    in a buffer to be delivered at a more convenient time so that
-	    the write operation doesn't block.
+    _O_ Keep the pipes clear: 
+        defer to 1.0 or 1.x
 
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
         has solved this problem better than I did?
+	_O_ File::Temp? Does this work on MSWin32?
+	    File::Temp not robust enough when child process outlives
+	    the parent. Probably has NFS issues.
 
     ___ Runtime IPC cleanup routine for long running programs. For long
 	completed jobs: close the open filehandles that have slipped
 	through the cracks; remove the IPC files; move from 
 	%ALL_JOBS,@ALL_JOBS to %ARCHIVED_JOBS,@ARCHIVED_JOBS
 
-    ___ Is it possible/desirable to use threads in place of "queue
+    _o_ Is it possible/desirable to use threads in place of "queue
 	monitor process", "productive pause"?
 
     _x_ Make Win32::API a required module for MSWin32.
 
-    ___ http://www.cpantesters.org/cpan/report/8376777 -- are there
+    _X_ http://www.cpantesters.org/cpan/report/8376777 -- are there
 	issues with Forks::Super and $ENV{LANG} == 'zh_TW.UTF-8'?
 	utf issues?
-
 	_X_ Vanilla utf8 seems ok. Running  t/forked_harness.pl  with
 	    -p -Mutf8  passes.
+	I can replicate this on Linux
+	_X_ Problem was with $! =~ /pattern/ statements, as $!
+	    produces different text in other locales.
+	_X_ Can we collect errno data in system-limits.PL and put in config?
 
-    ___ IPC cleanup -- log fails and cleanse them off-line with
+    _x_ IPC cleanup -- log fails and cleanse them off-line with
         perl -MForks::Super=cleanse   or
         perl -MForks::Super=cleanse=<directory>
+	___ test
+        ___ document. Only to be used when there are no other programs
+	    using Forks::Super with your target IPC directory.
 
     ___ Forks::Super::Job->reuse(%options) method to reuse a job
 	object and its existing set of parameters; like calling
 	fork { %{all_of_jobs_previous_options($job)} } but reusing
 	the existing Forks::Super::Job object. It would be an
 	error to call this unless the $job was completed.
-
-    _x_ Time::HiRes::setitimer can deliver <XXX>arbitrary signals</XXX>SIGALRM
-	at arbitrary times? Just what we need for dispatching the
-	queue, "cleaning pipes", handling the asynchronous headaches
-	of this module. Can we use this and retire the "queue monitor"?
-
-	Maybe.
-	___ _launch_queue_monitor() can set a SIGALRM handler and an itimer
-	___ _kill_queue_monitor() can kill the SIGALRM handler and unset 
-	    the itimer
-	___ in a child with a timeout and CHILD_FORK_OK, we need to be a
-	    little trickier.
-	    Consider a list of functions to run in a signal handler that
-	    can be added and removed at will.
-	    ___ 00-pause productive pause code
-	    ___ 01-runqueue check the queue
-	    ___ 99-timeout child timeout code
-	___ of course, verify that Time::HiRes::setitimer is available
-	    and keep the fallback queue monitor method around.
-	___ on solaris, we can only set one itimer.
-
-	"Use of interval times may interfere with alarm(), sleep(),
-	and usleep() ... anything may happen; it may work, it may not".
-
-    _X_ Document how to use $ENV{FORKS_SUPER_CONFIG}
-
-    _X_ unbundle Sys::CpuAffinity. At CPAN it shows that Sys::CpuAffinity
-        module is part of Forks::Super distribution, which is true but
-        it deemphasizes that it is also has its own distribution. I think
-        the current configuration gets it less attention from
-	CPAN testers, too.
-	_X_ bundling OK, just need to set "no_index" in META.yml
-
-    _X_ From Ed B. 2010-10-04, note in cmd/exec mode that output
-        may be buffered. Convention of F::S::J::read_stdXXX is to return
-        empty list/"" when we are waiting for output, undef when the
-        bg process has stopped producting output.
-
-    _X_ Also from Ed, 2010-10-04, allow user to specify the IPC
-        directory.
-        _X_ Maybe as both an import directive
-            use Forks::Super IPC_DIR => $directory
-        _X_ and as a subroutine
-            Forks::Super::Job::Ipc::set_ipc_dir()
-        _X_ and as a global variable to set directly
-            $Forks::Super::FH_DIR
-        _X_ and from environment variable
-          $ENV{IPC_DIR}
-        _X_ WARN when IPC_DIR is specified but not used.
 
     _X_ $Forks::Super::IPC_DIR should be a tied scalar so that after a
         direct assignment, a dedicated temporary directory
@@ -223,16 +157,17 @@ Possible TODOs:
         ___ Perform 1000's of jobs, 20 at a time
             ___ with queueing to perform other tasks
             ___ example: web crawler
-	    ___ example: multi-threaded du
-        ___ timeout long running jobs
-        ___ manipulate CPU affinities
+	    _x_ example: multi-threaded du
+        _x_ timeout long running jobs
+        _x_ manipulate CPU affinities
         ___ dependencies
         ___ interactive client/server example of IPC
-        ___ see t/forked_harness.pl
+        _x_ see t/forked_harness.pl
         ___ load management
             ___ block while system is busy
             ___ suspend/resume
         ___ bg_eval, bg_qx examples
+        ___ can_launch examples
         ___ how to: use sleep with Forks::Super
         ___ how to: use alarm with Forks::Super
         ___ changing IPC_DIR
@@ -241,23 +176,22 @@ Possible TODOs:
 	    I/O bound jobs
         ___ scheduler app, running for days at a time
 
-    ___ Forks::Super::Job::dispose( @jobs ) method
-        Closes all filehandles
-        Erases all temporary files
-        Removes entry from @ALL_JOBS, %ALL_JOBS
-        Erases hash
+    _x_ Forks::Super::Job::dispose( @jobs ) method
+        _X_ Closes all filehandles
+        _X_ Erases all temporary files
+        _X_ Removes entry from @ALL_JOBS, %ALL_JOBS
+	   ___ move to @ARCHIVED_JOBS, %ARCHIVED_JOBS?
+        _X_ Erases hash
         ___ test
 
-    _O_ Set $CHILD_FORK_OK from an environment variable? Nah.
+    _X_ Move F::S::Config::Config_Perl_component stuff into
+	system-limits.PL/SysInfo.pm
 
-    _X_ overloading problems with 5.8?
-	_X_ add job to @ALL_JOBS *after* it is blessed
-	    fixes problems on 5.8.6, 5.8.5, 5.8.4
-	_X_ update doc
+    ___ Update bundled Sys-CpuAffinity distribution to 0.98
 
-    _x_ add to system-limits.PL - test if alarm and sleep 
-	are compatible.
-        _X_ $compatible = 0;
-            eval { alarm 1; sleep 3; $compatible = 1 };
-	___ Document
+    ___ Enable Background::Zcalar as default scalar lazy eval class.
+	___ Change documentation.
 
+    ___ support stdin=>$input + child_fh=>socket or
+                stdin=>$input + CONFIG(filehandles)==0
+	___ t/25, t/42d, t/42i

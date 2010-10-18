@@ -162,6 +162,11 @@ SKIP: {
 	if (!isValidPid($p)) {
 	  $job->resume;
 	  $p = wait 2.0;
+	  if (!isValidPid($p)) {
+	    print STDERR "Killing unresponsive job $job\n";
+	    $job->kill('KILL');
+	    $job->resume;
+	  }
 	}
       }
     }

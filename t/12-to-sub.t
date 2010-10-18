@@ -1,5 +1,5 @@
 use Forks::Super ':test_CA';
-use Test::More tests => 30;
+use Test::More tests => 26;
 use strict;
 use warnings;
 
@@ -157,17 +157,6 @@ ok($? == 0, "captured correct zero STATUS from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");
 
 #############################################################################
-
-# list context
-
-$Forks::Super::SUPPORT_LIST_CONTEXT = 1;
-($pid,my $j) = fork { sub => sub { exit 14 } };
-ok(isValidPid($pid), "fork to sub, list context");
-ok(defined($j) && ref $j eq 'Forks::Super::Job', 
-   "fork gets job in list context");
-ok($j->{pid} == $pid && $j->{real_pid} == $pid, "pid saved in list context");
-$p = wait;
-ok($j->{status} == 14 << 8, "correct job status avail in list context");
 
 unlink $output;
 

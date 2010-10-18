@@ -1,4 +1,4 @@
-Sys-CpuAffinity v0.96
+Sys-CpuAffinity v0.98
 =====================
 
 The Sys::CpuAffinity module seeks to "do one thing and do it well":
@@ -18,6 +18,7 @@ it is hoped that at least one of the techniques will work
 and you will be able to get and set the CPU affinities of
 your processes.
 
+
 SUPPORTED SYSTEMS
 
 The techniques for manipulating CPU affinities for Windows
@@ -32,6 +33,7 @@ how you can help.
 MacOS is explicitly not supported, as there does not appear to
 be any public interface for specifying the CPU affinity of
 a process directly.
+
 
 RECOMMENDED MODULES
 
@@ -52,6 +54,11 @@ installed on your system. Then you may run the following commands:
 	./Build
 	./Build test
 	./Build install
+
+If you need to rebuild the module, or install it for several
+different version of Perl, it is recommended that you also
+"./Build clean" before each new installation.
+
 
 SUPPORT AND DOCUMENTATION
 
@@ -77,11 +84,11 @@ You can also look for information at:
 
 LICENSE AND COPYRIGHT
 
-Copyright (c) 2010, Marty O'Brien.
+Copyright (c) 2010, Marty O'Brien
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.8.8 or,
-at your option, any later version of Perl 5 you may have available.
+This program is free software; you can redistribute it and/or modify it
+under the terms of either: the GNU General Public License as published
+by the Free Software Foundation; or the Artistic License.
 
 See http://dev.perl.org/licenses/ for more information.
 

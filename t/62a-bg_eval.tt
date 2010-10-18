@@ -12,7 +12,11 @@ $Forks::Super::LazyEval::USE_ZCALAR = 0;
 # 
 
 my $t0 = Time::HiRes::gettimeofday();
-my $x = bg_eval { sleep 3 ; return 42 };
+
+# untaint needed when Data::Dumper is the serializer
+my $untaint = ${^TAINT};
+
+my $x = bg_eval { sleep 3 ; return 42 } { untaint => $untaint };
 my $t = Time::HiRes::gettimeofday();
 ok(defined $Forks::Super::LAST_JOB,        ### 3 ###
    "\$Forks::Super::LAST_JOB set");
@@ -40,13 +44,16 @@ SKIP: {
       . "can't test bg_eval with a timeout", 2;
   }
 
-  $x = bg_eval { sleep 10; return 19 } { timeout => 2 };
+  $x = bg_eval { sleep 10; return 19 } { timeout => 2, untaint => $untaint };
   $t = Time::HiRes::gettimeofday();
-  ok(!defined $$x, "scalar bg_eval undef on failure");
+  ok(!defined $$x, 
+     "scalar bg_eval undef on failure");
   $t = Time::HiRes::gettimeofday() - $t;
-  ok($t <= 3.95,                    ### 13 ### was 3.25, obs 3.41
+  ok($t <= 4.5,                     ### 13 ### was 3.25, obs 3.41,4.01
      "scalar bg_eval respected timeout, took ${t}s expected ~2s");
 }
+
+Forks::Super::Debug::_use_Carp_Always();
 
 ### list context ###
 #
@@ -60,6 +67,8 @@ my @x = bg_eval {
   my @f = grep { /\.t$/ } readdir(X);
   closedir X;
   return @f;
+} {
+  'untaint' => $untaint
 };
 my @tests = @x;
 $t = Time::HiRes::gettimeofday() - $t;
@@ -94,6 +103,8 @@ $x = bg_eval {
   my @f = grep { !/\.t$/ } readdir(X);
   closedir X;
   return \@f;
+} { 
+  'untaint' => $untaint
 };
 $t = Time::HiRes::gettimeofday();
 my @others = @$$x;
@@ -114,9 +125,10 @@ $t0 = Time::HiRes::gettimeofday();
 $x = bg_eval {
   sleep 5; return 19
 } { name => 'bg_eval_job', delay => 3, on_busy => "queue",
-      callback => { queue => sub { $w++ }, start => sub { $w+=2 },
-		    finish => sub { $w+=5 } }
-    };
+    callback => { queue => sub { $w++ }, start => sub { $w+=2 },
+		    finish => sub { $w+=5 } },
+    untaint => $untaint
+};
 $t = Time::HiRes::gettimeofday();
 my $j = Forks::Super::Job::get('bg_eval_job');
 ok($j eq $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");

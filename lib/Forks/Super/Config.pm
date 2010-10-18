@@ -98,7 +98,9 @@ sub CONFIG {
       or $module eq 'select4' or $module eq 'pipe'
       or $module eq 'setitimer' or $module eq 'socketpair') {
 
-    return $CONFIG{$module} = CONFIG_Perl_component($module);
+    Carp::confess "CONFIG_Perl_component sub was removed. ",
+	"Use \%Forks::Super::SysInfo::CONFIG\n";
+
   } elsif (substr($module,0,1) eq '/') {
     return $CONFIG{$module} = CONFIG_external_program($module);
   } elsif ($module eq 'filehandles') {
@@ -133,70 +135,6 @@ sub CONFIG_module {
     print STDERR "CONFIG\{$module\} enabled\n";
   }
   return 1;
-}
-
-sub CONFIG_Perl_component {
-  my ($component) = @_;
-  if (defined $CONFIG{$component}) {
-    return $CONFIG{$component};
-  }
-
-  no warnings;
-  local $SIG{__DIE__} = sub{}; # I mean it! no warnings.
-
-  if ($component eq 'getpgrp') {
-    $CONFIG{'getpgrp'} = eval { getpgrp(0); 1 } || 0;
-  } elsif ($component eq 'getpriority') {
-    $CONFIG{'getpriority'} = eval { getpriority(0,0); 1 } || 0;
-  } elsif ($component eq 'alarm') {
-    $CONFIG{'alarm'} = eval { alarm 0; 1 } || 0;
-  } elsif ($component eq 'SIGUSR1') {
-
-    # %SIG is a special hash -- defined $SIG{USR1} might be false
-    # but USR1 might still appear in keys %SIG.
-    # XXX - but couldn't I just say  exists $SIG{USR1} ?
-
-    my $SIG = join ' ', ' ', keys %SIG, ' ';
-    my $target_sig = defined $Forks::Super::QUEUE_INTERRUPT
-      ? $Forks::Super::QUEUE_INTERRUPT : '';
-    $CONFIG{'SIGUSR1'} = $SIG =~ / $target_sig / ? 1 : 0;
-  } elsif ($component eq 'select4') { # 4-arg version of select
-    $CONFIG{'select4'} = eval { select undef,undef,undef,0.05 ; 1 } || 0;
-  } elsif ($component eq 'pipe') {
-    $CONFIG{'pipe'} = eval {
-      my ($read,$write);
-      pipe $read, $write;
-      close $read;
-      close $write;
-      1;
-    } || 0;
-  } elsif ($component eq 'socketpair') {
-    $CONFIG{'socketpair'} = eval {
-      use Socket;
-      my ($read,$write);
-      socketpair $read, $write, AF_UNIX, SOCK_STREAM, PF_UNSPEC;
-      close $read;
-      close $write;
-      1;
-    } || 0;
-  } elsif ($component eq 'setitimer') {
-    $CONFIG{'setitimer'} = eval {
-      use Time::HiRes;
-      Time::HiRes::setitimer(Time::HiRes::ITIMER_REAL(), 0);
-      1
-    } || 0;
-  }
-
-  # getppid  is another OS-dependent Perl system call
-
-  if ($IS_TEST_CONFIG) {
-    if ($CONFIG{$component}) {
-      print STDERR "CONFIG\{$component\} enabled\n";
-    } else {
-      print STDERR "CONFIG\{$component\} failed\n";
-    }
-  }
-  return $CONFIG{$component};
 }
 
 sub CONFIG_external_program {

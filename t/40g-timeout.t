@@ -17,7 +17,7 @@ if (${^TAINT}) {
 }
 
 SKIP: {
-  if (!Forks::Super::Config::CONFIG_Perl_component('alarm')) {
+  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 6;
   }
@@ -26,7 +26,7 @@ SKIP: {
       . "can't test timeout feature", 6;
   }
 
-  if (!Forks::Super::Config::CONFIG_Perl_component("getpgrp")) {
+  if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if (!($^O eq 'MSWin32' 
 	  && Forks::Super::Config::CONFIG_module("Win32::Process"))) {
 
@@ -99,11 +99,11 @@ SKIP: {
 } # end SKIP
 
 SKIP: {
-  if (!Forks::Super::Config::CONFIG_Perl_component('alarm')) {
+  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
     skip "alarm function unavailable on this system ($^O,$]), "
       . "can't test timeout feature", 4;
   }
-  if (!Forks::Super::Config::CONFIG_Perl_component("getpgrp")) {
+  if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     skip "setpgrp() unavailable, can't test process group manipulation", 4;
   }
   my ($job, $pgid, $ppgid);

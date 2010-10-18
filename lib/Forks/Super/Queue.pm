@@ -65,7 +65,7 @@ sub init_child {
   @QUEUE = ();
   undef $QUEUE_MONITOR_PID;
   if ($Forks::Super::QUEUE_INTERRUPT
-      && Forks::Super::Config::CONFIG('SIGUSR1')) {
+      && $Forks::Super::SysInfo::CONFIG{SIGUSR1}) {
     $SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT';
   }
 }
@@ -85,7 +85,7 @@ sub init_child {
 # $Forks::Super::QUEUE_INTERRUPT signals to this
 #
 sub _launch_queue_monitor {
-  if (!Forks::Super::Config::CONFIG('SIGUSR1')) {
+  if (!$Forks::Super::SysInfo::CONFIG{'SIGUSR1'}) {
     debug("_lqm returning: no SIGUSR1") if $QUEUE_DEBUG;
     return;
   }
@@ -94,7 +94,7 @@ sub _launch_queue_monitor {
     return;
   }
 
-  if (Forks::Super::Config::CONFIG_Perl_component("setitimer")) {
+  if ($Forks::Super::SysInfo::CONFIG{'setitimer'}) {
     _launch_queue_monitor_setitimer();
   } else {
     _launch_queue_monitor_fork();
@@ -112,7 +112,7 @@ sub _launch_queue_monitor_setitimer {
   $QUEUE_MONITOR_PPID = $$;
   $QUEUE_MONITOR_PID = 'setitimer';
   # $Forks::Super::Sighandler::DEBUG = 1;
-  register_signal_handler("ALRM", 12, \&_check_queue);
+  register_signal_handler("ALRM", 2, \&_check_queue);
 						   
   Time::HiRes::setitimer(
 	&Time::HiRes::ITIMER_REAL, $QUEUE_MONITOR_FREQ, $QUEUE_MONITOR_FREQ);
@@ -190,8 +190,8 @@ sub _kill_queue_monitor {
 	
       if ($QUEUE_MONITOR_PID eq 'setitimer') {
 
-	register_signal_handler("ALRM", 10, undef);
-	register_signal_handler("ALRM", 12, undef);
+	register_signal_handler("ALRM", 1, undef);
+	register_signal_handler("ALRM", 2, undef);
 	Time::HiRes::setitimer(&Time::HiRes::ITIMER_REAL, 0);
 	undef $QUEUE_MONITOR_PID;
 	undef $QUEUE_MONITOR_PPID;

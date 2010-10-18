@@ -1,6 +1,6 @@
 use Forks::Super ':test';
 use POSIX ':sys_wait_h';
-use Test::More tests => 22;
+use Test::More tests => 15;
 use strict;
 use warnings;
 local $| = 1;
@@ -44,31 +44,4 @@ ok($? == $job->{status}, "captured correct job STATUS");
 
 #########################################################
 
-# list context
-$Forks::Super::SUPPORT_LIST_CONTEXT = 1;
-my $j;
-($p,$j) = fork;
-if ($p == 0) {
-
-  # XXX - in child, $j should be undefined.
-  #       What is best way to communicate this result to the parent?
-  if (defined $j) {
-    warn "child: job object shouldn't be defined! $j\n";
-  } else {
-    print STDERR "job object not defined in child -- ok\n";
-  }
-
-  sleep 2;
-  exit 1;
-}
-ok(isValidPid($p),"list context: valid pid");
-ok(ref $j eq 'Forks::Super::Job', "list context: valid Forks::Super::Job obj");
-ok($j->{state} eq 'ACTIVE', "active state");
-ok($j->{style} eq 'natural', "natural style");
-ok($j->{pid} == $p && $j->{real_pid} == $p, "pids match");
-$waitpid = waitpid $pid, &WNOHANG;
-ok(-1 == $waitpid, "non-blocking wait ok");
-$job = Forks::Super::Job::get($p);
-ok($j eq $job, "correct Forks::Super::Job object "
-	. "$j eq $job , " . ref $j . " eq " . ref $job);
 waitall;

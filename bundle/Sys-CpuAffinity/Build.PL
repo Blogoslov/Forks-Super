@@ -14,6 +14,7 @@ my $builderclass = Module::Build->subclass(
  sub ACTION_build {
    use File::Copy;
    my $self = shift;
+   my @successfully_compiled;
    my $DEBUG = $ENV{DEBUG};
 
    ### STEP 1: Try to compile each .xs file in ./contrib/ ###
@@ -31,9 +32,25 @@ my $builderclass = Module::Build->subclass(
            File::Copy::move($xs_file, "contrib/fail/");
        } else {
            print "\n\nSuccessfully compiled $xs_file\n\n";
+           push @successfully_compiled, $xs_file;
            File::Copy::move($xs_file, "contrib/ok/");
        }
        unlink <lib/xs/*>;
+     }
+     if (@successfully_compiled == 0) {
+       warn q[
+None of the XS code snippets successfully compiled.
+Perhaps you don't have a compiler on your system, or
+perhaps it is not configured correctly.
+
+On some systems and configuration, this module might
+still work without any XS code, so let's not worry
+about this just yet.
+];
+     } else {
+       print "Successfully compiled:\n\n\t";
+       print join "\n\t", @successfully_compiled;
+       print "\n\n";
      }
    }
 
@@ -56,6 +73,7 @@ my $builderclass = Module::Build->subclass(
        close $xs_fh;
        print "Incorporating $xs into lib/Sys/CpuAffinity.xs\n";
      }
+     print "\n";
      unlink <contrib/ok/*.xs>,<contrib/fail/*.xs>,'lib/Sys/CpuAffinity.xs';
      if (@POSTMOD) {
        open my $xs_fh, '>', 'lib/Sys/CpuAffinity.xs' or croak $!;
@@ -88,9 +106,10 @@ mkdir 'lib/xs' unless -d 'lib/xs';
 open(FOO, '>>', 'lib/xs/foo') && close FOO unless -f 'lib/xs/foo';
 my $bugtracker_url 
   = 'http://rt.cpan.org/NoAuth/Bugs.html?Dist=Sys-CpuAffinity';
+
+
 my $extra_compiler_flags = '';
 my $extra_linker_flags = '';
-
 if ($^O =~ /irix/) {
   $extra_linker_flags = '-lcpuset';
 }
@@ -117,16 +136,17 @@ my $builder = $builderclass->new(
 				 'lib/Sys/CpuAffinity.o',
 				 'lib/Sys/CpuAffinity.xs',
                                  'contrib/ok/*.xs', 'contrib/fail/*.xs',
+                                 'lib*.def', 'ipc.*',
                                  'blib', 'pod2htm*',
-                                 'Makefile', 'Build'
+                                 'Makefile', 'Build',
+                                 'perl*.stackdump',
 				 ],
 	create_makefile_pl  => 'passthrough',
 	extra_compiler_flags => $extra_compiler_flags,
-	extra_linker_flags =>   $extra_linker_flags,
-	sign                => 0,
+	extra_linker_flags   => $extra_linker_flags,
+	sign                 => 0,
 );
 
-# if $^O =~ /irix/, then we want to compile with  -lcpuset
 
 $builder->create_build_script();
 

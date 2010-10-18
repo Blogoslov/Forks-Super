@@ -99,5 +99,3 @@ ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
 ok($err[-1] eq "$msg\n", "got Expected line from child error");
 waitall;
 
-use Carp;
-$SIG{SEGV} = sub { Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" };

@@ -71,7 +71,7 @@ sub Forks::Super::Job::_config_timeout_child {
   $job->{_timeout} = $timeout;
   $job->{_expiration} = $timeout + Time::HiRes::gettimeofday();
 
-  if (!Forks::Super::Config::CONFIG('alarm')) {
+  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
     croak "Forks::Super: alarm() not available on this system. ",
       "timeout,expiration options not allowed.\n";
     return;
@@ -88,7 +88,7 @@ sub Forks::Super::Job::_config_timeout_child {
   #
   # see the END{} block that covers child cleanup below
   #
-  if (Forks::Super::Config::CONFIG('getpgrp')) {
+  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     $ORIG_PGRP = getpgrp(0);
     setpgrp(0, $$);
     $NEW_PGRP = $job->{pgid} = getpgrp(0);
@@ -118,7 +118,7 @@ sub Forks::Super::Job::_config_timeout_child {
   }
 
   # $SIG{ALRM} = \&_child_timeout;
-  register_signal_handler("ALRM", 10, \&_child_timeout);
+  register_signal_handler("ALRM", 1, \&_child_timeout);
 
   $EXPIRATION = Time::HiRes::gettimeofday() + $timeout - 1.0;
   alarm $timeout;
@@ -136,7 +136,7 @@ sub _child_timeout {
   # called does not necessarily mean it is time for the
   # child to exit.
 
-  return if Forks::Super::Config::CONFIG('setitimer')
+  return if $Forks::Super::SysInfo::CONFIG{'setitimer'}
     && Time::HiRes::gettimeofday() < $EXPIRATION;
 
   warn "Forks::Super: child process timeout\n";
@@ -146,7 +146,7 @@ sub _child_timeout {
   # but any other active processes that it has spawned.
   # There are several ways to do this.
 
-  if (Forks::Super::Config::CONFIG('getpgrp')) {
+  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
       local $SIG{$TIMEOUT_SIG} = 'IGNORE';
       $DISABLE_INT = 1;
@@ -201,7 +201,7 @@ sub _child_timeout {
 
 sub _cleanup_child {
   if (defined $Forks::Super::Config::CONFIG{'alarm'}
-      && $Forks::Super::Config::CONFIG{'alarm'}) {
+      && $Forks::Super::SysInfo::CONFIG{'alarm'}) {
     alarm 0;
   }
   if ($TIMEDOUT) {
@@ -212,7 +212,7 @@ sub _cleanup_child {
       
       $? = 255 << 8;
     }
-    if (Forks::Super::Config::CONFIG('getpgrp')) {
+    if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
       # try to kill off any grandchildren
       if ($ORIG_PGRP == $NEW_PGRP) {
 	carp "Forks::Super::child_exit: original setpgrp call failed, ",

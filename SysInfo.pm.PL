@@ -38,12 +38,46 @@ printF('SYSTEM', "'$info{system}'", "'unknown'");
 printF('PERL_VERSION', "'$info{version}'", "'unknown'");
 printF('MAX_FORK', $info{maxfork}, '12.345');
 printF('MAX_OPEN_FH', $info{maxfilehandle}, '123.456');
+printF('TOO_MANY_FH_ERRNO', $info{maxfilehandle_errno}, '23.0');
+printF('FILE_NOT_FOUND_ERRNO', $info{fnf_errno}, '2.0');
 printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
 printF('SLEEP_ALARM_COMPATIBLE', $info{sleep_alarm_compat}, '""');
 if (defined $info{ncpu}) {
   printF('NUM_PROCESSORS', $info{ncpu}, '1');
 }
+
+# See what core and core module functionality is available
+# on this system.
+my %config = ( alarm => eval { alarm 0;1 } || 0,
+	       getpgrp => eval { my $z=getpgrp(0);1 } || 0,
+	       getpriority => eval { my $z=getpriority(0,0);1 } || 0,
+	       SIGUSR1 => exists($SIG{USR1}) || 0,
+	       select4 => eval { select undef,undef,undef,0.05;1 } || 0,
+	       pipe => eval {
+		 my ($read,$write);
+		 pipe $read, $write;
+		 close $read;
+		 close $write;
+		 1 } || 0,
+	       socketpair => eval {
+		 use Socket;
+		 my ($read,$write);
+		 socketpair $read,$write,AF_UNIX,SOCK_STREAM,PF_UNSPEC;
+		 close $read;
+		 close $write;
+		 1 } || 0,
+	       setitimer => eval {
+		 require Time::HiRes;
+		 Time::HiRes::setitimer(Time::HiRes::ITIMER_REAL(), 0);
+		 1 } || 0
+);
+
+print F "\nour \%CONFIG = (\n";
+foreach my $key (sort keys %config) {
+  printf F "    %-14s => %d,\n", "'$key'", $config{$key};
+}
+print F ");\n\n";
 
 print F "\n\n1;\n";
 close F;

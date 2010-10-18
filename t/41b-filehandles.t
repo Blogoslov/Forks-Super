@@ -93,7 +93,8 @@ sub read_stderr_test1 {
                           " Result:$z");
     }
     sleep 1;
-    close $Forks::Super::CHILD_STDIN{$pid};
+    Forks::Super::Job::get($pid)->close_fh('stdin');
+    # close $Forks::Super::CHILD_STDIN{$pid};
     if ($Forks::Super::DEBUG) {
       Forks::Super::debug("Closed filehandle to $pid STDIN");
     }
@@ -104,7 +105,8 @@ sub read_stderr_test1 {
 my ($z,$pid) = &read_stderr_test1;
 ok(isValidPid($pid), "started job with join");
 ok($z > 0, "successful print to child STDIN");
-ok(defined $Forks::Super::CHILD_STDIN{$pid}, "CHILD_STDIN value defined");
+ok(defined $Forks::Super::CHILD_STDIN{$pid}, 
+   "CHILD_STDIN value defined");
 ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
    "CHILD_STDOUT value not defined");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "CHILD_STDERR value defined");

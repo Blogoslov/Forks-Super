@@ -58,7 +58,8 @@ SKIP: {
 
   # fails in 5.6; job state is still ACTIVE.
   # (fails under forked_harness, but passes as standalone?)
-  ok($j1->is_complete, "killed job is complete " . $j1->{state}); ### 7 ###
+  ok($j1->is_complete, 
+     "killed job is complete " . $j1->{state}); ### 7 ###
   waitall;
 
   $y = Forks::Super::kill('INT', $pid1, $pid2, $pid3);

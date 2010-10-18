@@ -130,7 +130,7 @@ for (my $i=0; $i<20; $i++) {
 
 $t = Time::HiRes::gettimeofday();
 SKIP: {
-  if (!Forks::Super::Config::CONFIG_Perl_component("getpgrp")) {
+  if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     skip "$^O,$]: Can't test waitpid on pgid", 44;
   }
 

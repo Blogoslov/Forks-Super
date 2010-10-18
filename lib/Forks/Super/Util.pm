@@ -17,7 +17,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.41';
+our $VERSION = '0.42';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -225,7 +225,7 @@ sub is_pipe {
   if (defined $$handle->{is_pipe}) {
     return $$handle->{is_pipe};
   }
-  return -p $handle;
+  return $handle->opened && -p $handle;
 }
 
 1;

@@ -1,4 +1,3 @@
-##! /usr/bin/perl -w
 # forked_harness.pl [options] tests
 #
 # Forks::Super proof-of-concept to run unit tests in parallel.
@@ -41,9 +40,11 @@
 #  --xrepeat|-x n:       run each test <n> times in each iteration
 #  --maxproc|-m n:       run up to <n> tests simultaneously
 #  --quiet|-q:           produce less output (-q is *not* the opposite of -v!)
+#  --really-quiet|--qq   just show test status, no other output
 #  --debug|-d:           produce output about what forked_harness.pl is doing
 #  --abort-on-fail|-a:   stop after the first test failure
 #  --color|-C:           colorize output (requires Term::ANSIColor >=3.00)
+#  --env|-E var=value:   pass environment variable value to the tests
 #
 # Environment:
 #  COLOR                 if true, try to colorize output [like -C flag]
@@ -54,6 +55,7 @@
 
 use lib qw(blib/lib blib/arch lib .);
 use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
+use IO::Handle;
 use Getopt::Long;
 eval "use Time::HiRes;1" 
   or do { *Time::HiRes::gettimeofday = sub { time } };
@@ -80,13 +82,15 @@ my $use_color = $ENV{COLOR} && -t STDOUT &&
 my $test_verbose = $ENV{TEST_VERBOSE} || 0;
 my @use_libs = qw(blib/lib blib/arch);
 my @perl_opts = ();
+my @env = ();
 my $shuffle = '';
 my $repeat = 1;
 my $xrepeat = 1;
 my $quiet = 0;
+my $really_quiet = 0;
 my $maxproc = &maxproc_initial;
 my $check_endgame = $ENV{ENDGAME_CHECK} || 0;
-my $abort_on_first_error = '';
+my $abort_on_first_error = 0;
 my $debug = '';
 my $use_socket = '';
 $::fail35584 = '';
@@ -100,12 +104,14 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "verbose" => \$test_verbose,
 	   "include=s" => \@use_libs,
 	   "popts=s" => \@perl_opts,
+	   "env=s" => \@env,
 	   "s|shuffle" => \$shuffle,
 	   "timeout=i" => \$timeout,
-	   "repeat=i" => \$repeat,
+	   "r|repeat=i" => \$repeat,
            "xrepeat=i" => \$xrepeat,
 	   "maxproc=i" => \$maxproc,
-	   "quiet" => \$quiet,
+	   "q|quiet" => \$quiet,
+	   "qq|really-quite" => \$really_quiet,
            "debug" => \$debug,
 	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
@@ -117,9 +123,25 @@ if (${^TAINT}) {
 $test_verbose ||= 0;
 $repeat = 1 if $repeat < 1;
 $xrepeat = 1 if $xrepeat < 1;
+$quiet ||= $really_quiet;
 $Forks::Super::MAX_PROC = $maxproc if $maxproc;
 $Forks::Super::Util::DEFAULT_PAUSE = 0.10;
 sub color_print;
+
+# these colors are appropriate when your terminal has a dark background.
+# How can this program determine when your terminal has a dark background?
+my %colors = (ITERATION => 'bold white',
+	      GOOD_STATUS => 'bold green',
+	      BAD_STATUS => 'bold red',
+	      'STDERR' => 'yellow bold',
+	      NORMAL => '');
+
+
+#####################################################3
+#
+# determine the set of test scripts to run
+#
+
 
 my $glob_required = 0;
 if (@ARGV == 0) {
@@ -159,39 +181,12 @@ if ($debug) {
 }
 my (%j,$count);
 
-
-# these colors are appropriate when your terminal has a dark background.
-# How can this program determine when your terminal has a dark background?
-my %colors = (ITERATION => 'bold white',
-	      GOOD_STATUS => 'bold green',
-	      BAD_STATUS => 'bold red',
-	      'STDERR' => 'yellow bold',
-	      NORMAL => '');
-
-
-#{
-#  no warnings 'signal';
-# $SIG{SEGV} = \&handle_SIG;
-  $SIG{SYS} = \&handle_SIG if exists $SIG{STS};
-#}
 &main;
 &summarize;
 &check_endgame if $check_endgame;
-
 exit +($total_status > 254 ? 254 : $total_status) >> 8;
 
-#
-# handle some signals that might be generated in a test or by the
-# operating system if this script tries to do too much
-#
-sub handle_SIG {
-  use Carp;
-  my $name = shift;
-  print STDERR "\n" x 10;
-  Carp::confess "SIG$name caught in $0 @ARGV\n";
-  $SIG{$name} = 'DEFAULT';
-}
-
+##################################################################
 #
 # iterate over list of test files and run tests in background processes.
 # when child processes are reaped, dispatch &process_test_output
@@ -232,27 +227,24 @@ sub main {
 	print "Queue size: ", scalar @Forks::Super::Queue::QUEUE, "\n";
       }
 
-      if (rand() > 0.95 || @Forks::Super::Queue::QUEUE > 0) {
-	my $reap = waitpid -1, WNOHANG;
-#	while (Forks::Super::Util::isValidPid($reap, 1)) {
-	while (Forks::Super::Util::isValidPid($reap)) {
-	  return if process_test_output($reap) eq "ABORT";
-	  $reap = -1;
-	  $reap = waitpid -1, WNOHANG;
-	}
+      # see if any tests have finished lately
+      my $reap = waitpid -1, WNOHANG;
+      while (Forks::Super::Util::isValidPid($reap)) {
+	return if process_test_output($reap) eq "ABORT";
+	$reap = -1;
+	$reap = waitpid -1, WNOHANG;
       }
     }
+
+    # all tests have launched. Now wait for all tests to complete.
 
     if ($debug) {
       print "All tests launched for this iteration, waiting for results.\n";
     }
 
     my $pid = wait;
-#   while (Forks::Super::Util::isValidPid($pid, 1)) {
     while (Forks::Super::Util::isValidPid($pid)) {
-
       return if process_test_output($pid) eq "ABORT";
-
       $pid = wait;
     }
     if ($total_status > 0) {
@@ -262,6 +254,8 @@ sub main {
   return;
 }
 
+# read the options to the perl interpreter from a shebang line
+#     #! perl -w -T     ==>  (-w, -T)
 sub _get_perl_opts {
   my ($file) = @_;
   open my $ph, '<', $file or return ();
@@ -305,11 +299,10 @@ sub launch_test_file {
   }
 
   @cmd = map /(.*)/, @cmd if ${^TAINT};
-#use Scalar::Util qw(tainted);
-#foreach my $cmd (@cmd) {
-#  warn "$cmd: ", tainted($cmd) ? "tainted\n" : "not tainted\n";
-#}
-
+  foreach my $env (@env) {
+    my ($k,$v) = split /=/, $env, 2;
+    $ENV{$k} = $v;
+  }
   my $pid = fork {
     cmd => [ @cmd ],
     child_fh => $child_fh,
@@ -404,9 +397,11 @@ sub process_test_output {
       $not_ok = 0.5;
       $status = 0.5;
 
-      color_print 'STDERR', "Not quite right: ", $j->toString(), "\n";
-      color_print 'STDERR', "OUTPUT: ", @stdout, "\n";
-      color_print 'STDERR', "ERROR: ", @stderr, "\n";
+      unless ($really_quiet) {
+	color_print 'STDERR', "Not quite right: ", $j->toString(), "\n";
+	color_print 'STDERR', "OUTPUT: ", @stdout, "\n";
+	color_print 'STDERR', "ERROR: ", @stderr, "\n";
+      }
     }
   }
 
@@ -428,7 +423,9 @@ sub process_test_output {
   my $status_color = $status > 0 ? 'BAD_STATUS' : 'GOOD_STATUS';
   my $sep_color = $status > 0 ? 'BAD_STATUS' : 'NORMAL';
   if ($quiet == 0 || $status > 0) {
-    color_print $sep_color, "------------------- $test_file -------------------\n";
+    if ($really_quiet == 0) {
+      color_print $sep_color, "------------------- $test_file -------------------\n";
+    }
   }
   my $aggr_status = $::fail35584 
     ? "$total_status+$::fail35584" : $total_status;
@@ -436,17 +433,26 @@ sub process_test_output {
     2*length("$repeat$ntests")+3, "$iter.$count/$repeat.$ntests";
 
   if ($use_harness && $quiet && $not_ok == 0) {
-    color_print $status_color, "|= test=$test_id; ",
-      "status: $status/$aggr_status ","time=$test_time ", "| ", @stdout;
+    if (1 || $really_quiet < 0) {
+      color_print $status_color, "|= test=$test_id; ",
+	"status: $status/$aggr_status ","time=$test_time ", "| ", @stdout;
+    }
   } else {
-    color_print $status_color, "|= test=$test_id; ",
-      "status: $status/$aggr_status time=$test_time | $test_file\n";
+    if ($status > 0 || $really_quiet == 0) {
+      color_print $status_color, "|= test=$test_id; ",
+	"status: $status/$aggr_status time=$test_time | $test_file\n";
+    } else {
+      print " test=$test_id | $test_file $status             \r";
+      *STDOUT->flush;
+    }
   }
 
   if ($status > 0 || $quiet == 0) {
-    print map{"|- $_"}@stdout;
-    print "|= $dashes\n";
-    color_print 'STDERR', map{"|: $_"}@stderr;
+    if ($really_quiet == 0) {
+      print map{"|- $_"}@stdout;
+      print "|= $dashes\n";
+      color_print 'STDERR', map{"|: $_"}@stderr;
+    }
   }
 
   # there are some circumstances where the tests passed but there
@@ -529,6 +535,7 @@ sub process_test_output {
     $abort_on_first_error = 2;
     return "ABORT";
   }
+  $j->dispose;
   return $total_status > 0 && $abort_on_first_error ? "ABORT" : "CONTINUE";
 }
 
@@ -542,7 +549,7 @@ sub summarize {
     print "=====================================\n";
     print "\n\n\n\n\n";
   }
-  if (scalar keys %fail > 0) {
+  if ($really_quiet == 0 && scalar keys %fail > 0) {
     print "\nTest failures:\n";
     print "================\n";
     foreach my $test_file (sort keys %fail) {

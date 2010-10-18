@@ -34,7 +34,7 @@ ok($t1 <= 1.0, "read blocked stderr fast ${t1}s, expected <1s");
 my $out = Forks::Super::read_stdout($pid, "block" => 1);
 my $t2 = Time::HiRes::gettimeofday() - $t0;
 ok($out =~ /^bar/, "read stdout");
-ok($t2 > 3.5, "read blocked stdout ${t2}s, expected ~4s");
+ok($t2 > 2.95, "read blocked stdout ${t2}s, expected ~4s");
 
 $out = Forks::Super::read_stdout($pid, "block" => 0);
 my $t3 = Time::HiRes::gettimeofday() - $t0;

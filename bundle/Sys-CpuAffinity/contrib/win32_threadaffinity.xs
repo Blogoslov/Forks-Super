@@ -56,7 +56,7 @@ int win32_get_thread_affinity(DWORD thread_id)
   }
   handle = OpenThread(0x0040, 0, thread_id);
   if (handle == NULL) {
-    handle = OpenThread(0x0200, 0, $thread_id);
+    handle = OpenThread(0x0200, 0, thread_id);
   }
   if (handle == NULL) {
     fprintf(stderr, "could not obtain handle for thread id %d\n",

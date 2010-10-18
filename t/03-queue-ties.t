@@ -94,7 +94,7 @@ SKIP: {
       4;
   }
 
-  if (Forks::Super::Config::CONFIG("setitimer")) {
+  if ($Forks::Super::SysInfo::CONFIG{'setitimer'}) {
     ok(1, "# \$Forks::Super::QUEUE_INTERRUPT not used in setitimer mode");
   } else {
     ok(defined($SIG{$Forks::Super::QUEUE_INTERRUPT}),

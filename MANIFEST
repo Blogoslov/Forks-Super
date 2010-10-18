@@ -73,6 +73,8 @@ t/42d-filehandles.t
 t/42e-filehandles.t
 t/42f-filehandles.t
 t/42g-filehandles.t
+t/42h-filehandles.t
+t/42i-filehandles.t
 t/43a-sockethandles.t
 t/43b-sockethandles.t
 t/43c-sockethandles.t
@@ -80,12 +82,14 @@ t/43d-sockethandles.t
 t/43e-sockethandles.t
 t/43f-sockethandles.t
 t/43g-sockethandles.t
+t/43h-sockethandles.t
 t/44a-pipes.t
 t/44b-pipes.t
 t/44c-pipes.t
 t/44d-pipes.t
 t/44f-pipes.t
 t/44g-pipes.t
+t/44h-pipes.t
 t/45-no-filehandles.t
 t/46-busy.t
 t/47-userbusy.t
@@ -95,7 +99,9 @@ t/50-queue.t
 t/51a-delayed.t
 t/51b-delayed.t
 t/51c-delayed.t
-t/52-dependencies.t
+t/52a-dependencies.t
+t/52b-dependencies.t
+t/52c-dependencies.t
 t/53a-name.t
 t/53b-name.t
 t/53c-name.t
@@ -111,7 +117,8 @@ t/62bd-bg_eval.t
 t/62bj-bg_eval.t
 t/62by-bg_eval.t
 t/62byt-bg_eval.t
-t/63-bg_qx.t
+t/63a-bg_qx.t
+t/63b-bg_qx.t
 t/64-cpu_load.t
 t/tie-enum.tt
 t/external-command.pl

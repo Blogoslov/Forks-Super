@@ -83,7 +83,7 @@ sub waitpid {
   } elsif ($target > 0) {
     # invalid pid
     return -1;
-  } elsif (Forks::Super::Config::CONFIG('getpgrp')) {
+  } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if ($target == 0) {
       $target = getpgrp(0);
     } else {

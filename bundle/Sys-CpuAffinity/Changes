@@ -1,5 +1,15 @@
 Revision history for Sys-CpuAffinity
 
+0.98	2010-10-17
+	Fix bug finding external programs in OpenBSD. Test improvements.
+	Better use of Win32 XS in Cygwin. Fix compile error and other typos
+	in solaris XS code.
+
+0.97	2010-10-11
+	Cygwin::pid_to_winpid hack for Perl < v5.10.
+	Disable Win32 GetActiveProcessorCount call, which always either
+	fails quietly or fails noisily.
+
 0.96	2010-05-06
 	Test fix for solaris. Fix parsing negative which output on
 	some platforms.
@@ -16,11 +26,11 @@ Revision history for Sys-CpuAffinity
 0.93	2010-04-21
 	Fix infinite loop in t/11 for single-processor systems.
 
-0.91    2010-04-20
+0.91	2010-04-20
 	Removed _configInlineCode calls, will use XS from now on.
 	Bug fix setting affinity for systems with exactly 32 processors.
 	Stub for IRIX support.
 
-0.90    2010-04-11 Initial release
+0.90	2010-04-11 Initial release
 	Good support for Windows, Cygwin, Linux
 	Basic support for Solaris, FreeBSD, maybe other BSDs

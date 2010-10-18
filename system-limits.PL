@@ -100,6 +100,8 @@ sub write_limits {
   
 }
 
+#############################################################################
+
 sub checkif_sleep_alarm_compatible {
   my $compatible = -1;
   eval {
@@ -185,6 +187,13 @@ sub find_max_open_filehandles {
     #     set rlim_fd_max = xxxx
     #     set rlim_fd_cur = xxxx
 
+
+
+  # we also want to get the error number for the
+  # "Too many open files" and "No such file or directory"
+  # error messages -- in a different locale we cannot
+  # count on $! containing any particular text.
+
   my $i = 0;
   undef $!;
   my $j = $$;
@@ -193,12 +202,26 @@ sub find_max_open_filehandles {
     $i++;
     push @fh, $fh;
   }
-  my $err = $!;
+  my $err = 0 + $!;
   close $_ for @fh;
   # print STDERR "Msg for $i open files: $err\n";
-  &write_limits('maxfilehandle' => $i);
+  $! = $err;
+  &write_limits('maxfilehandle' => $i,
+		'maxfilehandle_msg' => $!,
+		'maxfilehandle_errno' => $err);
   unlink "xxx.$j";
   print STDERR "Can open $i file handles simultaneously\n";
+
+  #################################
+  # also figure out the errno
+  # for file not found.
+  #################################
+
+  $! = 0;
+  open my $xh, '<', 'qwpor/qwer/qw/t/346/234/t';
+  &write_limits('fnf_errno' => 0+$!,
+		'fnf_msg' => $!);
+
   return $i;
 }
 

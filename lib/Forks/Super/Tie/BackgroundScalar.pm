@@ -72,7 +72,7 @@ sub _encode {
 }
 
 sub _decode {
-  my ($protocol, $data) = @_;
+  my ($protocol, $data, $job) = @_;
   if (!defined($data) || $data eq "") {
     return;
   } elsif ($protocol eq 'YAML') {
@@ -87,6 +87,18 @@ sub _decode {
   } elsif ($protocol eq 'Data::Dumper') {
     require Data::Dumper;
     my $VAR1;
+
+    if (${^TAINT}) {
+      if ($job->{untaint}) {
+	($data) = $data =~ /(.*)/s;
+      } else {
+	carp "Forks::Super::bg_eval/bg_qx(): ",
+	  "Using Data::Dumper for serialization, which cannot ",
+	  "operate on 'tainted' data. Use bg_eval {...} {untaint => 1} ",
+	  "or bg_qx COMMAND, {untaint => 1} to retrieve the result.\n";
+	return;
+      }
+    }
     my $x = eval "$data";
     return $x;
   } elsif ($protocol eq 'YAML::Tiny') {
@@ -114,7 +126,7 @@ sub _retrieve_value {
       $self->{value} = undef;
     } else {
       $self->{value_set} = 1;
-      $self->{value} = _decode($self->{job}->{_lazy_proto}, $stdout);
+      $self->{value} = _decode($self->{job}->{_lazy_proto}, $stdout, $self->{job});
     }
   } elsif ($self->{style} eq 'qx') {
     $self->{value_set} = 1;

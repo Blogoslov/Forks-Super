@@ -17,12 +17,17 @@ Forks::Super::Config::CONFIG_module("Time::HiRes");
 Forks::Super::Config::CONFIG_module("Win32");
 Forks::Super::Config::CONFIG_module("Win32::API");
 Forks::Super::Config::CONFIG_module("Win32::Process");
-Forks::Super::Config::CONFIG_Perl_component("SIGUSR1");
-Forks::Super::Config::CONFIG_Perl_component("getpgrp");
-Forks::Super::Config::CONFIG_Perl_component("alarm");
 Forks::Super::Config::CONFIG_module("Sys::CpuAffinity");
 Forks::Super::Config::CONFIG_module("Sys::CpuLoadX");
 Forks::Super::Config::CONFIG_external_program("/uptime");
+
+print STDERR "\%SysInfo::CONFIG includes:";
+foreach my $key (sort keys %Forks::Super::SysInfo::CONFIG) {
+  if ($Forks::Super::SysInfo::CONFIG{$key}) {
+    print STDERR " $key";
+  }
+}
+print STDERR "\n";
 
 my $ps = $ENV{PERL_SIGNALS} || "";
 print STDERR "\$ENV{PERL_SIGNALS} = $ps\n";
@@ -31,4 +36,19 @@ print STDERR "Forks::Super::Job is overloaded: ",
 	$Forks::Super::Job::OVERLOAD_ENABLED, "\n";
 
 print STDERR "\n";
-ok(1);
+
+my $sys = $Forks::Super::SysInfo::SYSTEM;
+my $vers = $Forks::Super::SysInfo::PERL_VERSION;
+
+# XXX - this test is too strong. Important things are
+#       %Forks::Super::SysInfo::CONFIG settings match actual behavior
+#       $Forks::Super::SysInfo::MAX_FORK is not too high for current sys
+
+ok($^O eq $Forks::Super::SysInfo::SYSTEM
+   && $] eq $Forks::Super::SysInfo::PERL_VERSION,
+   "test perl is same as build perl")
+or diag( qq{The version of Perl used to test this module ($^O/$])
+is different from the version used to build this module ($sys/$vers).
+This could cause problems after installation, so you should
+"make clean" and rebuild the module with this version of Perl.} );
+

@@ -1,6 +1,6 @@
 #
 # Forks::Super::Sighandler - tie %SIG to allow us to set
-# up multiple signal handlers on a signal.
+# up multiple (up to 10) signal handlers on a signal.
 #
 
 package Forks::Super::Sighandler;
@@ -15,7 +15,7 @@ our $VERSION = $Forks::Super::Util::VERSION;
 
 our %REGISTRY;
 our $DEBUG = 0;
-my $REGISTRY_MAX = 100;
+my $REGISTRY_MAX = 10;
 my %SIGTABLE;
 my $SIGTIE = bless {} , __PACKAGE__;
 
@@ -35,9 +35,9 @@ sub import {
   untie %SIG;
   for (keys %SIG) {
     if (defined $SIG{$_}) {
-      carp "REGISTRY{$_}[50] => $SIG{$_}\n" if $DEBUG;
+      carp "REGISTRY{$_}[5] => $SIG{$_}\n" if $DEBUG;
     }
-    $REGISTRY{$_}[50] = $SIG{$_};
+    $REGISTRY{$_}[5] = $SIG{$_};
   }
   tie %SIG, __PACKAGE__;
 
@@ -62,23 +62,29 @@ sub init_child {
 
   # IPC cleanup
   foreach my $sig (keys %SIG) {
-    register_signal_handler($sig, 35, undef);
+    register_signal_handler($sig, 4, undef);
   }
 
   # Queue monitor
-  register_signal_handler("ALRM", 10, undef);
-  register_signal_handler("ALRM", 12, undef);
-  register_signal_handler("CHLD", 10, undef);
+  register_signal_handler("ALRM", 1, undef);
+  register_signal_handler("ALRM", 2, undef);
+  register_signal_handler("CHLD", 1, undef);
 }
 
 ######### hash tie routines ############
 
 sub TIEHASH { $SIGTIE }
-sub FETCH { return $REGISTRY{$_[1]}[50] }
-sub STORE { 
-  my $old = $REGISTRY{$_[1]}[50];
-  register_signal_handler($_[1], 50, $_[2]);
-  return $old
+sub FETCH { return $REGISTRY{$_[1]}[5] }
+sub STORE {
+  if (0 && ($_[1] eq '__WARN__' || $_[1] eq '__DIE__')) {
+    my $old = untied { $SIG{$_[1]} };
+    untied { $SIG{$_[1]} = $_[2] };
+    return $old;
+  } else {
+    my $old = $REGISTRY{$_[1]}[5];
+    register_signal_handler($_[1], 5, $_[2]);
+    return $old
+  }
 }
 sub DELETE { return $_[0]->STORE($_[1], undef) }
 sub CLEAR { }  # not recommended, noop
@@ -179,7 +185,7 @@ sub _get_index_list {
   my $signal = shift;
   my @list = ();
   my %seen = ();
-  my @list1 = grep { defined $REGISTRY{$signal}[$_] } 0..99;
+  my @list1 = grep { defined $REGISTRY{$signal}[$_] } 0..9;
   for my $i (@list1) {
     my $handler = $REGISTRY{$signal}[$i];
     next if !defined $handler;

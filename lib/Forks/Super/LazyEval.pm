@@ -102,10 +102,10 @@ sub bg_qx {
   }
 
   if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-    # timeout, expiration are incompatible with bg_eval
+    # timeout, expiration are incompatible with bg_qx
     foreach (@other_options) {
       if ($_ eq "timeout" || $_ eq "expiration") {
-	croak "Forks::Super::bg_eval: ",
+	croak "Forks::Super::bg_qx: ",
 	  "$_ option not allowed because ",
 	  "alarm/sleep are not compatible on this system.\n";
       }
@@ -125,7 +125,7 @@ sub bg_qx {
       'qx', $command, @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows
-      croak "Forks::Super::bg_eval: ",
+      croak "Forks::Super::bg_qx: ",
 	"Inconsistency in process IDs: $p changed to $$!\n";
     }
     return $result;
@@ -135,7 +135,7 @@ sub bg_qx {
       'qx', $command, @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows
-      croak "Forks::Super::bg_eval: ",
+      croak "Forks::Super::bg_qx: ",
 	"Inconsistency in process IDs: $p changed to $$!\n";
     }
     return \$result;

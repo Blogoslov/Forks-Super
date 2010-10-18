@@ -1,5 +1,13 @@
 Revision history for Forks-Super
 
+0.42    2010-10-17
+        Implemented child_fh => block spec.
+        Moved some functionality checks into %Forks::Super::SysInfo::CONFIG.
+        Getting bg_eval, bg_qx to do the right thing in taint mode.
+        Fixed IPC failures in non-English locales bug (cf. 
+            www.cpantesters.org/cpan/report/8376777)
+        Fix stdin,stdout,stderr options to fork to work better with socket IPC.
+
 0.41    2010-10-10
         overload behavior from v0.34 more stable, enabled by default.
         Change name of $Forks::Super::FH_DIR to IPC_DIR and how it is set.

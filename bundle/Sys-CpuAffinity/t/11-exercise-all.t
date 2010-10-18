@@ -2,6 +2,7 @@ use Sys::CpuAffinity;
 use Test::More tests => 1;
 use strict qw(vars subs);
 use warnings;
+$| = 1;
 
 #
 # Exercise all of the methods in the toolbox to
@@ -29,7 +30,7 @@ my ($pid,$wpid);
 
 $wpid = $pid = $$;
 if ($^O eq "cygwin") {
-  $wpid = Cygwin::pid_to_winpid($pid);
+  $wpid = Sys::CpuAffinity::__pid_to_winpid($pid);
 }
 
 require "t/inventory.pl";
@@ -37,6 +38,7 @@ require "t/inventory.pl";
 select STDERR;
 
 EXERCISE_COUNT_NCPUS();
+
 my $n = Sys::CpuAffinity::getNumCpus();
 if ($n <= 1) {
  SKIP: {
@@ -48,6 +50,7 @@ if ($n <= 1) {
   }
   exit 0;
 }
+
 EXERCISE_GET_AFFINITY();
 EXERCISE_SET_AFFINITY();
 ok(1);
@@ -58,11 +61,19 @@ sub EXERCISE_GET_AFFINITY {
     print "\n\n===============================================\n";
 
     print "Current affinity = \n";
-
+    
+    my $success = 0;
     for my $s (inventory::getAffinity()) {
 	my $sub = 'Sys::CpuAffinity::_getAffinity_with_' . $s;
-	my $z = $s =~ /Win32/ ? $sub->($wpid) : $sub->($pid);
-	printf "    %-25s ==> %d\n", $s, $z;
+	printf "    %-25s ==> ", $s;
+	my $z = $s =~ /Win32/ ? eval { $sub->($wpid) } 
+	                      : eval { $sub->($pid) };
+	printf "%d\n", $z || 0;
+	$success += $z > 0;
+    }
+
+    if ($success == 0) {
+      recommend($^O, 'getAffinity');
     }
 }
 
@@ -74,7 +85,8 @@ sub EXERCISE_COUNT_NCPUS {
 
     for my $technique (inventory::getNumCpus()) {
 	my $s = 'Sys::CpuAffinity::_getNumCpus_from_' . $technique;
-	printf "    %-25s - %d -\n", $technique, $s->();
+	printf "    %-25s ", $technique;
+	printf "- %d -\n", eval { $s->() } || 0;
     }
 
 }
@@ -97,6 +109,7 @@ sub EXERCISE_SET_AFFINITY {
     }
 
     # print "@mask\n";
+    my $success = 0;
 
     print "Set affinity =\n";
 
@@ -109,14 +122,79 @@ sub EXERCISE_SET_AFFINITY {
 
 	my $s = "Sys::CpuAffinity::_setAffinity_with_$technique";
 	if ($technique =~ /Win32/) {
-	    $s->($wpid,$mask);
+	    eval { $s->($wpid,$mask) };
 	} else {
-	    $s->($pid,$mask);
+	    eval { $s->($pid,$mask) };
 	}
+	printf "    %-25s => %3u ==> ", $technique, $mask;
 	my $r = Sys::CpuAffinity::getAffinity($pid);
 	my $result = $r==$rr ? "FAIL" : " ok ";
-	printf "    %-25s => %3u ==> %3u   [%s]\n", $technique, 
-	  $mask, $r, $result;
+	if ($r != $rr) {
+	  $success++;
+	}
+	printf "%3u   [%s]\n", $r, $result;
+    }
+
+    if ($success == 0) {
+      recommend($^O, 'setAffinity');
     }
 }
+
+sub recommend {
+  use Config;
+
+  my ($sys, $function) = @_;
+
+  print "\n\n==========================================\n\n";
+  print "The function 'Sys::CpuAffinity::$function' does\n";
+  print "not seem to work on this system.\n\n";
+
+  my @recommendations = ("a C complier");
+  if ($Config{"cc"}) {
+    push @recommendations, "\t(preferrably $Config{cc})";
+  }
+
+  if ($sys eq 'cygwin') {
+    push @recommendations, "the  Win32  module";
+    push @recommendations, "the  Win32::API  module";
+    push @recommendations, "the  Win32::Process  module";
+  } elsif ($sys eq 'MSWin32') {
+    push @recommendations, "the  Win32  module";
+    push @recommendations, "the  Win32::API  module";
+    push @recommendations, "the  Win32::Process  module";
+  } elsif ($sys =~ /bsd/i) {
+    push @recommendations, "the  BSD::Process::Affinity  module";
+    push @recommendations, "make sure the  cpuset  program is in the PATH";
+  } elsif ($sys =~ /solaris/i) {
+    push @recommendations, "make sure the  pbind  program is in the PATH";
+  } elsif ($sys =~ /irix/i) {
+    # still need to learn to use the  cpuset_XXX  functions
+  } elsif ($sys =~ /darwin/i || $sys =~ /MacOS/i) {
+    @recommendations = ();
+    print "The Mac OS does not provide (as far as I can tell)\n";
+    print "a way to manipulate the CPU affinities of processes.\n";
+    print "\n\n==========================================\n\n\n";
+    return;
+  } elsif ($sys =~ /aix/i) {
+    push @recommendations, 
+      "make sure the  bindprocessor  program is in the PATH";
+  } else {
+    push @recommendations, 
+      "don't know what else to recommend for system $sys";
+  }
+
+  if (@recommendations > 0) {
+    print "To make this module work, you may want to install:\n\n";
+    foreach (@recommendations) {
+      print "\t$_\n";
+    }
+    print "\n\n";
+    print "If these recommendations do not help, drop a note\n";
+    print "to mob\@cpan.org with details about your\n";
+    print "system configuration.\n";
+  }
+
+  print "\n\n==========================================\n\n\n";
+}
+
 

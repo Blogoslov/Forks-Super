@@ -36,7 +36,7 @@ my $t = Time::HiRes::gettimeofday();
 my $pid4 = fork { sub => $sleepy , can_launch => $launch_after_nap };
 $t = Time::HiRes::gettimeofday() - $t;
 ok(isValidPid($pid4), "successful delayed fork");
-ok($t >= 9.7, "fork was delayed ${t}s expected >10s");
+ok($t >= 9.0, "fork was delayed ${t}s expected >10s");
 
 $Forks::Super::MAX_PROC = 50;
 my $pid5 = fork { sub => $sleepy };
@@ -46,7 +46,8 @@ ok(!isValidPid($pid6), "force failed fork");
 
 # PERL_SIGNALS=unsafe: can hang here
 
-my @to_kill = grep { isValidPid($_) } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
+my @to_kill = grep { isValidPid($_) 
+		   } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
 print "to kill: @to_kill\n";
 Forks::Super::kill('TERM', @to_kill) if @to_kill > 0;
 waitall;

@@ -188,3 +188,17 @@ Thoughts about a major revision. Also see the  TODO  file.
 	Like many things, this will probably suck to do in
 	Windows.
 
+    ___ "Pipe cleaner" tied filehandle class to periodically flush
+	pipes and sockets into buffers, emulating an "infinite capacity"
+	buffer.
+
+	___ during productive pauses or on regular itimer interrupts,
+	    read and buffer input from all pipes connected to output
+	    streams from another process. Read operations on the handle
+	    consult the input buffer first.
+
+	___ all write operations are to a buffer. On a write operation
+	    and during productive pauses/itimer interrupts, attempt
+	    to copy as much as you can from this buffer into the
+	    pipe.
+

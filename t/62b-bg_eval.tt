@@ -12,7 +12,11 @@ $Forks::Super::LazyEval::USE_ZCALAR = 1;
 # 
 
 my $t0 = Time::HiRes::gettimeofday();
-my $x = bg_eval { sleep 3 ; return 42 };
+
+# untaint needed when Data::Dumper is the serializer
+my $untaint = ${^TAINT};
+
+my $x = bg_eval { sleep 3 ; return 42 } { untaint => $untaint };
 my $t = Time::HiRes::gettimeofday();
 ok(defined $Forks::Super::LAST_JOB,        ### 3 ###
    "\$Forks::Super::LAST_JOB set");
@@ -34,14 +38,14 @@ $x = 19;
 ok($x == 19, "result is not read only");
 
 SKIP: {
+
   if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-    skip "alarm/sleep incompatible on this system, "
-      . "can't use bg_eval with timeout", 2;
+    skip "alarm and sleep are incompatible on this system; "
+      . "can't test bg_eval with a timeout", 2;
   }
 
-  $x = bg_eval { sleep 10; return 19 } { timeout => 2 };
+  $x = bg_eval { sleep 10; return 19 } { timeout => 2, untaint => $untaint };
   $t = Time::HiRes::gettimeofday();
-
   ok(!defined($x->_fetch) || $x eq '',
      "scalar bg_eval undef on failure");
   $t = Time::HiRes::gettimeofday() - $t;
@@ -63,6 +67,8 @@ my @x = bg_eval {
   my @f = grep { /\.t$/ } readdir(X);
   closedir X;
   return @f;
+} { 
+  'untaint' => $untaint 
 };
 my @tests = @x;
 $t = Time::HiRes::gettimeofday() - $t;
@@ -94,16 +100,15 @@ $t0 = Time::HiRes::gettimeofday();
 $x = bg_eval {
   sleep 2;
   opendir(X, "t");
-# my @f = grep { !/\.t$/ } readdir(X);
   my $i = 0; my %f = map { $_ => ++$i } grep { !/\.t$/ } readdir(X);
   closedir X;
-# return \@f;
   return \%f;
+} {
+  'untaint' => $untaint
 };
 $t = Time::HiRes::gettimeofday();
 my %others = %$x;
 my $t2 = Time::HiRes::gettimeofday();
-
 ($t,$t0) = ($t2-$t,$t2-$t0);
 ok($t0 >= 1.95 && $t <= 5.04,           ### 25 ### was 3.25 obs 3.56,3.75,4.97
    "listref bg_eval took ${t0}s ${t}s expected ~2s");
@@ -120,9 +125,10 @@ $t0 = Time::HiRes::gettimeofday();
 $x = bg_eval {
   sleep 5; return 19
 } { name => 'bg_eval_job', delay => 3, on_busy => "queue",
-      callback => { queue => sub { $w++ }, start => sub { $w+=2 },
-		    finish => sub { $w+=5 } }
-    };
+    callback => { queue => sub { $w++ }, start => sub { $w+=2 },
+		    finish => sub { $w+=5 } },
+    untaint => $untaint
+};
 $t = Time::HiRes::gettimeofday();
 my $j = Forks::Super::Job::get('bg_eval_job');
 ok($j eq $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
