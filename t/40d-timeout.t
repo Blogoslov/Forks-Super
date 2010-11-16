@@ -27,12 +27,12 @@ SKIP: {
 
 #######################################################
 
-my $now = Time::HiRes::gettimeofday();
-my $future = Time::HiRes::gettimeofday() + 3;
+my $now = Time::HiRes::time();
+my $future = Time::HiRes::time() + 3;
 my $pid = fork { sub => sub { sleep 10; exit 0 }, expiration => $future };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($p == $pid, "$$\\wait successful");
 ok($t < 5.95, "wait took ${t}s, expected ~3s");  ### 11 ###
 ok($? != 0, "job expired with non-zero STATUS $? should be != 0"); ### 12 ###

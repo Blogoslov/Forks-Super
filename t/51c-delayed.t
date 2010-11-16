@@ -9,7 +9,7 @@ SKIP: {
     skip "natural language test requires DateTime::Format::Natural module", 4;
   }
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $pid = fork { delay => "in 5 seconds", sub => sub { sleep 3 } };
 my $pp = waitpid $pid, 0;
 my $job = Forks::Super::Job::get($pid);
@@ -20,7 +20,7 @@ ok(!isValidPid($pid,-1) && $pp == $pid || $pp == $job->{real_pid},
 ok($elapsed >= 4 && $elapsed <= 6, "natural language delay was respected");
 
 my $future = "in 6 seconds";
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $pid = fork { start_after => $future,
 		child_fh => "out",
 		sub => sub { 

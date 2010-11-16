@@ -11,7 +11,7 @@ my ($pid,$pid1,$pid2,$pid3,$j1,$j2,$j3,$p,$q,$t,@j,$p1,$p2,$p3);
 $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $p1 = fork { sub => sub {sleep 3}, name => "dup1" };
 $p2 = fork { sub => sub {sleep 2}, name => "dup1", delay => 2 };
 $p3 = fork { sub => sub {sleep 1}, depend_start => "dup1", depend_on => $p2 };

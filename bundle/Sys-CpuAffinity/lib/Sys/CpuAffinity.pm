@@ -1092,7 +1092,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-Version 0.98
+0.98
 
 =head1 SYNOPSIS
 

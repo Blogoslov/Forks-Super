@@ -63,14 +63,14 @@ sub bg_eval (&;@) {
       protocol => $proto,
       @other_options;
     return @result;
-  } elsif ($Forks::Super::LazyEval::USE_ZCALAR) {
+  } elsif (!$Forks::Super::LazyEval::USE_ZCALAR) {
 
     # Forks::Super::Tie::BackgroundZcalar is experimental replacement for
     # Forks::Super::Tie::BackgroundScalar using overloading that would not
     # require dereferencing to get the result.
 
-    require Forks::Super::Tie::BackgroundZcalar;
-    $result = new Forks::Super::Tie::BackgroundZcalar
+    require Forks::Super::Tie::BackgroundScalar;
+    $result = new Forks::Super::Tie::BackgroundScalar
       'eval', $code, 
       protocol => $proto,
       @other_options;
@@ -81,8 +81,8 @@ sub bg_eval (&;@) {
     }
     return $result;
   } else {
-    require Forks::Super::Tie::BackgroundScalar;
-    tie $result, 'Forks::Super::Tie::BackgroundScalar',
+    require Forks::Super::Tie::BackgroundZcalar;
+    tie $result, 'Forks::Super::Tie::BackgroundZcalar',
       'eval', $code, 
       protocol => $proto,
       @other_options;
@@ -119,9 +119,9 @@ sub bg_qx {
     tie @result, 'Forks::Super::Tie::BackgroundArray',
       'qx', $command, @other_options;
     return @result;
-  } elsif ($Forks::Super::LazyEval::USE_ZCALAR) {
-    require Forks::Super::Tie::BackgroundZcalar;
-    $result =  new Forks::Super::Tie::BackgroundZcalar
+  } elsif (!$Forks::Super::LazyEval::USE_ZCALAR) {
+    require Forks::Super::Tie::BackgroundScalar;
+    $result =  new Forks::Super::Tie::BackgroundScalar
       'qx', $command, @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows
@@ -130,8 +130,8 @@ sub bg_qx {
     }
     return $result;
   } else {
-    require Forks::Super::Tie::BackgroundScalar;
-    tie $result, 'Forks::Super::Tie::BackgroundScalar',
+    require Forks::Super::Tie::BackgroundZcalar;
+    tie $result, 'Forks::Super::Tie::BackgroundZcalar',
       'qx', $command, @other_options;
     if ($$ != $p) {
       # a WTF observed on Windows

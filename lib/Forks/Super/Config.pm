@@ -15,7 +15,6 @@ use Carp;
 
 use Exporter;
 our @ISA = qw(Exporter);
-#use base 'Exporter';
 
 use strict;
 use warnings;
@@ -26,7 +25,10 @@ our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %signo);
 our $VERSION = $Forks::Super::Debug::VERSION;
 
 sub init {
-  %CONFIG = (filehandles => 1);
+
+  %CONFIG = ();
+  $CONFIG{filehandles} = 1;
+
   $IS_TEST = 0;
   $IS_TEST_CONFIG = 0;
 
@@ -54,7 +56,9 @@ sub init {
 }
 
 sub init_child {
-  unconfig('filehandles');
+  untie $CONFIG{'filehandles'};
+  untie %CONFIG;
+# unconfig('filehandles');
 }
 
 sub unconfig {
@@ -64,7 +68,6 @@ sub unconfig {
 
 sub config {
   my $module = shift;
-  if ($module eq 'filehandles') { Carp::cluck "Setting CONFIG(filehandles)\n" }
   $CONFIG{$module} = 1;
 }
 
@@ -92,16 +95,7 @@ sub CONFIG {
     return $CONFIG{$module};
   }
 
-  # check for OS-dependent Perl functionality
-  if ($module eq 'getpgrp' or $module eq 'alarm'
-      or $module eq 'SIGUSR1' or $module eq 'getpriority'
-      or $module eq 'select4' or $module eq 'pipe'
-      or $module eq 'setitimer' or $module eq 'socketpair') {
-
-    Carp::confess "CONFIG_Perl_component sub was removed. ",
-	"Use \%Forks::Super::SysInfo::CONFIG\n";
-
-  } elsif (substr($module,0,1) eq '/') {
+  if (substr($module,0,1) eq '/') {
     return $CONFIG{$module} = CONFIG_external_program($module);
   } elsif ($module eq 'filehandles') {
     return $CONFIG{$module} = 1; # available by default

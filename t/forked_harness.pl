@@ -4,7 +4,7 @@
 #
 # this framework is good for
 #     fast testing
-#       * if you have lots of tests and your framework is mature
+#       * if you have lots of tests and your distribution is mature
 #         enough that you expect the vast majority to pass
 #       * if you have an intermittent failure and you might
 #         need to run a test many many times to reproduce
@@ -25,7 +25,8 @@
 #     # stresstest -- run all tests 100 times, in parallel
 #     stresstest :: pure_all
 #           $(PERLRUN) t/forked_harness.pl $(TEST_FILES) -r 20 -x 5 -s -q
-
+#
+#
 # options:
 #
 #  --harness|-h:         wrap tests in the ExtUtils::Command::MM::test_harness
@@ -58,12 +59,12 @@ use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
 use IO::Handle;
 use Getopt::Long;
 eval "use Time::HiRes;1" 
-  or do { *Time::HiRes::gettimeofday = sub { time } };
+  or do { *Time::HiRes::time = sub { time } };
 use POSIX ':sys_wait_h';
 use strict;
 use warnings;
 $| = 1;
-$^T = Time::HiRes::gettimeofday();
+$^T = Time::HiRes::time();
 if (${^TAINT}) {
   if ($^O eq 'MSWin32') {
     ($ENV{PATH}) = $ENV{PATH} =~ /(.*)/;
@@ -75,22 +76,22 @@ if (${^TAINT}) {
   @ARGV = map /(.*)/, @ARGV;
 }
 
-my $timeout = 120;
-my $use_harness = '';
-my $use_color = $ENV{COLOR} && -t STDOUT &&
-  eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
-my $test_verbose = $ENV{TEST_VERBOSE} || 0;
 my @use_libs = qw(blib/lib blib/arch);
 my @perl_opts = ();
 my @env = ();
-my $shuffle = '';
+my $maxproc = &maxproc_initial;
+my $use_color = $ENV{COLOR} && -t STDOUT &&
+  eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
+my $timeout = 120;
 my $repeat = 1;
 my $xrepeat = 1;
+my $test_verbose = $ENV{TEST_VERBOSE} || 0;
+my $check_endgame = $ENV{ENDGAME_CHECK} || 0;
 my $quiet = 0;
 my $really_quiet = 0;
-my $maxproc = &maxproc_initial;
-my $check_endgame = $ENV{ENDGAME_CHECK} || 0;
 my $abort_on_first_error = 0;
+my $use_harness = '';
+my $shuffle = '';
 my $debug = '';
 my $use_socket = '';
 $::fail35584 = '';
@@ -111,7 +112,7 @@ my $result = GetOptions("harness" => \$use_harness,
            "xrepeat=i" => \$xrepeat,
 	   "maxproc=i" => \$maxproc,
 	   "q|quiet" => \$quiet,
-	   "qq|really-quite" => \$really_quiet,
+	   "qq|really-quiet" => \$really_quiet,
            "debug" => \$debug,
 	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
@@ -568,7 +569,7 @@ sub summarize {
     $iteration--;
     print "All tests successful. $iteration iterations.\n";
   }
-  my $elapsed = Time::HiRes::gettimeofday() - $^T;
+  my $elapsed = Time::HiRes::time() - $^T;
   printf "Elapsed time: %.3f\n", $elapsed; sleep 3 if $debug;
 }
 

@@ -24,9 +24,9 @@ SKIP: {
 #######################################################
 
 my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 0 };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($p == $pid, "wait successful; Expected $pid got $p");
 ok($t <= 1.9, "fast fail timeout=${t}s, expected <=1s"); ### 8 ###
 ok($? != 0, "job failed with non-zero STATUS $?");

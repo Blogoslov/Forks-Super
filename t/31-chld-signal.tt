@@ -14,7 +14,7 @@ use warnings;
 our $_LOCK = 0;  # use same synchronization technique as F::S::Sighandler
 
 sub child_signal_hijacker {
-# $SIGNAL::TIME = Time::HiRes::gettimeofday() if $_[0] =~ /^C/;
+# $SIGNAL::TIME = Time::HiRes::time() if $_[0] =~ /^C/;
   $_LOCK++;
   if ($_LOCK>1) {
     $_LOCK--;
@@ -32,7 +32,7 @@ sub child_signal_hijacker {
       #print "NEW COMPLETE JOB: ", $cj->toString(), "\n";
       $LAST::COMPLETE = $cj;
       $LAST::COMPLETE{$cj}++;
-      $SIGNAL::TIME = Time::HiRes::gettimeofday();
+      $SIGNAL::TIME = Time::HiRes::time();
     }
   }
   $_LOCK--;
@@ -44,7 +44,7 @@ sub child_signal_hijacker {
 my $old_sig_chld = delete $SIG{CHLD};
 $SIG{CHLD} = \&child_signal_hijacker;
 *Forks::Super::handle_CHLD = *child_signal_hijacker;
-$SIGNAL::TIME = Time::HiRes::gettimeofday();
+$SIGNAL::TIME = Time::HiRes::time();
 
 my $pid = fork();
 if (defined $pid && $pid == 0) {
@@ -70,7 +70,7 @@ ok($j->{state} eq "ACTIVE", "active state");
 # But I've also seen it not happen intermittently
 # on FreeBSD and CentOS :-(
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 SKIP: {
   if ($^O eq "MSWin32") {
     Forks::Super::pause(5);
@@ -78,7 +78,7 @@ SKIP: {
   }
   local $! = 0;
   sleep 10;   # sleep should be interrupted by SIGCHLD
-  $t = Time::HiRes::gettimeofday() - $t;
+  $t = Time::HiRes::time() - $t;
 
   #if ($t > 9) {
   #  Forks::Super::pause();
@@ -121,9 +121,9 @@ if (defined $pid && $pid == 0) {
 ok(defined $pid && isValidPid($pid), "valid pid $pid");
 $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 Forks::Super::pause(6);   # ACK! sleep can be interrupted by CHLD signal!
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t > 5.7 && $t < 7.75,                           ### 13 ### was 7.1 obs 7.10
    "Forks::Super::pause(6) took ${t}s expected 6");
 ok($j->{state} eq 'COMPLETE', "complete state " . $j->{state});

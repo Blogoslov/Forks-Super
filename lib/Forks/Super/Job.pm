@@ -25,7 +25,7 @@ use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -50,7 +50,7 @@ sub new {
   if (ref $opts eq 'HASH') {
     $this->{$_} = $opts->{$_} foreach keys %$opts;
   }
-  $this->{created} = Time::HiRes::gettimeofday();
+  $this->{created} = Time::HiRes::time();
   $this->{state} = 'NEW';
   $this->{ppid} = $$;
   if (!defined $this->{_is_bg}) {
@@ -184,7 +184,7 @@ sub toShortString {
 sub _mark_complete {
   my $job = shift;
   $job->{state} = 'COMPLETE';
-  $job->{end} = Time::HiRes::gettimeofday();
+  $job->{end} = Time::HiRes::time();
 
   $job->run_callback('collect');
   $job->run_callback('finish');
@@ -193,7 +193,7 @@ sub _mark_complete {
 sub _mark_reaped {
   my $job = shift;
   $job->{state} = 'REAPED';
-  $job->{reaped} = Time::HiRes::gettimeofday();
+  $job->{reaped} = Time::HiRes::time();
   $? = $job->{status};
   debug("Job $job->{pid} reaped") if $job->{debug};
   return;
@@ -206,7 +206,7 @@ sub can_launch {
   no strict 'refs';
 
   my $job = shift;
-  $job->{last_check} = Time::HiRes::gettimeofday();
+  $job->{last_check} = Time::HiRes::time();
   if (defined $job->{can_launch}) {
     if (ref $job->{can_launch} eq 'CODE') {
       return $job->{can_launch}->($job);
@@ -223,7 +223,7 @@ sub can_launch {
 sub _can_launch_delayed_start_check {
   my $job = shift;
   return 1 if !defined $job->{start_after} ||
-    Time::HiRes::gettimeofday() >= $job->{start_after};
+    Time::HiRes::time() >= $job->{start_after};
 
   debug('Forks::Super::Job::_can_launch(): ',
 	'start delay requested. launch fail') if $job->{debug};
@@ -355,6 +355,8 @@ sub launch {
 
   my $retries = $job->{retries} || 0;
 
+
+
   my $pid = _CORE_fork();
   while (!defined $pid && $retries-- > 0) {
     warn "Forks::Super::launch: ",
@@ -406,7 +408,7 @@ sub launch {
     }
     $job->{real_pid} = $pid;
     $job->{pid} = $pid unless defined $job->{pid};
-    $job->{start} = Time::HiRes::gettimeofday();
+    $job->{start} = Time::HiRes::time();
 
     $job->_config_parent;
     $job->run_callback('start');
@@ -669,8 +671,8 @@ sub _preconfig_start_time {
   # configure a future start time
   my $start_after = 0;
   if (defined $job->{delay}) {
-    $start_after = Time::HiRes::gettimeofday() +  Forks::Super::Job::Timeout::_time_from_natural_language($job->{delay}, 1);
-    #$start_after = Time::HiRes::gettimeofday() +  $job->{delay};
+    $start_after = Time::HiRes::time() +  Forks::Super::Job::Timeout::_time_from_natural_language($job->{delay}, 1);
+    #$start_after = Time::HiRes::time() +  $job->{delay};
   }
   if (defined $job->{start_after}) {
     my $start_after2 = Forks::Super::Job::Timeout::_time_from_natural_language($job->{start_after}, 0);
@@ -1059,7 +1061,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.42
+0.43
 
 =head1 SYNOPSIS
 
@@ -1510,18 +1512,46 @@ This method will
 
 =item * close any open filehandles
 
+=item * attempt to remove temporary files used for interprocess communication ]with the job
+
 =item * erase all information about the job
 
 =item * remove the job object from the C<@ALL_JOBS> and C<%ALL_JOBS> variables.
 
 =back
 
-
 =back
+
+=head1 VARIABLES
+
+=head2 @ALL_JOBS, %ALL_JOBS
+
+Any job object created by this module will be added to the list
+C<@Forks::Super::Job::ALL_JOBS> and to the lookup table
+C<%Forks::Super::Job::ALL_JOBS>. Within C<%ALL_JOBS>, a specific
+job object can be accessed by its job id (the numerical value returned
+from C<Forks::Super::fork()>), its real process id (once the
+job has started), or its C<name> attribute, if one was passed to
+the C<Forks::Super::fork()> call. This may be helpful for iterating
+through all of the jobs your program has created.
+
+    my ($longest_job, $longest_time) = (-1, -1);
+    foreach $job (@Forks::Super::ALL_JOBS) {
+        if ($job->is_complete) {
+            $job_time = $job->{end} - $job->{start};
+            if ($job_time > $longest_time) {
+                ($longest_job, $longest_time) = ($job, $job_time);
+            }
+        }
+    }
+    print STDERR "The job that took the longest was $job: ${job_time}s\n";
+
+Jobs that have been passed to the L<"dispose"> method are removed
+from C<@ALL_JOBS> and C<%ALL_JOBS>.
 
 =head1 OVERLOADING
 
-An experimental feature in the L<Forks::Super> module is to make
+An available feature in the L<Forks::Super> module is to make
 it more convenient to access the functionality of 
 C<Forks::Super::Job>. When this feature is enabled, the 
 return value from a call to C<Forks::Super::fork()> is an
@@ -1531,7 +1561,7 @@ I<overloaded> C<Forks::Super::Job> object.
 
 In a numerical context, this value looks and behaves like
 a process ID (or job ID). The value can be passed to functions
-like C<kill> and C<waitpid>.
+like C<kill> and C<waitpid> that expect a process ID.
 
     if ($job_or_pid != $another_pid) { ... }
     kill 'TERM', $job_or_pid;
@@ -1541,10 +1571,6 @@ C<Forks::Super::Job> object.
 
     $job_or_pid->{real_pid}
     $job_or_pid->suspend
-
-Even when overloading is enabled, C<Forks::Super::fork()> 
-still returns a simple scalar value of 0 to the child process
-(when a value is returned).
 
 Since v0.41, this feature is enabled by default.
 
@@ -1572,6 +1598,10 @@ In principle you may call these methods at any time and as often
 as you wish.
 
 =back
+
+Even when overloading is enabled, C<Forks::Super::fork()> 
+still returns a simple scalar value of 0 to the child process
+(when a value is returned).
 
 =head1 SEE ALSO
 

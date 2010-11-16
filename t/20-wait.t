@@ -9,9 +9,9 @@ use warnings;
 
 my $pid = fork { sub => sub { sleep 2 ; exit 2 } };
 sleep 4;
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 my $s = $?;
 ok(isValidPid($pid), "fork was successful");
 ok($p == $pid, "wait captured correct pid");
@@ -20,11 +20,11 @@ ok($s == 512, "wait set exit STATUS in \$\?");
 
 ############################################
 
-my $u = Time::HiRes::gettimeofday();
+my $u = Time::HiRes::time();
 $pid = fork { sub => sub { sleep 3; exit 3 } };
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $p = wait;
-my $v = Time::HiRes::gettimeofday();
+my $v = Time::HiRes::time();
 ($u,$t) = ($v-$u,$v-$t);
 $s = $?;
 ok(isValidPid($pid) && $p==$pid, "successful fork+wait");
@@ -40,7 +40,7 @@ for (my $i=0; $i<20; $i++) {
   ok(isValidPid($pid), "successful fork $pid");
   $x{$pid} = $i;
 }
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 
 my $waitfail = 0;
 while (0 < scalar keys %x) {
@@ -56,15 +56,15 @@ while (0 < scalar keys %x) {
     last;
   }
 }
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t <= 10.5,        ### 88 ### was 8 obs 10.23,10.40
    "wait did not take too long ${t}s, expected <=8s");
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 for (my $i=0; $i<5; $i++) {
   my $p = wait;
   ok($p == -1, "wait on nothing gives -1");
 }
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t <= 1, "fast return wait on nothing ${t}s, expected <=1s"); ### 94 ###
 
 

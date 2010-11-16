@@ -37,7 +37,7 @@ SKIP: {
   ok(!defined $Forks::Super::Queue::QUEUE_MONITOR_PID,
      "\$QUEUE_MONITOR_PID not defined");
 
-  my $start_after = 5 + Time::HiRes::gettimeofday();
+  my $start_after = 5 + Time::HiRes::time();
   my $job = Forks::Super::Job->new({ 
 				  queue_priority => 0,
 				  style => 'sub',

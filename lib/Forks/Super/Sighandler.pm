@@ -2,6 +2,9 @@
 # Forks::Super::Sighandler - tie %SIG to allow us to set
 # up multiple (up to 10) signal handlers on a signal.
 #
+# This implementation is an early version of some code
+# that would become the Signals::XSIG module. 
+#
 
 package Forks::Super::Sighandler;
 use Exporter;
@@ -205,6 +208,7 @@ sub _get_index_list {
 __END__
 
 
+
 Signal handling, since v0.40
 
 Where available, signals are used throughout Forks::Super.
@@ -250,8 +254,48 @@ for the signal handlers to do at will. If end user
 also wishes to add a signal handler, the framework
 should be able to accomodate that, too. And transparently.
 
-Let's spike it out ...
+--------------------------
 
+_head1 NAME
 
+Forks::Super::Sighandler - extended signal handling module for Forks::Super
 
+_head1 VERSION
 
+0.43
+
+_head1 DESCRIPTION
+
+A precursor to L<Signals::XSIG>, this module allows you to install
+multiple handlers for a signal. This is handy because 
+
+_over 4
+
+_item * we can perform multiple actions on receipt of a single signal,
+adding and removing actions as needed
+
+_item * we can handle a signal (say, C<SIGALRM>), and the module's
+end-user may still install his/her own handler for that signal
+without interfering with our signal handler.
+
+_back
+
+_head1 SEE ALSO
+
+L<Signals::XSIG>
+
+_head1 AUTHOR
+
+Marty O'Brien, E<lt>mob@cpan.orgE<gt>
+
+_head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2009-2010, Marty O'Brien.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
+
+_cut

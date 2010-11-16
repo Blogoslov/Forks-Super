@@ -40,7 +40,8 @@ no warnings;
 
 my $flag_on_error = 0;
 my $STATUS=0;
-$SIG{'INT'} = sub { $STATUS=2; die $^O eq 'MSWin32' ? "die INT\n" : "\n";};
+#$SIG{'INT'} = sub { $STATUS=2; die $^O eq 'MSWin32' ? "die INT\n" : "\n";};
+$SIG{'HUP'} = sub { $STATUS=1; die $^O eq 'MSWin32' ? "die HUP\n" : "\n";};
 
 END {
   $?=$STATUS if $STATUS;
@@ -54,7 +55,6 @@ END {
   close STDERR;
   1;
 }
-
 
 $| = 1;
 foreach my $arg (@ARGV) {

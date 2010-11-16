@@ -10,7 +10,7 @@ use warnings;
 
 
 my (%x,@pid);
-my $t0 = Time::HiRes::gettimeofday();
+my $t0 = Time::HiRes::time();
 for (my $i=0; $i<5; $i++) {
   my $pid = fork { sub => sub { sleep 5 ; exit $i },
 	callback => { ___start => sub { 
@@ -19,9 +19,9 @@ for (my $i=0; $i<5; $i++) {
   push @pid, $pid;
 }
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 Forks::Super::waitall;
-my $t2 = Time::HiRes::gettimeofday();
+my $t2 = Time::HiRes::time();
 ($t0,$t) = ($t2-$t0, $t2-$t);
 my $p = wait;
 ok($p == -1, "wait after waitall returns -1==$p");

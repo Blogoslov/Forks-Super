@@ -202,3 +202,38 @@ Thoughts about a major revision. Also see the  TODO  file.
 	    to copy as much as you can from this buffer into the
 	    pipe.
 
+    ___ Several "modes" corresponding to use cases, controlling various
+	settings in the program:
+        ___ how frequently we examine the queue
+        ___ the timeout on non-blocking reads
+        ___ minimum resolution of the  pause()  function
+        ___ maximum processes as a function of number of processors
+        ___ how frequently we call suspend/resume callback
+
+        Considerations for these settings depend on:
+        ___ characteristic job duration
+           ___ short jobs (characteristic time 0-10s)
+           ___ long jobs (characteristic time >5m)
+           ___ medium jobs (10s-5m)
+           ___ mixed use (jobs of different sizes)
+           ___ asynchronous (jobs start in response to external events)
+           ___ number of jobs (active+queued). Does it take a noticeable amount
+	       of time to examine the queue and decide what job to dispatch?
+        ___ characteristic job intensity - what resources each job uses
+           ___ cpu-intensive jobs
+           ___ memory intensive jobs
+           ___ I/O intensive jobs
+           ___ network intensive jobs
+           ___ passive jobs (consume few resources, respond to external events)
+        ___ whether the queue is in use
+        ___ external factors
+	   ___ number and intensity of other programs running
+           ___ available memory
+           ___ additional users that are logged in to the same machine
+
+        ___ intelligent, "adaptive" mode which makes adjustments based
+            on actual characteristics of completed jobs
+
+        Good documentation on how to override any of these settings.
+
+

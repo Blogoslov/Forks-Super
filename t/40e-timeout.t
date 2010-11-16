@@ -23,11 +23,11 @@ SKIP: {
 
 #######################################################
 
-my $future = Time::HiRes::gettimeofday() + 15;
+my $future = Time::HiRes::time() + 15;
 my $pid = fork { sub => sub { sleep 5; exit 0 }, expiration => $future };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($p == $pid, "wait successful");
 ok($t < 10, "job completed before expiration ${t}s expected ~5s");
 ok($? == 0, "job completed with zero exit STATUS");

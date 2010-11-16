@@ -97,7 +97,7 @@ SKIP: {
     skip "suspend/resume not supported on MSWin32", 9;
   }
 
-  my $t0 = $::T = Time::HiRes::gettimeofday();
+  my $t0 = $::T = Time::HiRes::time();
   my $pid = fork { 
     suspend => 'child_suspend_callback_function',
       sub => sub {
@@ -109,7 +109,7 @@ SKIP: {
       },
 	timeout => 45
       };
-  my $t1 = 0.5 * ($t0 + Time::HiRes::gettimeofday());
+  my $t1 = 0.5 * ($t0 + Time::HiRes::time());
   my $job = Forks::Super::Job::get($pid);
 
   # sub should proceed normally for 5 seconds
@@ -117,12 +117,12 @@ SKIP: {
   # process should stay suspended for 10 seconds
   # then process should resume and run for 5-10 seconds
 
-  Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::gettimeofday());
+  Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::time());
   ok($job->{state} eq 'ACTIVE', "job has started");
   my $w = read_value();
   ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
 
-  Forks::Super::Util::pause($t1 + 8.0 - Time::HiRes::gettimeofday());
+  Forks::Super::Util::pause($t1 + 8.0 - Time::HiRes::time());
   ok($job->{state} eq 'SUSPENDED', "job is suspended");
   $w = read_value();
   if (!defined $w) {
@@ -131,14 +131,14 @@ SKIP: {
     $w = read_value();
   }
 
-  ok($w >= 4, "job is incrementing value, expect val:$w >= 4");
+  ok($w >= 4, "job is incrementing value, expect val:$w >= 4");  ### 4 ###
 
-  Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::gettimeofday());
+  Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::time());
   ok($job->{state} eq 'SUSPENDED', "job is still suspended");
   my $x = read_value();
   ok($x == $w, "job has stopped increment value, expect val:$x == $w");
 
-  Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::gettimeofday());
+  Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::time());
   ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',
      "job has resumed state=" . $job->{state});
   $x = read_value();

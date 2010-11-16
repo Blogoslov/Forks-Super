@@ -39,11 +39,11 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
 $p1 = fork { sub => sub { sleep 3 }, name => "simple" };
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $p2 = fork { sub => sub { sleep 3 }, depend_on => "simple",
 	     queue_priority => 10 };
 $p3 = fork { sub => sub { }, queue_priority => 5 };
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t <= 2.05,              ### 11 ### was 1.5, obs 1.65,1.76,1.98
    "fast return for queued job ${t}s expected <=1s"); 
 $j1 = Forks::Super::Job::get($p1);

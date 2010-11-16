@@ -125,12 +125,12 @@ ok($z eq $target_z,
 
 # test that timing of reap is correct
 
-my $u = Time::HiRes::gettimeofday();
+my $u = Time::HiRes::time();
 $pid = fork { sub => sub { sleep 3 } };
 ok(isValidPid($pid), "fork to sleepy sub ok");
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 $p = wait;
-my $v = Time::HiRes::gettimeofday();
+my $v = Time::HiRes::time();
 ($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait on sleepy sub ok");        ### 18 ###
 ok($u >= 2.9 && $t <= 5.05,                     ### 19 ### was 4 obs 4.69

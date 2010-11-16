@@ -17,7 +17,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -28,15 +28,10 @@ our ($DEFAULT_PAUSE, $_PAUSE) = (0.10, 0);
 
 $Time_HiRes_avail = eval "use Time::HiRes; 1" || 0;
 if (!$Time_HiRes_avail) {
-  *Time::HiRes::gettimeofday = \&__fake_Time_HiRes_gettimeofday;
+  *Time::HiRes::time = \&time;
   *Time::HiRes::sleep = \&__fake_Time_HiRes_sleep;
 }
 
-
-
-sub __fake_Time_HiRes_gettimeofday {
-  return wantarray ? (time,0) : time;
-}
 
 sub __fake_Time_HiRes_sleep {
   my $delay = shift;
@@ -49,7 +44,7 @@ sub __fake_Time_HiRes_sleep {
 }
 
 sub Ctime {
-  my $t = Time::HiRes::gettimeofday(); #Time();
+  my $t = Time::HiRes::time(); #Time();
   return sprintf "%02d:%02d:%02d.%03d: ",
     ($t/3600)%24, ($t/60)%60, $t%60, ($t*1000)%1000;
 }
@@ -101,7 +96,7 @@ sub set_other_productive_pause_code (&) {
 
 # productive "sleep" function
 sub pause {
-  my $start = Time::HiRes::gettimeofday();
+  my $start = Time::HiRes::time();
   my $delay = shift || $DEFAULT_PAUSE;
   my $unproductive = shift || 0;
   my $expire = $start + ($delay || 0.25);
@@ -109,16 +104,16 @@ sub pause {
   $_PAUSE++; # prevent too much productive code from nested pause calls
 
   if ($Time_HiRes_avail) {
-    my $time_left = $expire - Time::HiRes::gettimeofday();
+    my $time_left = $expire - Time::HiRes::time();
     while ($time_left > 0) {
       if ($_PAUSE < 2 && $something_productive && !$unproductive) {
 	$something_productive->();
-	$time_left = $expire - Time::HiRes::gettimeofday();
+	$time_left = $expire - Time::HiRes::time();
 	last if $time_left <= 0;
       }
       my $resolution = $time_left > $DEFAULT_PAUSE ? $DEFAULT_PAUSE : $time_left * 0.5 + 0.01;
       Time::HiRes::sleep($resolution || 0.25);
-      $time_left = $expire - Time::HiRes::gettimeofday();
+      $time_left = $expire - Time::HiRes::time();
     }
   } else {
     my $stall = $delay * 0.1;
@@ -129,7 +124,7 @@ sub pause {
     while ($delay > 0) {
       if ($_PAUSE < 2 && $something_productive && !$unproductive) {
 	$something_productive->();
-	$delay = Time::HiRes::gettimeofday() - $expire;
+	$delay = Time::HiRes::time() - $expire;
 	last if $delay <= 0;
       }
 
@@ -149,7 +144,7 @@ sub pause {
     $something_productive->();
   }
   $_PAUSE = 0;
-  return Time::HiRes::gettimeofday() - $start;
+  return Time::HiRes::time() - $start;
 }
 
 #

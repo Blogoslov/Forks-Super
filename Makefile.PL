@@ -32,7 +32,7 @@ our $FILES_TO_CLEAN
 
 our %META_MERGE
   = (recommends => \%RECOMMENDED,
-     no_index => { 'package' => ['Sys::CpuAffinity'] });
+     no_index => { 'package' => ['Sys::CpuAffinity', 'Signals::XSIG'] });
 
 ######################################################################
 

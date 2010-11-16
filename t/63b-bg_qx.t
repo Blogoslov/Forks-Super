@@ -12,10 +12,10 @@ if (${^TAINT}) {
 
 ### list context ###
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my @x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -n -s=2 -e=\"it is a\" -n -e=beautiful -n -e=day";
 my @tests = @x;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($tests[0] eq "Hello \n" && $tests[1] eq "World \n", "list bg_qx");
 ok(@tests == 5, "list bg_qx");
 ok($t >= 3.95, "list bg_qx took ${t}s expected ~4s");
@@ -51,11 +51,11 @@ SKIP: {
       . "can't use timeout with bg_qx", 4;
   }
 
-  $t = Time::HiRes::gettimeofday();
+  $t = Time::HiRes::time();
   @x = bg_qx "$^X t/external-command.pl -e=Hello -n -s=1 -e=World -s=12".
     " -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 6 };
   @tests = @x;
-  $t = Time::HiRes::gettimeofday() - $t;
+  $t = Time::HiRes::time() - $t;
   ok($tests[0] eq "Hello \n", "list bg_qx first line ok");
   ok($tests[1] eq "World \n", "list bg_qx second line ok");    ### 30 ###
   ok(@tests == 2, "list bg_qx interrupted output had " 

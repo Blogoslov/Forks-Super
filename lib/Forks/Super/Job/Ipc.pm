@@ -15,19 +15,17 @@ use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(IS_WIN32 is_socket);
 use Forks::Super::Sighandler;
-# use Symbol qw(gensym);
 use IO::Handle;
 use File::Path;
 # use Time::HiRes;  not installed on ActiveState 5.6 :-(
 use Carp;
+use strict;
+use warnings;
+
 $| = 1;
 
 use Exporter;
 our @ISA = qw(Exporter);
-#use base 'Exporter';
-
-use strict;
-use warnings;
 
 our @EXPORT = qw(close_fh);
 our $VERSION = $Forks::Super::Util::VERSION;
@@ -102,9 +100,6 @@ our $_IPC_DIR;
 # against "Too many open filehandles" error
 sub _safeopen (*$$;$) {
   my ($fh, $mode, $expr, $robust) = @_;
-
-#warn "_safeopen $mode $expr called from  $$\n";
-
   my ($open2, $open3);
   if ($mode =~ /&/) {
     my $fileno = CORE::fileno($expr);
@@ -124,7 +119,6 @@ sub _safeopen (*$$;$) {
     $fh = _gensym();
   }
   for (my $try = 1; $try <= 10; $try++) {
-
     if ($try == 10) {
       carp "Failed to open $mode $expr after 10 tries. Giving up.\n";
       return 0;
@@ -148,7 +142,7 @@ sub _safeopen (*$$;$) {
       # -- there are a lot of ways we can make good use of this data.
 
       my ($pkg,$file,$line) = caller;
-      $$fh->{opened} = Time::HiRes::gettimeofday();
+      $$fh->{opened} = Time::HiRes::time();
       $$fh->{caller} = "$pkg;$file:$line";
       $$fh->{is_regular} = 1;
       $$fh->{is_socket} = 0;
@@ -241,9 +235,6 @@ sub Forks::Super::Job::_preconfig_fh {
       # sockets,pipes not supported for cmd/exec style forks on MSWin32
       # we could support cmd-style with IPC::Open3-like framework ...
       if ($fh_spec =~ /sock/i) {
-	if ($job->{style} =~ /(cmd|exec)/) {
-	  warn "\n\n\n\n\nLet's try sockets with $job->{style}-style command\n\n\n\n\n\n";
-	}
 	$config->{sockets} = 1;
       } elsif ($fh_spec =~ /pipe/i) {
 	$config->{pipes} = 1;
@@ -251,8 +242,8 @@ sub Forks::Super::Job::_preconfig_fh {
     } elsif (!Forks::Super::Config::CONFIG('filehandles')) {
 
       carp "Forks::Super::Job::_preconfig_fh: ",
-	"Requested cmd/exec-style fork on MSWin32 with socket based IPC. ",
-	"This is not going to end well.\n";
+	"Requested cmd/exec-style fork on MSWin32 with\n",
+	"socket based IPC. This is not going to end well.\n";
 
       $config->{sockets} = 1;
     }
@@ -521,7 +512,7 @@ sub _create_socket_pair {
   $$s_child->{is_regular} = $$s_parent->{is_regular} = 0;
   $$s_child->{is_child}   = $$s_parent->{is_parent}  = 1;
   $$s_child->{is_parent}  = $$s_parent->{is_child}   = 0;
-  $$s_child->{opened}     = $$s_parent->{opened}     = Time::HiRes::gettimeofday();
+  $$s_child->{opened}     = $$s_parent->{opened}     = Time::HiRes::time();
   my ($pkg,$file,$line)   = caller(2);
   $$s_child->{caller}     = $$s_parent->{caller}     = "$pkg;$file:$line";
 
@@ -552,7 +543,7 @@ sub _create_pipe_pair {
   $$p_read->{is_regular} = $$p_write->{is_regular} = 0;
   $$p_read->{is_read} = $$p_write->{is_write} = 1;
   $$p_read->{is_write} = $$p_write->{is_read} = 1;
-  $$p_read->{opened} = $$p_write->{opened} = Time::HiRes::gettimeofday();
+  $$p_read->{opened} = $$p_write->{opened} = Time::HiRes::time();
 
   my ($pkg,$file,$line) = caller(2);
   $$p_read->{caller} = $$p_write->{caller} = "$pkg;$file:$line";
@@ -1554,8 +1545,16 @@ sub _config_fh_child_stderr {
 sub Forks::Super::Job::_config_fh_child {
   my $job = shift;
   return if not defined $job->{fh_config};
+
+  # "a tie in the parent should not be allowed to cause problems"
+  # according to IPC::Open3
+  untie *STDIN;
+  untie *STDOUT;
+  untie *STDERR;
+
   if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
-    if (&IS_WIN32) {
+  # if (&IS_WIN32) {
+    if (&IS_WIN32 && Forks::Super::Config::CONFIG('filehandles')) {
       return _config_cmd_fh_child($job);
     }
   }
@@ -1745,7 +1744,7 @@ sub _close {
     #$__OPEN_FH-- if $z;
     #return $z;
   }
-  $$handle->{closed} ||= Time::HiRes::gettimeofday();
+  $$handle->{closed} ||= Time::HiRes::time();
   $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
   my $z = close $handle;
   if ($z) {
@@ -1770,7 +1769,7 @@ sub _close_socket {
   if (0 == ($$handle->{shutdown} & $is_write)) {
     my $z = $$handle->{shutdown} |= $is_write;
     if ($$handle->{shutdown} >= 3) {
-      $$handle->{closed} ||= Time::HiRes::gettimeofday();
+      $$handle->{closed} ||= Time::HiRes::time();
       $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
       $z = close $handle;
       $__OPEN_FH--;
@@ -1894,6 +1893,11 @@ sub _read_socket {
     $blocking_desired = $options{"block"};
   }
   #my $blocking_desired = defined($options{"block"}) && $options{"block"} != 0;
+  my $expire = 0;
+  if (defined($options{'timeout'}) && $options{'timeout'} > 0) {
+    $expire = Time::HiRes::time() + $options{'timeout'};
+    $blocking_desired = 1;
+  }
 
   while ($sh->blocking() || &IS_WIN32 || $blocking_desired) {
     my $fileno = fileno($sh);
@@ -1904,6 +1908,13 @@ sub _read_socket {
 
     my ($rin,$rout,$ein,$eout);
     my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+    if ($expire && Time::HiRes::time() + $timeout > $expire) {
+      $timeout = $expire - Time::HiRes::time();
+      if ($timeout < 0) {
+	$timeout = 0.0;
+	$blocking_desired = 0;
+      }
+    }
 
     $rin = '';
     vec($rin, $fileno, 1) = 1;
@@ -1960,67 +1971,67 @@ sub _read_pipe {
   if (defined $options{'block'}) {
     $blocking_desired = $options{'block'};
   }
-  # my $blocking_desired = defined($options{"block"}) && $options{"block"} != 0;
 
   # pipes are blocking by default.
   if ($blocking_desired) {
-    if ($wantarray) {
-      return readline($sh);
-    } else {
-      return scalar readline($sh);
+    return $wantarray ? readline($sh) : scalar readline($sh);
+  }
+
+  my ($rin,$rout,$ein,$eout);
+  $rin = '';
+  vec($rin, $fileno, 1) = 1;
+
+  my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+  if (defined($options{'timeout'}) && $options{'timeout'} >= 0) {
+    $timeout = $options{'timeout'};
+  }
+
+  local $! = undef;
+  my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+
+  if ($nfound == 0) {
+    if ($DEBUG) {
+      debug("no input found on $sh/$fileno");
     }
+    return () if $wantarray;
+    return;
+  }
+  if ($nfound < 0) {
+    # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
+    return () if $wantarray;
+    return; # return ''?
+  }
+
+  # perldoc select: warns against mixing select4
+  # (unbuffered input) with readline (buffered input).
+  # Do I have to do my own buffering? Don't look.
+
+  if ($wantarray) {
+    my $input = '';
+
+    while ($nfound) {
+      my $buffer = '';
+      last if 0 == sysread $sh, $buffer, 1;
+      $input .= $buffer;
+      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
+    }
+
+    my @return = ();
+    while ($input =~ m!$/!) {  # XXX - what if $/ is "" or undef ?
+      push @return, substr $input, 0, $+[0];
+      substr($input, 0, $+[0]) = "";
+    }
+    return @return;
   } else {
-    my ($rin,$rout,$ein,$eout);
-    my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
-    $rin = '';
-    vec($rin, $fileno, 1) = 1;
-    local $! = undef;
-    my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
-
-    if ($nfound == 0) {
-      if ($DEBUG) {
-	debug("no input found on $sh/$fileno");
-      }
-      return () if $wantarray;
-      return;
+    my $input = '';
+    while ($nfound) {
+      my $buffer = '';
+      last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
+      $input .= $buffer;
+      last if length($/) > 0 && substr($input,-length($/)) eq $/;
+      ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
     }
-    if ($nfound < 0) {
-      # warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
-      return () if $wantarray;
-      return;
-    }
-
-    # perldoc select: warns against mixing select4
-    # (unbuffered input) with readline (buffered input).
-    # Do I have to do my own buffering? Don't look.
-
-    if ($wantarray) {
-      my $input = '';
-
-      while ($nfound) {
-	my $buffer = '';
-	last if 0 == sysread $sh, $buffer, 1;
-	$input .= $buffer;
-	($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
-      }
-
-      my @return = ();
-      while ($input =~ m!$/!) {  # XXX - what if $/ is "" or undef ?
-	push @return, substr $input, 0, $+[0];
-	substr($input, 0, $+[0]) = "";
-      }
-      return @return;
-    } else {
-      my $input = '';
-      while ($nfound) {
-	my $buffer = '';
-	last unless sysread $sh, $buffer, 1;  # or $buffer = getc($sh) ??
-	$input .= $buffer;
-	last if length($/) > 0 && substr($input,-length($/)) eq $/;
-	($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
-      }
-      return $input;
-    }
+    return $input;
   }
 }
 
@@ -2075,9 +2086,14 @@ sub _readline {
   }
 
   # WARNING: blocking read on a filehandle can lead to deadlock
+  my $expire = 0;
   my $blocking_desired = $$fh->{emulate_blocking};
   if (defined $options{'block'}) {
     $blocking_desired = $options{'block'};
+  }
+  if (defined($options{'timeout'}) && $options{'timeout'} > 0) {
+    $expire = Time::HiRes::time() + $options{'timeout'};
+    $blocking_desired = 1;
   }
   #my $blocking_desired = defined($options{"block"}) && $options{"block"} != 0;
 
@@ -2090,7 +2106,7 @@ sub _readline {
 	return @lines;
       }
 
-      if ($job->is_complete && Time::HiRes::gettimeofday() - $job->{end} > 3) {
+      if ($job->is_complete && Time::HiRes::time() - $job->{end} > 3) {
 	if ($job->{debug}) {
 	  debug("Forks::Super::_readline(): ",
 		"job $job->{pid} is complete. Closing $fh");
@@ -2103,7 +2119,12 @@ sub _readline {
 	}
       } else {
 	seek $fh, 0, 1;
-	Forks::Super::pause();
+	if ($blocking_desired) {
+	  Forks::Super::pause();
+	  if ($expire > 0 && Time::HiRes::time() >= $expire) {
+	    $blocking_desired = 0;
+	  }
+	}
       }
       if (!$blocking_desired) {
 	return ();
@@ -2118,7 +2139,7 @@ sub _readline {
 	return $line;
       }
 
-      if ($job->is_complete && Time::HiRes::gettimeofday() - $job->{end} > 3) {
+      if ($job->is_complete && Time::HiRes::time() - $job->{end} > 3) {
 	if ($job->{debug}) {
 	  debug("Forks::Super::_readline(): ",
 	      "job $job->{pid} is complete. Closing $fh");
@@ -2132,7 +2153,12 @@ sub _readline {
 	return;
       } else {
 	seek $fh, 0, 1;
-	Forks::Super::pause();
+	if ($blocking_desired) {
+	  Forks::Super::pause();
+	  if ($expire > 0 && Time::HiRes::time() >= $expire) {
+	    $blocking_desired = 0;
+	  }
+	}
       }
       if (!$blocking_desired) {
 	return '';
@@ -2146,7 +2172,6 @@ sub _readline {
 sub init_child {
   $IPC_DIR_DEDICATED = 0;
   %IPC_FILES = @IPC_FILES = ();
-  # untie $__OPEN_FH;
   %SIG_OLD = ();
   return;
 }

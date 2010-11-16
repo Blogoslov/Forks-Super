@@ -57,8 +57,8 @@ sub Forks::Super::Job::_config_timeout_child {
   }
   if (defined $job->{expiration}) {
     $job->{expiration} = _time_from_natural_language($job->{expiration}, 0);
-    if ($job->{expiration} - Time::HiRes::gettimeofday() < $timeout) {
-      $timeout = $job->{expiration} - Time::HiRes::gettimeofday();
+    if ($job->{expiration} - Time::HiRes::time() < $timeout) {
+      $timeout = $job->{expiration} - Time::HiRes::time();
     }
     if ($job->{style} eq 'exec') {
       carp "Forks::Super: exec option used, expiration option ignored\n";
@@ -69,7 +69,7 @@ sub Forks::Super::Job::_config_timeout_child {
     return;
   }
   $job->{_timeout} = $timeout;
-  $job->{_expiration} = $timeout + Time::HiRes::gettimeofday();
+  $job->{_expiration} = $timeout + Time::HiRes::time();
 
   if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
     croak "Forks::Super: alarm() not available on this system. ",
@@ -120,7 +120,7 @@ sub Forks::Super::Job::_config_timeout_child {
   # $SIG{ALRM} = \&_child_timeout;
   register_signal_handler("ALRM", 1, \&_child_timeout);
 
-  $EXPIRATION = Time::HiRes::gettimeofday() + $timeout - 1.0;
+  $EXPIRATION = Time::HiRes::time() + $timeout - 1.0;
   alarm $timeout;
   debug("Forks::Super::Job::_config_timeout_child(): ",
 	"alarm set for ${timeout}s in child process $$")
@@ -137,7 +137,7 @@ sub _child_timeout {
   # child to exit.
 
   return if $Forks::Super::SysInfo::CONFIG{'setitimer'}
-    && Time::HiRes::gettimeofday() < $EXPIRATION;
+    && Time::HiRes::time() < $EXPIRATION;
 
   warn "Forks::Super: child process timeout\n";
   $TIMEDOUT = 1;

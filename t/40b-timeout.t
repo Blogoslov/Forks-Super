@@ -30,11 +30,11 @@ SKIP: {
 
 #######################################################
 
-my $u = Time::HiRes::gettimeofday();
+my $u = Time::HiRes::time();
 my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-my $v = Time::HiRes::gettimeofday();
+my $v = Time::HiRes::time();
 ($t,$u)=($v-$t,$v-$u);
 ok($p == $pid, "wait successful; Expected $pid got $p");
 ok($t > 3.9 && $u <= 7.5,                 ### 2b ### was 7, obs 7.03

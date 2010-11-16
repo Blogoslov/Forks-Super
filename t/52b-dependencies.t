@@ -18,13 +18,13 @@ my $pid1 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1), "job 1 started");
 my $j1 = Forks::Super::Job::get($pid1);
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1 };
 my $j2 = Forks::Super::Job::get($pid2);
 ok($j1->{state} eq "COMPLETE", "job 1 complete when job 2 starts");
 my $pid3 = fork { sub => sub { } };
 my $j3 = Forks::Super::Job::get($pid3);
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t >= 4.75, "job 2 took ${t}s to start expected >5s"); ### 8 ###
 
 ok($j2->{state} eq "ACTIVE", "job 2 still running");

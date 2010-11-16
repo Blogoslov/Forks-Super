@@ -32,9 +32,9 @@ my $pid2 = fork { sub => $sleepy };
 ok(!isValidPid($pid2), "failed fork");
 my $pid3 = fork { sub => $sleepy , can_launch => 'main::do_launch' };
 ok(isValidPid($pid3), "successful user fork");
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $pid4 = fork { sub => $sleepy , can_launch => $launch_after_nap };
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok(isValidPid($pid4), "successful delayed fork");
 ok($t >= 9.0, "fork was delayed ${t}s expected >10s");
 

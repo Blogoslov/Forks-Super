@@ -4,18 +4,11 @@ or through  http://rt.cpan.org/NoAuth/Bugs.html?Dist=Forks-Super
 
 Possible TODOs:
 
-    _o_ incorporate free memory into system busy-ness calc 
-		(Parallel::ForkControl)	(Parallel::ForkControl says 
-		"non functional"). [Do I need to start putting
-		together a Sys::FreeMemory distribution, too?]
-
     _x_ support sockets/pipes for cmd-style forks like IPC::Open3 does.
 	_X_ for Unixy systems
 	___ for MSWin32
-
-    ___	Forks::Super::Uninterruptable package for "uninterruptable" versions
-	of Perl system calls like  sleep , connect , select($$$$). Well,
-        for interruption-resistant versions, anyway.
+	    IPC::Open3 supports MSWin32/os2 with the <system 1, @_>
+	    construction. Don't think that is appropriate for this module.
 
     ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
 	Can test with  PERL_SIGNALS=unsafe make test .
@@ -44,97 +37,39 @@ Possible TODOs:
 	to tighten up performance? What can be done to reduce overhead
 	when there are many short tasks?
 
-        Characterize some use cases for Forks::Super, and use settings
-        appropriate to that use case. For example, if we use Forks::Super
-        to manage many short tasks, we want to run the queue frequently
-	and we want to use a short pause time. If we use Forks::Super to
-	manage long, CPU-intense tasks, then frequent queue checks and
-        brief pauses will make the Forks::Super module use up CPU that
-	could be going to the tasks.
-
-        ___ $FSU::DEFAULT_PAUSE short when tasks are quick,
-            long when there are a lot of tasks
-        ___ $FSQ::QUEUE_MONITOR_FREQ short when tasks are quick
-        ___ $FSQ::QUEUE_MONITOR_LIFESPAN long or infinite for "daemon" programs
-        ___ $FS::SOCKET_READ_TIMEOUT short for quick tasks
-	___ $FS::MAX_PROC and ::DEFAULT_PROC to 1-1.5 times the number of
-	    CPUs for CPU-intensive tasks; higher for IO bound tasks;
-	    much higher for tasks with ample idle time
-
-	Also document tips and tricks for tuning performance.
-	Things like "Set $Forks::Super::Util::DEFAULT_PAUSE to
-	a small value when you have lots of short tasks, and
-	longer for longer tasks".
-
     ___ Test needed, Win32+cmd, See Job.pm:344 (416?) 
         (FSJO::Win32::openX_win32_process?)
-
-    _x_ With cmd and child_fh => "in" where cmd has pipes (cmd1 | cmd2),
-	'<.fhfork/.fh_xxx' needs to go _before_ the first pipe
-	_X_ solve basic case
-	_x_ solve complicated case, where first pipe char might be a
-	    quoted argument, or part of an argument.
-	    e.g., what if the external command is
-		perl -F/\\\|/ -ane 'BLOCK' < .fhforkXXX/.fh_XXX | ./other_prog
 
     ___ fork { run => [ \@cmd, ... ] }
 	to invoke or emulate IPC::Run's rich feature set
 	___ What else can I learn by studying IPC::Run?
 
-    _o_ Investigate "filehandle leaks" in t/forked_harness.pl.
-
-    _o_ Tie all filehandles from _safeopen for improved debugging
-	in Forks::Super::Job::IPC. 
-	_x_ we are piling a lot of handle data into the symbol table now
-
-    _X_ block attribute or block value in child_fh attribute to
-	indicate whether blocking I/O is desired.
-	_X_ extend t/42g, 43g, 44g
-        _X_ document
-
-	We'll streamline the way options are specified in 1.0
-
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
-	___ timeout => max number of seconds to wait for input
+	_X_ timeout => max number of seconds to wait for input
 
-    ___ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
+    _o_ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
+        No. It is correct behavior to interrupt sleep.
 
     _X_ Turn installation of bundled packages on by default for a couple
 	of CPAN testing cycles. See what breaks.
 
 	_X_ Enabled in v0.39
-	_X_ Still enabled in v0.42
-
-    _O_ Keep the pipes clear: 
-        defer to 1.0 or 1.x
+	_X_ Still enabled in v0.43
 
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
         has solved this problem better than I did?
 	_O_ File::Temp? Does this work on MSWin32?
-	    File::Temp not robust enough when child process outlives
-	    the parent. Probably has NFS issues.
+	:-( File::Temp not robust enough when child procs outlive the parent.
+	    Probably has NFS issues, too.
 
     ___ Runtime IPC cleanup routine for long running programs. For long
 	completed jobs: close the open filehandles that have slipped
 	through the cracks; remove the IPC files; move from 
 	%ALL_JOBS,@ALL_JOBS to %ARCHIVED_JOBS,@ARCHIVED_JOBS
 
-    _o_ Is it possible/desirable to use threads in place of "queue
-	monitor process", "productive pause"?
-
     _x_ Make Win32::API a required module for MSWin32.
-
-    _X_ http://www.cpantesters.org/cpan/report/8376777 -- are there
-	issues with Forks::Super and $ENV{LANG} == 'zh_TW.UTF-8'?
-	utf issues?
-	_X_ Vanilla utf8 seems ok. Running  t/forked_harness.pl  with
-	    -p -Mutf8  passes.
-	I can replicate this on Linux
-	_X_ Problem was with $! =~ /pattern/ statements, as $!
-	    produces different text in other locales.
-	_X_ Can we collect errno data in system-limits.PL and put in config?
 
     _x_ IPC cleanup -- log fails and cleanse them off-line with
         perl -MForks::Super=cleanse   or
@@ -148,10 +83,6 @@ Possible TODOs:
 	fork { %{all_of_jobs_previous_options($job)} } but reusing
 	the existing Forks::Super::Job object. It would be an
 	error to call this unless the $job was completed.
-
-    _X_ $Forks::Super::IPC_DIR should be a tied scalar so that after a
-        direct assignment, a dedicated temporary directory
-        is created under the specified directory.
 
     ___ Demos/examples/cookbook section.
         ___ Perform 1000's of jobs, 20 at a time
@@ -184,14 +115,34 @@ Possible TODOs:
         _X_ Erases hash
         ___ test
 
-    _X_ Move F::S::Config::Config_Perl_component stuff into
-	system-limits.PL/SysInfo.pm
-
-    ___ Update bundled Sys-CpuAffinity distribution to 0.98
-
-    ___ Enable Background::Zcalar as default scalar lazy eval class.
-	___ Change documentation.
-
-    ___ support stdin=>$input + child_fh=>socket or
+    _x_ support stdin=>$input + child_fh=>socket or
                 stdin=>$input + CONFIG(filehandles)==0
 	___ t/25, t/42d, t/42i
+
+    ___ Parallel::Forker uses Proc::ProcessTable to kill grandchildren.
+        Is that an option? Yeah, maybe on Unix-y systems, including Cygwin.
+
+    ___ POSIX::RT::Timer as possible replacement for get/set itimer?
+
+    ___ daemonize => 1  option to close/reopen STDxxx fhs to /dev/null,
+        start a new process group, change directory to /.
+        Disables IPC.
+
+    ___ Require Signals::XSIG. Bundle it?
+        ___ The Default.pm module is not quite mature. Can't require
+            Signals::XSIG while those tests are still part of the build.
+        ___ Not practical to add functionality as workaround for Signals::XSIG
+            not being available.
+
+    ___ make SysInfo.pm.PL capable of managing config for multiple $^O,$]?
+	Or more generally, what if the installed SysInfo.pm is set up for
+	a different sys/version than the one that is actually being used?
+	___ Some things are cheap to determine $SYSTEM/$VERSION/
+	    $NUM_PROCESSORS(?)/all of %CONFIG; Others are expensive 
+	    $MAX_FORK/$MAX_OPEN_FH/$SOCKET_CAPACITY/$PIPE_CAPACITY,
+	    even $SLEEP_ALARM_COMPAT is not a cost you want to pay every
+	    time the module is loaded.
+	___ Can we detect all the versions of Perl that will use a module
+	    installed a specific location? And run SysInfo.pm.PL for all
+	    of them? I doubt it.
+

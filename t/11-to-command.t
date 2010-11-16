@@ -52,12 +52,12 @@ ok($z eq $target_z,
 
 # test that timing of reap is correct
 
-my $u = Time::HiRes::gettimeofday();
+my $u = Time::HiRes::time();
 $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=5" ] };
 ok(isValidPid($pid), "fork to external command");
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 $p = wait;
-my $v = Time::HiRes::gettimeofday();
+my $v = Time::HiRes::time();
 ($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait reaped correct pid");
 ok($u >= 4.9 && $t <= 9.05,             ### 11 ### was 6.5 obs 8.02,9.33,8.98

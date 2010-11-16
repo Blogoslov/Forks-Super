@@ -23,11 +23,11 @@ SKIP: {
 
 #######################################################
 
-my $future = Time::HiRes::gettimeofday() - 5;
+my $future = Time::HiRes::time() - 5;
 my $pid = fork { sub => sub { sleep 5; exit 0 }, expiration => $future };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($p == $pid, "wait succeeded");
 # A "fast fail" can still take longer than a second. 
 # "fast fail" invokes Carp::croak, which wants to load

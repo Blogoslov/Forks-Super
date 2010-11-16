@@ -26,9 +26,9 @@ SKIP: {
   }
 
 my $pid = fork { sub => sub { sleep 10; exit 0 }, timeout => 3 };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p = wait;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($p == $pid, "$$\\wait successful");
 ok($? != 0, "job expired with non-zero exit STATUS");
 ok($t < 6.05, "Timed out in ${t}s, expected ~3s"); ### 3a ### was 5.1 obs 5.98

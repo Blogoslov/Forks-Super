@@ -51,7 +51,7 @@ sub TIEHANDLE {
   my ($class, %props) = @_;
   my $self = bless _gensym(), $class;
   $$self->{$_} = $props{$_} for keys %props;
-  $$self->{created} = Time::HiRes::gettimeofday();
+  $$self->{created} = Time::HiRes::time();
   return $self;
 }
 
@@ -193,7 +193,7 @@ sub CLOSE {
   _printtty $self, "CLOSE";
 
   if (!$$self->{closed}) {
-    $$self->{closed} = Time::HiRes::gettimeofday();
+    $$self->{closed} = Time::HiRes::time();
 
     my $elapsed = $$self->{closed} - $$self->{opened}||$$self->{created}||$^T;
     $$self->{elapsed} = $elapsed;
@@ -223,7 +223,7 @@ sub tieopen (*$;$@) {
   my $tied;
   if (1) {
     $tied = tie *$glob, 'Forks::Super::Tie::IPCFileHandle', %$props;
-    $$tied->{opened} = Time::HiRes::gettimeofday();
+    $$tied->{opened} = Time::HiRes::time();
     $$tied->{open_caller} = "$pkg ; $file:$line";
     $$tied->{name} = sprintf "%d:%s%s", $$, $mode, 
       ($expr||$props->{filename}||'') . "@list";

@@ -45,9 +45,9 @@ my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
 ok($z > 0, "print to child STDIN successful");
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 waitpid $pid, 0;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t > 1.01 && $t < 6.15,              ### 8 ### was 1.25/5.05,obs 1.05/6.12
    "compound command took ${t}s, expected ~2s");
 sleep 1;

@@ -44,17 +44,17 @@ SKIP: {
   # This is harder to do on some systems than on others.
 
   unlink "t/out/spawn.pids.$$";
-  my $t = Time::HiRes::gettimeofday();
+  my $t = Time::HiRes::time();
 
   # set up a program to spawn many other processes and to run
   # for about 15 seconds.
   my $pid = fork { timeout => 5, 
 		     cmd => [ $^X, "t/spawner-and-counter.pl",
 			      "t/out/spawn.pids.$$", "3", "15" ] };
-  my $t2 = Time::HiRes::gettimeofday();
+  my $t2 = Time::HiRes::time();
 
   my $p = wait;
-  my $t3 = Time::HiRes::gettimeofday();
+  my $t3 = Time::HiRes::time();
   ($t,$t2) = ($t3-$t,$t3-$t2);
   my $j = Forks::Super::Job::get($pid);
   my $t4 = $j->{end} - $j->{start};

@@ -99,18 +99,18 @@ sub waitall {
   my $timeout = shift || 9E9;  # 285 years should be long enough to wait
   $timeout = 1E-6 if $timeout < 0;
   my $waited_for = 0;
-  my $expire = Time::HiRes::gettimeofday() + $timeout ;
+  my $expire = Time::HiRes::time() + $timeout ;
   debug("Forks::Super::waitall(): waiting on all procs") if $DEBUG;
   my $pid;
   do {
     # $productive_waitpid_code->() if $productive_waitpid_code;
-    $pid = Forks::Super::Wait::wait($expire - Time::HiRes::gettimeofday());
+    $pid = Forks::Super::Wait::wait($expire - Time::HiRes::time());
     if ($DEBUG) {
       debug("Forks::Super::waitall: caught pid $pid");
     }
   } while isValidPid($pid,1) 
     && ++$waited_for 
-    && Time::HiRes::gettimeofday() < $expire;
+    && Time::HiRes::time() < $expire;
 
   return $waited_for;
 }
@@ -209,11 +209,11 @@ sub _reap {
 # wait on any process
 sub _waitpid_any {
   my ($no_hang,$reap_bg_ok,$timeout) = @_;
-  my $expire = Time::HiRes::gettimeofday() + ($timeout || 9E9);
+  my $expire = Time::HiRes::time() + ($timeout || 9E9);
   my ($pid, $nactive2, $nalive, $nactive) = _reap($reap_bg_ok);
   unless ($no_hang) {
     while (!isValidPid($pid,1) && $nalive > 0) {
-      if (Time::HiRes::gettimeofday() >= $expire) {
+      if (Time::HiRes::time() >= $expire) {
 	return TIMEOUT;
       }
       if ($nactive == 0) {
@@ -257,7 +257,7 @@ sub _active_one_suspended_job {
 # wait on a specific process
 sub _waitpid_target {
   my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
-  my $expire = Time::HiRes::gettimeofday() + ($timeout || 9E9);
+  my $expire = Time::HiRes::time() + ($timeout || 9E9);
   my $job = $ALL_JOBS{$target};
   if (not defined $job) {
     return -1;
@@ -271,7 +271,7 @@ sub _waitpid_target {
   } else {
     # block until job is complete.
     while ($job->{state} ne 'COMPLETE' and $job->{state} ne 'REAPED') {
-      if (Time::HiRes::gettimeofday() >= $expire) {
+      if (Time::HiRes::time() >= $expire) {
 	return TIMEOUT;
       }
       pause();
@@ -284,7 +284,7 @@ sub _waitpid_target {
 
 sub _waitpid_name {
   my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
-  my $expire = Time::HiRes::gettimeofday() + ($timeout || 9E9);
+  my $expire = Time::HiRes::time() + ($timeout || 9E9);
   my @jobs = Forks::Super::Job::getByName($target);
   if (@jobs == 0) {
     return -1;
@@ -307,7 +307,7 @@ sub _waitpid_name {
     $_->{state} eq 'COMPLETE' || $_->{state} eq 'REAPED'
   } @jobs_to_wait_for;
   while (@jobs == 0) {
-    if (Time::HiRes::gettimeofday() >= $expire) {
+    if (Time::HiRes::time() >= $expire) {
       return TIMEOUT;
     }
     pause();
@@ -322,11 +322,11 @@ sub _waitpid_name {
 # wait on any process from a specific process group
 sub _waitpid_pgrp {
   my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
-  my $expire = Time::HiRes::gettimeofday() + ($timeout || 9E9);
+  my $expire = Time::HiRes::time() + ($timeout || 9E9);
   my ($pid, $nactive) = _reap($reap_bg_ok,$target);
   unless ($no_hang) {
     while (!isValidPid($pid,1) && $nactive > 0) {
-      if (Time::HiRes::gettimeofday() >= $expire) {
+      if (Time::HiRes::time() >= $expire) {
 	return TIMEOUT;
       }
       pause();

@@ -34,22 +34,22 @@ SKIP: {
 
 ##########################################################
 
-my $t0 = Time::HiRes::gettimeofday();
+my $t0 = Time::HiRes::time();
 my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=15" ], 
 		   timeout => 2 };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 waitpid $pid, 0;
-my $t2 = Time::HiRes::gettimeofday();
+my $t2 = Time::HiRes::time();
 ($t0,$t) = ($t2-$t0,$t2-$t);
 ok($t <= 6.95,           ### 29 ### was 3.0 obs 3.10,3.82,4.36,6.63,9.32
    "cmd-style respects timeout ${t}s ${t0}s "
    ."expected ~2s"); 
 
-$t0 = Time::HiRes::gettimeofday();
+$t0 = Time::HiRes::time();
 $pid = fork { exec => [ $^X, "t/external-command.pl", "-s=6" ], timeout => 2 };
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 waitpid $pid, 0;
-$t2 = Time::HiRes::gettimeofday();
+$t2 = Time::HiRes::time();
 ($t0,$t) = ($t2-$t0,$t2-$t);
 ok($t0 >= 5.9 && $t > 4.95, 
    "exec-style doesn't respect timeout ${t}s ${t0}s expected ~6s");

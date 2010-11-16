@@ -31,9 +31,9 @@ SKIP: {
 
   Forks::Super::Debug::_use_Carp_Always();
 
-  my $t = Time::HiRes::gettimeofday();
+  my $t = Time::HiRes::time();
   my $p = waitpid $pid1, 0, 20;
-  $t = Time::HiRes::gettimeofday() - $t;
+  $t = Time::HiRes::time() - $t;
   ok($t < 6,              ### 3 ### was 3, obs 4.4,5.44 on Cygwin
      "process $pid1 took ${t}s to reap, expected fast"); 
      # [sometimes it can take a while, though]

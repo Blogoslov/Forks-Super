@@ -11,21 +11,21 @@ use warnings;
 
 $Forks::Super::ON_BUSY = "block";
 
-my $now = Time::HiRes::gettimeofday();
+my $now = Time::HiRes::time();
 
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $p1 = fork { sub => sub { sleep 3 } , delay => 5, on_busy => 'block' };
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t >= 4, "delayed job blocked took ${t}s expected >=5s");
 ok(isValidPid($p1), "delayed job blocked and ran");
 my $j1 = Forks::Super::Job::get($p1);
 ok($j1->{state} eq "ACTIVE", "state of delayed job is ACTIVE");
 
-my $future = Time::HiRes::gettimeofday() + 10;
-$t = Time::HiRes::gettimeofday();
+my $future = Time::HiRes::time() + 10;
+$t = Time::HiRes::time();
 my $p2 = fork { sub => sub { sleep 3 } , start_after => $future, 
 	on_busy => 'block' };
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t >= 4, "start_after job blocked took ${t}s expected ~10s");
 ok(isValidPid($p2), "start_after job blocked and ran");
 my $j2 = Forks::Super::Job::get($p2);

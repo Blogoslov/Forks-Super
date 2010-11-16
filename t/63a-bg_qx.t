@@ -12,10 +12,10 @@ if (${^TAINT}) {
 
 ok(!defined $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB not set");
 ok(!defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID not set");
-my $t2 = Time::HiRes::gettimeofday();
+my $t2 = Time::HiRes::time();
 my $z = sprintf "%05d", 100000 * rand();
 my $x = bg_qx "$^X t/external-command.pl -e=$z -s=3";
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 ok(defined $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB set");
 ok(defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID set");
 ok(Forks::Super::isValidPid($Forks::Super::LAST_JOB_ID), 
@@ -23,18 +23,18 @@ ok(Forks::Super::isValidPid($Forks::Super::LAST_JOB_ID),
 ok($Forks::Super::LAST_JOB->{_is_bg} > 0, 
 	"\$Forks::Super::LAST_JOB marked bg");
 my $p = waitpid -1, 0;
-my $t3 = Time::HiRes::gettimeofday() - $t;
+my $t3 = Time::HiRes::time() - $t;
 ok($p == -1 && $t3 <= 1.5,
 	"waitpid doesn't catch bg_qx job, fast fail ${t3}s expect <=1s");
-ok($$x eq "$z \n", "scalar bg_qx $$x");
-my $h = Time::HiRes::gettimeofday();
+ok($x eq "$z \n", "scalar bg_qx $x");
+my $h = Time::HiRes::time();
 ($t,$t2) = ($h-$t,$h-$t2);
-my $y = $$x;
+my $y = $x;
 ok($y == $z, "scalar bg_qx");
 ok($t2 >= 2.8 && $t <= 6.5,           ### 10 ### was 5.1 obs 5.23,5.57,6.31
    "scalar bg_qx took ${t}s ${t2}s expected ~3s");
-$$x = 19;
-ok($$x == 19, "result is not read only");
+$x = 19;
+ok($x == 19, "result is not read only");
 
 #Forks::Super::Debug::_deemulate_Carp_Always();
 
@@ -49,16 +49,13 @@ SKIP: {
   my $j = $Forks::Super::LAST_JOB;
   $y = "";
   $z = sprintf "B%05d", 100000 * rand();
-  my $x2 = bg_qx "$^X t/external-command.pl -s=10 -e=$z", timeout => 2;
-  $t = Time::HiRes::gettimeofday();
-  $y = $$x2;
+  $y = bg_qx "$^X t/external-command.pl -s=5 -s=5 -e=$z", { timeout => 2 };
+  $t = Time::HiRes::time();
 
-  ok((!defined $y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure");
+  ok(!defined($y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure")
+	or diag("\$y was $y, expected empty or undefined\n");
   ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
-  if (defined $y && $y ne "" && $y ne "\n") {
-    print STDERR "Fail on test 5: \$y: ", hex_enc($y), "\n";
-  }
-  $t = Time::HiRes::gettimeofday() - $t;
+  $t = Time::HiRes::time() - $t;
   ok($t <= 6.5,                        ### 14 ### was 4 obs 4.92,6.0,7.7!
      "scalar bg_qx respected timeout, took ${t}s expected ~2s");
 
@@ -66,15 +63,16 @@ SKIP: {
 
   $z = sprintf "C%05d", 100000 * rand();
   $x = bg_qx "$^X t/external-command.pl -e=$z -s=10", timeout => 4;
-  $t = Time::HiRes::gettimeofday();
-  ok($$x eq "$z \n" || $$x eq "$z ",   ### 15 ###
-     "scalar bg_qx failed but retrieved output"); 
-  if (!defined $$x) {
+  $t = Time::HiRes::time();
+  ok($x eq "$z \n" || $x eq "$z ",     ### 15 ###
+     "scalar bg_qx failed but retrieved output")
+	or diag("\$x was $x, expected $z\n");
+  if (!defined $x) {
     print STDERR "(output was: <undef>;target was \"$z \")\n";
-  } elsif ($$x ne "$z \n" && $$x ne "$z ") {
-    print STDERR "(output was: $$x; target was \"$z \")\n";
+  } elsif ($x ne "$z \n" && $x ne "$z ") {
+    print STDERR "(output was: $x; target was \"$z \")\n";
   }
-  $t = Time::HiRes::gettimeofday() - $t;
+  $t = Time::HiRes::time() - $t;
   ok($t <= 7.5,                            ### 16 ### was 3 obs 3.62,5.88,7.34
      "scalar bg_qx respected timeout, took ${t}s expected ~4s");
 }

@@ -16,11 +16,11 @@ $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
 $p1 = fork { sub => sub { sleep 3 }, name => "simple2", delay => 3 };
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $p2 = fork { sub => sub { sleep 3 }, 
 	depend_start => "simple2", queue_priority => 10 };
 $p3 = fork { sub => sub {}, queue_priority => 5 };
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t <= 1.5, "fast return for queued job ${t}s expected <= 1s"); ### 15 ###
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
@@ -32,18 +32,18 @@ ok($j1->{start} <= $j2->{start}, "respected start dependency by name");
 ok($j3->{start} < $j2->{start}, 
    "non-dependent job started before dependent job");
 
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $p1 = fork { sub => sub {sleep 3}, name => "circle1", depend_on => "circle2" };
-my $t2 = Time::HiRes::gettimeofday();
+my $t2 = Time::HiRes::time();
 $p2 = fork { sub => sub {sleep 3}, name => "circle2", depend_on => "circle1" };
-my $t3 = Time::HiRes::gettimeofday();
+my $t3 = Time::HiRes::time();
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',
    "jobs with apparent circular dependency in correct state");
-my $t31 = Time::HiRes::gettimeofday();
+my $t31 = Time::HiRes::time();
 waitall();
-my $t4 = Time::HiRes::gettimeofday();
+my $t4 = Time::HiRes::time();
 ($t,$t2,$t3,$t31) = ($t4-$t,$t4-$t2,$t4-$t3,$t4-$t31);
 ok($t > 5.5 && $t31 < 8.8,          ### 20 ### was 8.0 obs 8.08
    "Took ${t}s ${t2}s ${t3}s ${t31} for dependent jobs - expected ~6s"); 

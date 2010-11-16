@@ -10,15 +10,12 @@
 package Forks::Super::Job::Callback;
 use Forks::Super::Util qw(qualify_sub_name);
 use Forks::Super::Debug qw(:all);
-
-use Exporter;
-our @ISA = qw(Exporter);
-#use base 'Exporter';
-
 use Carp;
+use Exporter;
 use strict;
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(run_callback);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our $VERSION = $Forks::Super::Util::VERSION;
@@ -39,7 +36,7 @@ sub run_callback {
     return;
   }
 
-  $job->{"callback_time_$callback"} = Time::HiRes::gettimeofday();
+  $job->{"callback_time_$callback"} = Time::HiRes::time();
   $callback = delete $job->{$key};
 
   no strict 'refs';

@@ -22,17 +22,17 @@ $Forks::Super::ON_BUSY = "block";
 
 my $pid1 = fork { sub => $sleepy };
 my $pid2 = fork { sub => $sleepy };
-my $t = Time::HiRes::gettimeofday();
+my $t = Time::HiRes::time();
 my $t0 = $t;
 my $pid3 = fork { sub => $sleepy };
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t <= 1.97, "$$\\three forks fast return ${t}s expected <1s"); ### 1 ###
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "forks successful");
 
-my $t2 = Time::HiRes::gettimeofday();
+my $t2 = Time::HiRes::time();
 my $pid4 = fork { sub => $sleepy };
-my $t3 = Time::HiRes::gettimeofday();
+my $t3 = Time::HiRes::time();
 ($t2,$t0) = ($t3-$t2, $t3-$t0);
 ok($t2 >= 2 || ($t0 > 3.0), "blocked fork took ${t2}s ${t0}s expected >2s");
 ok(isValidPid($pid4), "blocking fork returns valid pid $pid4"); ### 4 ###
@@ -43,22 +43,22 @@ waitall;
 $Forks::Super::ON_BUSY = "fail";
 $pid1 = fork { sub => $sleepy };  # ok 1/3
 $pid2 = fork { sub => $sleepy };  # ok 2/3
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $pid3 = fork { sub => $sleepy };  # ok 3/3
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 ok($t <= 1.9, "three forks no delay ${t}s expected <=1s"); ### 5 ###
 ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
    "three successful forks");
 
 
-$t = Time::HiRes::gettimeofday();
+$t = Time::HiRes::time();
 $pid4 = fork { sub => $sleepy };     # should fail .. already 3 procs
 my $pid5 = fork { sub => $sleepy };  # should fail
-my $u = Time::HiRes::gettimeofday() - $t;
+my $u = Time::HiRes::time() - $t;
 ok($u <= 1, "Took ${u}s expected fast fail 0-1s"); ### 7 ###
 ok(!isValidPid($pid4) && !isValidPid($pid5), "failed forks");
 waitall;
-$t = Time::HiRes::gettimeofday() - $t;
+$t = Time::HiRes::time() - $t;
 
 ok($t >= 2.15 && $t <= 6.75,                    ### 9 ### was 4 obs 6.75!
    "Took ${t}s for all jobs to finish; expected 3-4"); 

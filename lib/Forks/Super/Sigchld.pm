@@ -33,7 +33,7 @@ sub handle_CHLD {
   $_SIGCHLD++;
   if ($_SIGCHLD > 1) {
     if ($SIG_DEBUG) {
-      my $z = Time::HiRes::gettimeofday() - $^T;
+      my $z = Time::HiRes::time() - $^T;
       push @CHLD_HANDLE_HISTORY, "synch $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
     }
     $_SIGCHLD--;
@@ -41,7 +41,7 @@ sub handle_CHLD {
   }
 
   if ($SIG_DEBUG) {
-    my $z = Time::HiRes::gettimeofday() - $^T;
+    my $z = Time::HiRes::time() - $^T;
     push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
   if ($sig ne "-1" && $DEBUG) {
@@ -68,7 +68,7 @@ sub handle_CHLD {
       debug("Forks::Super::handle_CHLD(): ",
 	    "preliminary reap for $pid status=$status") if $DEBUG;
       if ($SIG_DEBUG) {
-	my $z = Time::HiRes::gettimeofday() - $^T;
+	my $z = Time::HiRes::time() - $^T;
 	push @CHLD_HANDLE_HISTORY, 
 	  "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
       }
@@ -96,7 +96,7 @@ sub handle_CHLD {
     $Forks::Super::Queue::_REAP = 1;
   }
   if ($SIG_DEBUG) {
-    my $z = Time::HiRes::gettimeofday() - $^T;
+    my $z = Time::HiRes::time() - $^T;
     push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
   $_SIGCHLD--;

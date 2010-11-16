@@ -18,6 +18,7 @@ if (! -r $limits_file) {
 
 my %info = load_limits_file($limits_file);
 
+
 open F, '>', $ARGV[0] || 'lib/Forks/Super/SysInfo.pm';
 print F <<"____;";
 
@@ -42,7 +43,8 @@ printF('TOO_MANY_FH_ERRNO', $info{maxfilehandle_errno}, '23.0');
 printF('FILE_NOT_FOUND_ERRNO', $info{fnf_errno}, '2.0');
 printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
-printF('SLEEP_ALARM_COMPATIBLE', $info{sleep_alarm_compat}, '""');
+printF('SLEEP_ALARM_COMPATIBLE', &sleep_alarm_compat, '""');
+
 if (defined $info{ncpu}) {
   printF('NUM_PROCESSORS', $info{ncpu}, '1');
 }
@@ -50,16 +52,22 @@ if (defined $info{ncpu}) {
 # See what core and core module functionality is available
 # on this system.
 my %config = ( alarm => eval { alarm 0;1 } || 0,
+
 	       getpgrp => eval { my $z=getpgrp(0);1 } || 0,
+
 	       getpriority => eval { my $z=getpriority(0,0);1 } || 0,
+
 	       SIGUSR1 => exists($SIG{USR1}) || 0,
+
 	       select4 => eval { select undef,undef,undef,0.05;1 } || 0,
+
 	       pipe => eval {
 		 my ($read,$write);
 		 pipe $read, $write;
 		 close $read;
 		 close $write;
 		 1 } || 0,
+
 	       socketpair => eval {
 		 use Socket;
 		 my ($read,$write);
@@ -67,6 +75,7 @@ my %config = ( alarm => eval { alarm 0;1 } || 0,
 		 close $read;
 		 close $write;
 		 1 } || 0,
+
 	       setitimer => eval {
 		 require Time::HiRes;
 		 Time::HiRes::setitimer(Time::HiRes::ITIMER_REAL(), 0);
@@ -89,8 +98,8 @@ sub printF {
   $value ||= $defaultValue;
   $value = "0" if $value eq "000";
 
-  print F "\r\n";
-  print F 'our $', $varName, " = $value;", "\r\n";
+  print F "\n";
+  print F 'our $', $varName, " = $value;", "\n";
 }
 
 sub load_limits_file {
@@ -106,3 +115,16 @@ sub load_limits_file {
   return %info;
 }
 
+sub sleep_alarm_compat {
+  # compute this every time. The value from load_limits_file can be unreliable.
+  my $compatible = -1;
+  eval {
+    local $SIG{ALRM} = sub { die "Timeout\n" };
+    alarm 1;
+    $compatible = 1;
+    sleep 2;
+    $compatible = "000";
+  };
+  return $compatible;
+    
+}

@@ -50,11 +50,11 @@ $msg = sprintf "%05x", rand() * 99999;
 $z = print $fh_in "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open3: print to input handle ok = $z");
-sleep 3;
-#@out = <$fh_out>;
+sleep 4;
+
 @out = Forks::Super::read_stdout($pid);
 Forks::Super::close_fh($pid, 'stdout');
-#my @err = <$fh_err>;
+
 my @err = Forks::Super::read_stderr($pid);
 Forks::Super::close_fh($pid, 'stderr');
 ok(@out == 4, "open3: got right number of output lines");
