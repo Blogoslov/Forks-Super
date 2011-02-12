@@ -23,7 +23,7 @@ my $pid = fork {
   timeout => 5,
   child_fh => "all"
 };
-print STDERR "Job is: ", $pid->toFullString(), "\n";
+# print STDERR "Job is: ", $pid->toFullString(), "\n";
 waitall;
 my @out = Forks::Super::read_stdout($pid);
 my @err = Forks::Super::read_stderr($pid);

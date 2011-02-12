@@ -17,7 +17,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.43';
+our $VERSION = '0.44';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -206,7 +206,7 @@ sub _has_POSIX_signal_framework {
 
 sub is_socket {
   my $handle = shift;
-  if (ref tied $handle eq 'Forks::Super::Tie::IPCFileHandle') {
+  if (ref tied *$handle eq 'Forks::Super::Tie::IPCFileHandle') {
     return 0;
   }
   if (defined $$handle->{is_socket}) {

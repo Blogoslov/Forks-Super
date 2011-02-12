@@ -110,7 +110,7 @@ sub CONFIG_module {
   if (defined $CONFIG{$module}) {
     return $CONFIG{$module};
   }
-  my $zz = eval " require $module ";
+  my $zz = eval " require $module ";     ## no critic (StringyEval)
   if ($@) {
     carp "Forks::Super::CONFIG: ",
       "Module $module could not be loaded: $@\n" if $warn;
@@ -118,7 +118,7 @@ sub CONFIG_module {
   }
 
   if (@settings) {
-    $zz = eval " $module->import(\@settings) ";
+    $zz = eval " $module->import(\@settings) ";  ## no critic (StringyEval)
     if ($@) {
       carp "Forks::Super::CONFIG: ",
 	"Module $module was loaded but could not import with settings [",

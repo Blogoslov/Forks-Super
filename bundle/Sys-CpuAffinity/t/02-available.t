@@ -33,19 +33,41 @@ print STDERR "xs_cpuset_set_affinity\n"
 	if defined &Sys::CpuAffinity::xs_cpuset_set_affinity;
 
 foreach my $module (qw(Win32::API Win32::Process BSD::Process::Affinity)) {
-	my $avail = Sys::CpuAffinity::_configModule($module);
-	print STDERR "module $module: ", $avail && "not ", "available\n";
+  my $avail = Sys::CpuAffinity::_configModule($module);
+  print STDERR "module $module: ", $avail && "not ", "available\n";
 }
 
-foreach my $externalProgram (qw(bindprocessor dmesg sysctl psrinfo
-	hinv hwprefs prtconf taskset pbind cpuset)) {
+foreach my $externalProgram (qw(bindprocessor dmesg sysctl psrinfo hinv
+				hwprefs prtconf taskset pbind cpuset)) {
 
-	my $path = Sys::CpuAffinity::_configExternalProgram($externalProgram);
-	if ($path) {
-		print STDERR "$externalProgram available at $path\n";
-	} else {
-		print STDERR "$externalProgram: not found\n";
-	}
+  my $path = Sys::CpuAffinity::_configExternalProgram($externalProgram);
+  if ($path) {
+    print STDERR "$externalProgram available at $path\n";
+    if (0 && $Sys::CpuAffinity::VERSION == 0.99 && $^O eq 'openbsd') {
+      if ($externalProgram eq 'dmesg') {
+	print STDERR "openbsd dmesg output:\n";
+	print STDERR qx($path | grep -i cpu);
+	print STDERR "=========================\n";
+      }
+      if (0 && $externalProgram eq 'sysctl') {
+	print STDERR "openbsd sysctl output:\n";
+	print STDERR qx($path -a);
+	print STDERR "=========================\n";
+      }
+    }
+  } else {
+    print STDERR "$externalProgram: not found\n";
+  }
+}
+
+if (0 && $Sys::CpuAffinity::VERSION == 0.99 && $^O eq 'openbsd') {
+  if (-r '/proc/cpuinfo') {
+    print STDERR "openbsd /proc/cpuinfo:\n";
+    open my $cpuinfo, '<', '/proc/cpuinfo';
+    print STDERR <$cpuinfo>;
+    close $cpuinfo;
+    print STDERR "=========================\n";
+  }
 }
 
 ok(1);

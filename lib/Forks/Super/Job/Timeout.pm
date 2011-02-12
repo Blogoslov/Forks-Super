@@ -146,7 +146,27 @@ sub _child_timeout {
   # but any other active processes that it has spawned.
   # There are several ways to do this.
 
-  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+  if (Forks::Super::Config::CONFIG('Proc::ProcessTable')) {
+    my $ps = new Proc::ProcessTable();
+    my (%ppid, @to_kill) = ();
+    foreach my $p (@{$ps->table}) {
+      $ppid{$p->pid} = $p->ppid;
+    }
+    foreach my $opid (keys %ppid) {
+      my $pid = $ppid{$opid};
+      while (defined $pid) {
+	if ($pid == $$) {
+	  push @to_kill, $opid;
+	  last;
+	}
+	$pid = $ppid{$pid};
+      }
+    }
+    if (@to_kill > 0) {
+      Forks::Super::kill($TIMEOUT_SIG, @to_kill);
+    }
+
+  } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
       local $SIG{$TIMEOUT_SIG} = 'IGNORE';
       $DISABLE_INT = 1;

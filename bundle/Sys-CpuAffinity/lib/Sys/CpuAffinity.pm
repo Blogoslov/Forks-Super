@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use base qw(DynaLoader);
 
-our $VERSION = '0.98';
+our $VERSION = '0.99';
 our $DEBUG = $ENV{DEBUG} || 0;
 eval { bootstrap Sys::CpuAffinity $VERSION };
 
@@ -350,9 +350,18 @@ sub _getNumCpus_from_sysctl {
     return 0 if !_configExternalProgram("sysctl");
     my $cmd = _configExternalProgram("sysctl");
     my @sysctl = qx($cmd -a 2> /dev/null);
-    my @results = grep { /^hw.ncpu:/ } @sysctl;
+    my @results = grep { /^hw.ncpu[:=]/ } @sysctl;
     return 0 if @results == 0;
-    my ($ncpus) = $results[0] =~ /:\s*(\d+)/;
+    my ($ncpus) = $results[0] =~ /[:=]\s*(\d+)/;
+
+    if ($ncpus == 0) {
+      $ncpus = 0 + qx($cmd -n hw.ncpu 2> /dev/null);
+    }
+    if ($ncpus == 0) {
+      $ncpus = 0 + qx($cmd -n hw.ncpufound 2> /dev/null);
+    }
+
+
     return $ncpus || 0;
 
     # there are also sysctl/sysctlbyname system calls
@@ -507,6 +516,7 @@ sub _getAffinity_with_Win32API {
 
 sub _getAffinity_with_Win32Process {
   my $pid = shift;
+
   return 0 if $^O ne "MSWin32" && $^O ne "cygwin";
   return 0 if !_configModule("Win32::Process");
   return 0 if $pid < 0;  # pseudo-process / thread id
@@ -715,7 +725,7 @@ sub _setAffinity_with_Win32API {
 
 sub _setAffinity_with_Win32Process {
   my ($pid, $mask) = @_;
-  return 0 if $^O ne "MSWin32" && $^O ne "cygwin";
+  return 0 if $^O ne "MSWin32";   # cygwin? can't get it to work reliably
   return 0 if !_configModule("Win32::Process");
 
   $DB::single = 1;
@@ -907,7 +917,7 @@ $DB::single = 1;
     return 0;
   } elsif ($opid == $$) {
 
-    if ($^O ne 'cygwin' && defined &xs_win32_setAffinity_thread) {
+    if (0 && $^O ne 'cygwin' && defined &xs_win32_setAffinity_thread) {
       my $r = xs_win32_setAffinity_thread(0, $mask);
       return $r if $r;
     }
@@ -993,6 +1003,7 @@ sub _configExternalProgram {
     if ($which =~ / not in / 			# negative output on irix
 	|| $which =~ /no \Q$program\E in /	# negative output on solaris
 	|| $which =~ /Command not found/        # negative output on openbsd
+	|| ! -x $which                          # output is not executable, may be junk
        ) {
 
       $which = '';
@@ -1092,7 +1103,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-0.98
+Version 0.99
 
 =head1 SYNOPSIS
 
@@ -1142,7 +1153,7 @@ other existing modules, and Sys::CpuAffinity will use
 these modules if they are available:
 
     Win32::API, Win32::Process [MSWin32, cygwin]
-    BSD::Process::Affinity [*bsd]
+    BSD::Process::Affinity [FreeBSD, NetBSD]
 
 =head1 SUPPORTED SYSTEMS
 
@@ -1383,7 +1394,7 @@ by default.
 Some systems have a concept of the maximum number of processors that
 they can suppport.
 
-Currently (0.91-0.98), constant parameters to Win32 API functions are 
+Currently (0.91-0.99), constant parameters to Win32 API functions are 
 hard coded, not extracted from the local header files. Microsoft is
 probably loathe to change these constants between different versions,
 but this still seems dodgy.
@@ -1393,3 +1404,9 @@ but this still seems dodgy.
 
 Cygwin: if Win32::API is not installed and setCpuAffinity doesn't work,
 recommend Win32::API
+
+OpenBSD doesn't have a way to set affinity (yet?) ? What about using
+the data structures under sys/proc.h? Now that I have a devio.us account
+I can check it out.
+
+

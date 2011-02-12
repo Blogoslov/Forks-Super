@@ -1,5 +1,5 @@
 
-Forks::Super version 0.43
+Forks::Super version 0.44
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -117,6 +117,7 @@ but will still be able to perform most of its functions
 without them:
 
     DateTime::Format::Natural
+    Proc::ProcessTable
     Win32::Process, Win32::API [Windows and Cygwin]
     Win32          [Windows]
     Sys::CpuAffinity 

@@ -1,5 +1,9 @@
 Revision history for Sys-CpuAffinity
 
+0.99	2010-11-18
+        Cygwin fix.
+	Can now get num cpus on OpenBSD (thanks, devio.us!)
+
 0.98	2010-10-17
 	Fix bug finding external programs in OpenBSD. Test improvements.
 	Better use of Win32 XS in Cygwin. Fix compile error and other typos

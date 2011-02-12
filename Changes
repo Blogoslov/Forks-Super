@@ -1,5 +1,12 @@
 Revision history for Forks-Super
 
+0.44    2011-02-12
+        Upgrade Sys-CpuAffinity bundle to 0.99.
+        Can use Proc::ProcessTable to clean up grandchild processes.
+        Introduced reuse, dispose methods in Forks::Super::Job.
+        Fix tied $fh call (deprecated in 5.13.8).
+        Implement -MForks::Super=cleanse for picking up IPC litter off-line.
+
 0.43    2010-11-15
         API change for bg_eval, bg_qx functions: return value is no longer a
         reference to a tied variable, but an overloaded object that retrieves

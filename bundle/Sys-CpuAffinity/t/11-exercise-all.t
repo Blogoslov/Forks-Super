@@ -163,7 +163,9 @@ sub recommend {
     push @recommendations, "the  Win32::API  module";
     push @recommendations, "the  Win32::Process  module";
   } elsif ($sys =~ /bsd/i) {
-    push @recommendations, "the  BSD::Process::Affinity  module";
+    if ($sys !~ /openbsd/i) {
+      push @recommendations, "the  BSD::Process::Affinity  module";
+    }
     push @recommendations, "make sure the  cpuset  program is in the PATH";
   } elsif ($sys =~ /solaris/i) {
     push @recommendations, "make sure the  pbind  program is in the PATH";

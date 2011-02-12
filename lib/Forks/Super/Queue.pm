@@ -233,6 +233,7 @@ sub queue_job {
   }
   if (defined $job) {
     $job->{state} = 'DEFERRED';
+    $job->{queued} ||= Time::HiRes::time();
     $job->{pid} = $NEXT_DEFERRED_ID--;
     $Forks::Super::ALL_JOBS{$job->{pid}} = $job;
     if ($DEBUG || $QUEUE_DEBUG) {

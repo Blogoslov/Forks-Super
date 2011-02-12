@@ -236,4 +236,24 @@ Thoughts about a major revision. Also see the  TODO  file.
 
         Good documentation on how to override any of these settings.
 
+    ___ IPCChannel object spec:
+	Mode: read, write, bidirectional
+	Scheme: file, socket, pipe, INET socket
+        Options: non-blocking, timeout on blocking operations,
+            use pipecleaning
+
+        Constructor:
+	    mode, scheme, %options
+            from JSON spec
+        Methods
+            to JSON spec
+            reverse to JSON spec
+            readline
+            print
+            sysread
+            syswrite
+            select (4 arg)
+            open/init
+	        try-to-open (for read end that must wait for write end)
+            close
 

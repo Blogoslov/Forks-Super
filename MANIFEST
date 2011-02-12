@@ -105,6 +105,7 @@ t/52c-dependencies.t
 t/53a-name.t
 t/53b-name.t
 t/53c-name.t
+t/54-reuse.t
 t/60-os.t
 t/61-callbacks.t
 t/62a-bg_eval.tt

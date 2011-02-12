@@ -56,7 +56,7 @@ Possible TODOs:
 
 	_X_ Enabled in v0.39
 	_X_ Still enabled in v0.43
-
+ 
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
         has solved this problem better than I did?
@@ -74,15 +74,15 @@ Possible TODOs:
     _x_ IPC cleanup -- log fails and cleanse them off-line with
         perl -MForks::Super=cleanse   or
         perl -MForks::Super=cleanse=<directory>
-	___ test
-        ___ document. Only to be used when there are no other programs
-	    using Forks::Super with your target IPC directory.
+	_x_ test
+        _X_ document. <XXX>Only to be used when there are no other programs
+	    using Forks::Super with your target IPC directory.</XXX>
 
-    ___ Forks::Super::Job->reuse(%options) method to reuse a job
+    _X_ Forks::Super::Job->reuse(%options) method to reuse a job
 	object and its existing set of parameters; like calling
 	fork { %{all_of_jobs_previous_options($job)} } but reusing
 	the existing Forks::Super::Job object. It would be an
-	error to call this unless the $job was completed.
+	error to call this unless the $job was completed?
 
     ___ Demos/examples/cookbook section.
         ___ Perform 1000's of jobs, 20 at a time
@@ -106,6 +106,7 @@ Possible TODOs:
 	    memory intensive jobs, cpu intensive jobs,
 	    I/O bound jobs
         ___ scheduler app, running for days at a time
+	___ reuse
 
     _x_ Forks::Super::Job::dispose( @jobs ) method
         _X_ Closes all filehandles
@@ -119,20 +120,34 @@ Possible TODOs:
                 stdin=>$input + CONFIG(filehandles)==0
 	___ t/25, t/42d, t/42i
 
-    ___ Parallel::Forker uses Proc::ProcessTable to kill grandchildren.
+    _X_ Parallel::Forker uses Proc::ProcessTable to kill grandchildren.
         Is that an option? Yeah, maybe on Unix-y systems, including Cygwin.
 
     ___ POSIX::RT::Timer as possible replacement for get/set itimer?
 
-    ___ daemonize => 1  option to close/reopen STDxxx fhs to /dev/null,
+    _-_ daemonize => 1  option to close/reopen STDxxx fhs to /dev/null,
         start a new process group, change directory to /.
-        Disables IPC.
+        Disables IPC. Set umask to 0.
+	See the Wikipedia daemon article to see all the requirements.
+	A daemonized job cannot be signalled with Forks::Super::kill(job)
+	___ how to test it?
+	___ Will blanket close ruin sockethandles in the parent?
+	___ Set the os_priority, cpu_affinity
+	___ timeout, expiration?
+	___ Then again, couldn't a daemon use most of the options to fork(),
+	    including timeout, setting {real_pid}, etc.? Suppose that at 
+	    the time a daemonized job is created, we create a small pipe
+	    or other IPC channel for the child to tell the parent
+	    what is the grandchild's PID ... 
+        ___ Use Proc::Daemon if available? Any::Daemon
+	___ Maybe this is something for 1.0 ...
 
     ___ Require Signals::XSIG. Bundle it?
         ___ The Default.pm module is not quite mature. Can't require
             Signals::XSIG while those tests are still part of the build.
         ___ Not practical to add functionality as workaround for Signals::XSIG
-            not being available.
+            not being available. Hard bundling would be ok, though. Or
+	    copying the code into Forks::Super::Sighandler.
 
     ___ make SysInfo.pm.PL capable of managing config for multiple $^O,$]?
 	Or more generally, what if the installed SysInfo.pm is set up for
@@ -146,3 +161,10 @@ Possible TODOs:
 	    installed a specific location? And run SysInfo.pm.PL for all
 	    of them? I doubt it.
 
+    _X_ {queued} Job attribute, time of first queue.
+
+    ___ Fails t/20 t/21 on OpenBSD run as make test, but succeed as
+	standalone? What's up with that?
+	Intermittent failures.
+
+    ___ Cygwin v5.13.9 runaway process during make?

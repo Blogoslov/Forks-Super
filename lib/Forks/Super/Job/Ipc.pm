@@ -46,7 +46,6 @@ our @SAFEOPENED = ();
 
 our $_IPC_DIR;
 {
-
   package Forks::Super::Job::Ipc::Tie;
 
   # special behavior for $Forks::Super::IPC_DIR ==>
@@ -698,10 +697,14 @@ sub set_ipc_dir {
 	 || $_CLEANSE_MODE) {
     my $readme = "$_IPC_DIR/README.txt";
     open my $readme_fh, '>', $readme;
-    my $localtime = scalar localtime;
+    my $localtime1 = time;
+    my $localtime2 = scalar localtime;
     print $readme_fh <<"____";
-This directory was created by process $$ at $localtime
-running $0 @ARGV.
+This directory was created by process $$ at 
+$localtime2
+$localtime1 $$
+running 
+$0 @ARGV.
 
 It should be/have been cleaned up when the process completes/completed.
 If that didn't happen for some reason, it is safe to delete
@@ -716,6 +719,7 @@ ____
 }
 
 sub _cleanup {
+
   no warnings 'once';
   if (defined $_IPC_DIR
       && 0 >= ($Forks::Super::DONT_CLEANUP || 0)) {
@@ -796,6 +800,39 @@ sub cleanse {
   opendir(D, ".");
   my $errors = 0;
   foreach my $ipc_dir (grep { -d $_ && /^\.fhfork/ } readdir (D)) {
+
+    # try not to remove a directory for a running process ...
+    if (-f "$ipc_dir/README.txt") {
+      if (open my $fh, '<', "$ipc_dir/README.txt") {
+	scalar <$fh>;  # header
+	scalar <$fh>;  
+	my ($t,$pid) = split /\s+/,<$fh>;
+	if (time - $t < 86400) {
+
+	  # 1. is there a process $pid running?
+	  # 2. is it the same process $pid that created this directory?
+
+	  if (kill 0, $pid) {
+	    # This works on Windows (Strawbery 5.10, anyway), even if $pid < 0
+
+	    # it's possible that this is a *newer* process with the
+	    # same pid ...
+	    if (-e "/proc/$pid") {
+	      if ((-M "/proc/$pid") > (-M $ipc_dir)) {
+
+		warn "Process $pid appears to still be running. ",
+		  "Will not erase ipc dir $ipc_dir\n";
+		next;
+	      }
+	    }
+	    # else ... Windows? how to get age of a process?
+	  }
+	}
+
+	close $fh;
+      }
+    }
+
     my $errors = _cleanse_dir($ipc_dir);
     if ($errors > 0) {
       no Carp;
@@ -847,6 +884,7 @@ sub END_cleanup {
   if ($$ != ($Forks::Super::MAIN_PID || $MAIN_PID)) {
     return;
   }
+
   return if $_CLEANUP++;
   if ($INC{'Devel/Trace.pm'}) {
     no warnings 'once';
@@ -863,7 +901,7 @@ sub END_cleanup {
     # $__OPEN_FH -= close $fh;
   }
 
-  # daemonize is there is anything to clean up
+  # daemonize if there is anything to clean up
   my @unused_files = grep { ! -e $_ } keys %IPC_FILES;
   delete $IPC_FILES{$_} for @unused_files;
 
@@ -876,8 +914,24 @@ sub END_cleanup {
   }
 
   # daemonize
+  ### chdir "/";  # but don't chdir. $IPC_DIR might be relative path.
+  umask 0;
+
   return if CORE::fork();
+
+  POSIX::setsid();
+  if (-e '/dev/null') {
+    open STDIN, '<', '/dev/null';
+    open STDOUT, '>>', '/dev/null';
+    open STDERR, '>>', '/dev/null';
+  } else {
+    close STDIN;
+    close STDOUT;
+    close STDERR;
+  }
+
   exit 0 if CORE::fork();
+
 
   # rename process, if supported by the OS, to note that we are cleaning up
   # not everyone will like this "feature"
@@ -1552,36 +1606,33 @@ sub Forks::Super::Job::_config_fh_child {
   untie *STDOUT;
   untie *STDERR;
 
+  # track handles to close when the child exits
+  $job->{child_fh_close} = [];
+
   if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
-  # if (&IS_WIN32) {
     if (&IS_WIN32 && Forks::Super::Config::CONFIG('filehandles')) {
       return _config_cmd_fh_child($job);
     }
   }
 
-  # track handles to close when the child exits
-  $job->{child_fh_close} = [];
-
   _config_fh_child_stdout($job);
   _config_fh_child_stderr($job);
   _config_fh_child_stdin($job);
+
   if ($job->{fh_config} && $job->{fh_config}->{sockets}) {
     my $s1 = $job->{fh_config}->{psock};
     my $s2 = $job->{fh_config}->{psock2};
     if (defined $s1) {
       _close($s1);
-      # $__OPEN_FH -= close $s1;
     }
     if (defined $s2) {
       _close($s2);
-      # $__OPEN_FH -= close $s2;
     }
   }
   if ($job->{fh_config} && $job->{fh_config}->{pipes}) {
     foreach my $pipeattr (qw(p_to_in p_out p_err)) {
       if (defined $job->{fh_config}->{$pipeattr}) {
 	_close( $job->{fh_config}->{$pipeattr} );
-	# $__OPEN_FH -= close $job->{fh_config}->{$pipeattr};
       }
     }
   }

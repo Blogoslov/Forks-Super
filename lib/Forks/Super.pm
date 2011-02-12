@@ -16,6 +16,8 @@ use Forks::Super::Tie::Enum;
 use Forks::Super::Sighandler;
 use Forks::Super::Sigchld;
 use Forks::Super::LazyEval;
+use strict;
+use warnings;
 
 use Exporter;
 our @ISA = qw(Exporter);
@@ -24,9 +26,6 @@ our @ISA = qw(Exporter);
 use POSIX ':sys_wait_h';
 use Carp;
 $Carp::Internal{ (__PACKAGE__) }++;
-
-use strict;
-use warnings;
 $| = 1;
 
 our @EXPORT = qw(fork wait waitall waitpid);
@@ -41,7 +40,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.43';
+our $VERSION = '0.44';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -616,7 +615,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.43
+Version 0.44
 
 =head1 SYNOPSIS
 
@@ -2762,6 +2761,13 @@ In programs that use the interprocess communication features,
 the module will usually but not always do a good job of cleaning
 up after itself. You may find directories called C<< .fhfork<nnn> >>
 that may or not be empty scattered around your filesystem.
+
+Invoking this module as one of
+
+    $ perl -MForks::Super=cleanse
+    $ perl -MForks::Super=cleanse,<directory>
+
+runs a function that will clean up these directories. 
 
 =cut
 

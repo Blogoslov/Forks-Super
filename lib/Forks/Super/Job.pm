@@ -25,7 +25,7 @@ use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.43';
+our $VERSION = '0.44';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -50,6 +50,9 @@ sub new {
   if (ref $opts eq 'HASH') {
     $this->{$_} = $opts->{$_} foreach keys %$opts;
   }
+
+  $this->{__opts__} = $opts;
+
   $this->{created} = Time::HiRes::time();
   $this->{state} = 'NEW';
   $this->{ppid} = $$;
@@ -66,6 +69,22 @@ sub new {
     debug("New job created: ", $this->toString());
   }
   return $this;
+}
+
+sub reuse {
+  my ($job, $opts) = @_;
+  if (ref $opts ne 'HASH') {
+    $opts = { @_[1..$#_] };
+  }
+  my %opts;
+  if (defined $job->{__opts__}) {
+    %opts = %{$job->{__opts__}};
+  }
+  for (keys %$opts) {
+    $opts{$_} = $opts->{$_};
+  }
+
+  return Forks::Super::fork( \%opts ) ;
 }
 
 sub is_complete {
@@ -671,12 +690,14 @@ sub _preconfig_start_time {
   # configure a future start time
   my $start_after = 0;
   if (defined $job->{delay}) {
-    $start_after = Time::HiRes::time() +  Forks::Super::Job::Timeout::_time_from_natural_language($job->{delay}, 1);
+    $start_after
+      = Time::HiRes::time() 
+	+ Forks::Super::Job::Timeout::_time_from_natural_language(
+		$job->{delay}, 1);
     #$start_after = Time::HiRes::time() +  $job->{delay};
   }
   if (defined $job->{start_after}) {
     my $start_after2 = Forks::Super::Job::Timeout::_time_from_natural_language($job->{start_after}, 0);
-    #my $start_after2 = $job->{start_after};
     $start_after = $start_after2 if $start_after < $start_after2;
   }
   if ($start_after) {
@@ -771,6 +792,7 @@ sub _config_child {
   $job->_config_fh_child;
   return;
 }
+
 
 sub _config_debug_child {
   my $job = shift;
@@ -1061,7 +1083,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.43
+0.44
 
 =head1 SYNOPSIS
 
@@ -1486,6 +1508,36 @@ On most systems, open filehandles are a scarce resource and it
 is a very good practice to close filehandles when the jobs that
 created them are finished running and you are finished processing
 input and output on those filehandles.
+
+=back
+
+=head3 reuse
+
+=over 4
+
+=item C<< $pid = $job->reuse( \%new_opts ) >>
+
+Creates a new background process by calling C<Forks::Super::fork>,
+using all of the existing settings of the current C<Forks::Super::Job>
+object. Additional options may be provided which will override
+the original settings.
+
+Use this method to launch multiple instances of identical or
+similar jobs.
+
+    $job = fork { child_fh => "all",
+              callback => { start => sub { print "I started!" },
+                            finish => sub { print "I finished!" } },
+              sub => sub {
+                 do_something();
+                 do_something_else();
+                 ...   # do 100 other things.
+              },
+              args => [ @the_args ], timeout => 15
+    };
+
+    # Crikey, I'm not typing all that in again.
+    $job2 = $job->reuse { args => [ @new_args ], timeout => 30 };
 
 =back
 
