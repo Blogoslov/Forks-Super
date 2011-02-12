@@ -48,14 +48,12 @@ Possible TODOs:
 	_X_ warn => 0|1
 	_X_ timeout => max number of seconds to wait for input
 
-    _o_ Hijack sleep function with FSU::pause or F::S::Uninterruptable::sleep?
-        No. It is correct behavior to interrupt sleep.
-
     _X_ Turn installation of bundled packages on by default for a couple
 	of CPAN testing cycles. See what breaks.
 
 	_X_ Enabled in v0.39
-	_X_ Still enabled in v0.43
+	_X_ Still enabled in v0.45
+	___ Nothing breaks. Leave it.
  
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
@@ -68,21 +66,6 @@ Possible TODOs:
 	completed jobs: close the open filehandles that have slipped
 	through the cracks; remove the IPC files; move from 
 	%ALL_JOBS,@ALL_JOBS to %ARCHIVED_JOBS,@ARCHIVED_JOBS
-
-    _x_ Make Win32::API a required module for MSWin32.
-
-    _x_ IPC cleanup -- log fails and cleanse them off-line with
-        perl -MForks::Super=cleanse   or
-        perl -MForks::Super=cleanse=<directory>
-	_x_ test
-        _X_ document. <XXX>Only to be used when there are no other programs
-	    using Forks::Super with your target IPC directory.</XXX>
-
-    _X_ Forks::Super::Job->reuse(%options) method to reuse a job
-	object and its existing set of parameters; like calling
-	fork { %{all_of_jobs_previous_options($job)} } but reusing
-	the existing Forks::Super::Job object. It would be an
-	error to call this unless the $job was completed?
 
     ___ Demos/examples/cookbook section.
         ___ Perform 1000's of jobs, 20 at a time
@@ -109,19 +92,12 @@ Possible TODOs:
 	___ reuse
 
     _x_ Forks::Super::Job::dispose( @jobs ) method
-        _X_ Closes all filehandles
-        _X_ Erases all temporary files
         _X_ Removes entry from @ALL_JOBS, %ALL_JOBS
 	   ___ move to @ARCHIVED_JOBS, %ARCHIVED_JOBS?
-        _X_ Erases hash
-        ___ test
 
     _x_ support stdin=>$input + child_fh=>socket or
                 stdin=>$input + CONFIG(filehandles)==0
 	___ t/25, t/42d, t/42i
-
-    _X_ Parallel::Forker uses Proc::ProcessTable to kill grandchildren.
-        Is that an option? Yeah, maybe on Unix-y systems, including Cygwin.
 
     ___ POSIX::RT::Timer as possible replacement for get/set itimer?
 
@@ -160,8 +136,6 @@ Possible TODOs:
 	___ Can we detect all the versions of Perl that will use a module
 	    installed a specific location? And run SysInfo.pm.PL for all
 	    of them? I doubt it.
-
-    _X_ {queued} Job attribute, time of first queue.
 
     ___ Fails t/20 t/21 on OpenBSD run as make test, but succeed as
 	standalone? What's up with that?

@@ -40,7 +40,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.44';
+our $VERSION = '0.45';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -570,38 +570,6 @@ sub _is_test {
 }
 
 ###################################################################
-##
-## XXX - Do we want to hijack the sleep function? This would prevent a 
-## sleep call from getting interrupted by a SIGCHLD event.
-##
-## Advantages:
-##   In normal use case, you'd need less defensive programming.
-##   Automatically get the productive functionality of  pause  without
-##       needing to get in the habit of using it
-##   Retire tests 31#1-4
-##   Remove "BUGS AND LIMITATIONS" entry on Interrupted system calls.
-##        sleep  is the only one of importance.
-## Disadvantages:
-##   You might actually want sleep to get interrupted, say, by SIGALRM
-##       You might actually need sleep to get interrupted.
-##   pause uses more CPU than sleep
-##   return value of pause might not be an integer
-##   what other system calls are there to hijack?
-##   pause has potential to over-sleep
-##
-
-# Leave it enabled but crippled and undocumented for now.
-BEGIN { *CORE::GLOBAL::sleep = *__sleep; $Forks::Super::HIJACK{"sleep"} = 0 }
-sub __sleep { # not used in v0.38-v0.42
-  my $n = shift;
-  if ($Forks::Super::HIJACK{"sleep"} && defined $MAIN_PID && $$ == $MAIN_PID) {
-    return Forks::Super::Util::pause($n);
-  } else {
-    return CORE::sleep $n;
-  }
-}
-
-###################################################################
 
 1;
 
@@ -615,7 +583,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.44
+Version 0.45
 
 =head1 SYNOPSIS
 

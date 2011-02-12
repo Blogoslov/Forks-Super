@@ -919,7 +919,6 @@ sub END_cleanup {
 
   return if CORE::fork();
 
-  POSIX::setsid();
   if (-e '/dev/null') {
     open STDIN, '<', '/dev/null';
     open STDOUT, '>>', '/dev/null';
