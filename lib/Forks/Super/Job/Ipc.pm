@@ -918,17 +918,6 @@ sub END_cleanup {
   umask 0;
 
   return if CORE::fork();
-
-  if (-e '/dev/null') {
-    open STDIN, '<', '/dev/null';
-    open STDOUT, '>>', '/dev/null';
-    open STDERR, '>>', '/dev/null';
-  } else {
-    close STDIN;
-    close STDOUT;
-    close STDERR;
-  }
-
   exit 0 if CORE::fork();
 
 

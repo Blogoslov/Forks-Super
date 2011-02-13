@@ -262,7 +262,7 @@ Forks::Super::Sighandler - extended signal handling module for Forks::Super
 
 _head1 VERSION
 
-0.45
+0.46
 
 _head1 DESCRIPTION
 

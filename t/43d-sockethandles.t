@@ -55,7 +55,10 @@ ok(@pdata > 0 && @pdata == @cdata, "$$\\parent & child processed "
 @cdata = sort @cdata;
 my $pc_equal = 1;
 for (my $i=0; $i<@pdata; $i++) {
-  $pc_equal=0 if $pdata[$i] ne $cdata[$i] && print "$i: $pdata[$i] /// $cdata[$i] ///\n";
+  if ($pdata[$i] ne $cdata[$i]) {
+    print "$i: $pdata[$i] /// $cdata[$i] ///\n";
+    $pc_equal = 0;
+  }
 }
 ok($pc_equal, "parent/child agree on output");
 
