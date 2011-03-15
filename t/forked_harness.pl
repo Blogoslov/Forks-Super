@@ -35,7 +35,7 @@
 #  --popts|-p option:    pass option to perl interpreter during test
 #                        [e.g.: -p -d:Trace, -p -MCarp::Always]
 #  --shuffle|-s:         run tests in random order
-#  --timeout|-t n:       abort a test after <n> seconds [default: 120]
+#  --timeout|-t n:       abort a test after <n> seconds [default: 150]
 #  --repeat|-r n:        do up to <n> iterations of testing. Pause after each
 #                        iteration, and abort if iteration had error(s)
 #  --xrepeat|-x n:       run each test <n> times in each iteration
@@ -82,7 +82,7 @@ my @env = ();
 my $maxproc = &maxproc_initial;
 my $use_color = $ENV{COLOR} && -t STDOUT &&
   eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
-my $timeout = 120;
+my $timeout = 150;
 my $repeat = 1;
 my $xrepeat = 1;
 my $test_verbose = $ENV{TEST_VERBOSE} || 0;
@@ -308,7 +308,6 @@ sub launch_test_file {
     cmd => [ @cmd ],
     child_fh => $child_fh,
     timeout => $timeout,
-    # callback => sub { print "XXXXXX Finished job $_[0] $_[1]\n" },
   };
 
   $j{$pid} = $test_file;
@@ -467,7 +466,8 @@ sub process_test_output {
   } elsif ($status == 35584 && $not_ok == 0) {
     $redo++;
   } elsif ($status != 0 && $not_ok == 0) {
-    $fail{$test_file}{'unknown'} += $status >> 8;
+    # $fail{$test_file}{'unknown'} += $status >> 8;
+    $fail{$test_file}{'unknown'} += 1;
   }
   # elsif ($quiet && $use_harness) { should summarize test results }
 

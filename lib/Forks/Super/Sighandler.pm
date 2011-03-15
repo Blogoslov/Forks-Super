@@ -16,6 +16,9 @@ our @ISA = qw(Exporter);
 our @EXPORT = qw(register_signal_handler);
 our $VERSION = $Forks::Super::Util::VERSION;
 
+push @Devel::DumpTrace::EXCLUDE_PATTERN, '^Forks::Super::Sighandler$';
+$Devel::Trace::Fork::IGNORE_PACKAGES{'Forks::Super::Sighandler'} = 1;
+
 our %REGISTRY;
 our $DEBUG = 0;
 my $REGISTRY_MAX = 10;
@@ -262,7 +265,7 @@ Forks::Super::Sighandler - extended signal handling module for Forks::Super
 
 _head1 VERSION
 
-0.46
+0.47
 
 _head1 DESCRIPTION
 
@@ -290,7 +293,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 _head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2010, Marty O'Brien.
+Copyright (c) 2009-2011, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

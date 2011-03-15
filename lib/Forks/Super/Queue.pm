@@ -260,7 +260,6 @@ sub _check_for_reap {
   }
 }
 
-
 #
 # attempt to launch all jobs that are currently in the
 # DEFFERED state.
@@ -273,10 +272,11 @@ sub run_queue {
   if ($Forks::Super::Job::INSIDE_END_QUEUE > 0) {
     return;
   }
-  # XXX - run_queue from child ok if $Forks::Super::CHILD_FORK_OK
+
   {
     no warnings 'once';
-    return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
+    return if $Forks::Super::CHILD_FORK_OK <= 0
+      && $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
   }
   queue_job();
 

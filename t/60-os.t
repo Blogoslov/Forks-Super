@@ -75,7 +75,6 @@ SKIP: {
 
 # Win32-specific test. A spawned job should have the same CPU affinity
 # from the psuedo-process (thread) that spawned it
-# XXX - what about priority ?
 
 SKIP: {
   if ($^O ne 'MSWin32') {
@@ -117,7 +116,8 @@ waitall;
 
 ######################################################################
 
-# Win32 specific test: a spawned process should have the same
+# Win32 specific test: a spawned process should have the same priority
+# as the job that spawned it
 
 SKIP: {
   if ($^O ne 'MSWin32') {

@@ -29,7 +29,7 @@ for (my $i=0; $i<4; $i++) {
       child_fh => "in,out" 
     };
 }
-my @data = (@INC,%INC,%!);
+my @data = (@INC,%INC,%!,0..19)[0..19];
 my (@pdata, @cdata);
 for (my $i=0; $i<@data; $i++) {
   Forks::Super::write_stdin $pids[$i%4], "$data[$i]\n";

@@ -26,7 +26,7 @@ our $FILES_TO_CLEAN
   = join " ", qw(Forks-Super-* system-limits system-limits.lock
 		 lib/Forks/Super/SysInfo.pm t/out/spawn*
 		 t/out/sigchld.debug t/out/test* t/out/.lock-*
-		 t/out/49.* t/out/debug1-*
+		 t/out/49.* t/out/debug1-* t/out/limits.*
 		 t/out/ipc* t/out/new-ipc* *.stackdump
 		 lib/_Inline *.stackdump _Inline);
 
@@ -69,9 +69,9 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => \%REQUIRED,
 
-    ($ExtUtils::MakeMaker::VERSION+0 >= 6.46
+    (eval $ExtUtils::MakeMaker::VERSION >= 6.46
      ? ('META_MERGE' => \%META_MERGE ) : ()),
-    ($ExtUtils::MakeMaker::VERSION+0 >= 6.3002
+    (eval $ExtUtils::MakeMaker::VERSION >= 6.3002
      ? ('LICENSE'    => 'perl')        : ()),
 
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },

@@ -22,11 +22,17 @@ our ($DEBUG, $DEBUG_fh, %_CARPED,
      $OLD_SIG__WARN__, $OLD_SIG__DIE__, $OLD_CARP_VERBOSE);
 our $VERSION = $Forks::Super::Util::VERSION;
 
-open($DEBUG_fh, '>&STDERR')
+(uc($ENV{FORKS_SUPER_DEBUG} || "") eq 'TTY'
+ && open($DEBUG_fh, '>', $^O eq 'MSWin32' ? 'CON' : '/dev/tty'))
+  or open($DEBUG_fh, '>&2')
   or $DEBUG_fh = *STDERR
   or carp_once("Forks::Super: Debugging not available in module!\n");
 $DEBUG_fh->autoflush(1);
-$DEBUG = $ENV{FORKS_SUPER_DEBUG} || '0';
+$DEBUG = !!$ENV{FORKS_SUPER_DEBUG} || '0';
+
+# open filehandle to tty for emergency debugging as we may clobber STDERR
+open ::__XXXXXX__, $^O eq 'MSWin32' ? ">>CON" : ">>/dev/tty";
+(*::__XXXXXX__)->autoflush(1);
 
 sub init {
 }

@@ -6,8 +6,13 @@ use warnings;
 
 sub _read_socket {
   my $handle = shift;
-  # die "Invalid handle\n" unless $$handle->{is_socket};
-  return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+
+  if ($Forks::Super::Job::Ipc::USE_TIE_SH) {
+    return <$handle>;
+  } else {
+    # die "Invalid handle\n" unless $$handle->{is_socket};
+    return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+  }
 }
 
 #

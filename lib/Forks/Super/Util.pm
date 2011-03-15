@@ -17,7 +17,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.46';
+our $VERSION = '0.47';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -111,7 +111,9 @@ sub pause {
 	$time_left = $expire - Time::HiRes::time();
 	last if $time_left <= 0;
       }
-      my $resolution = $time_left > $DEFAULT_PAUSE ? $DEFAULT_PAUSE : $time_left * 0.5 + 0.01;
+      my $resolution = $time_left > $DEFAULT_PAUSE
+			? $DEFAULT_PAUSE
+			: $time_left * 0.5 + 0.01;
       Time::HiRes::sleep($resolution || 0.25);
       $time_left = $expire - Time::HiRes::time();
     }
@@ -209,6 +211,9 @@ sub is_socket {
   if (ref tied *$handle eq 'Forks::Super::Tie::IPCFileHandle') {
     return 0;
   }
+  if (ref tied *$handle eq 'Forks::Super::Tie::IPCSocketHandle') {
+    return 1;
+  }
   if (defined $$handle->{is_socket}) {
     return $$handle->{is_socket};
   }
@@ -220,7 +225,13 @@ sub is_pipe {
   if (defined $$handle->{is_pipe}) {
     return $$handle->{is_pipe};
   }
-  return $handle->opened && -p $handle;
+  if ($$handle->{is_socket} || $$handle->{is_file} || 0) {
+    return 0;
+  }
+  if (defined $handle->{std_delegate}) {
+    $handle = $handle->{std_delegate};
+  }
+  return eval '$handle->opened' && -p $handle;
 }
 
 1;

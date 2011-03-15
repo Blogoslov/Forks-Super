@@ -25,7 +25,7 @@ use strict;
 use warnings;
 
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.46';
+our $VERSION = '0.47';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -481,7 +481,11 @@ sub launch {
     exec( @{$job->{exec}} );
   } elsif ($job->{style} eq 'sub') {
     no strict 'refs';
-    $job->{sub}->(@{$job->{args}});
+
+    my $sub = $job->{sub};
+    my @args = @{$job->{args}};
+    $sub->(@args);
+
     debug("Job $$ subroutine call has completed") if $job->{debug};
     deinit_child();
     exit 0;
@@ -769,14 +773,12 @@ sub _config_parent {
   $job->_config_fh_parent;
   $job->_config_timeout_parent;
   if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    $job->{pgid} = getpgrp($job->{real_pid});
-
     # when  timeout =>   or   expiration =>  is used,
     # PGID of child will be set to child PID
-    # XXX - tragically this is not always true. Do the parent settings matter
-    #       though? Should comment out these lines and test
-    if (defined $job->{timeout} or defined $job->{expiration}) {
+    if (defined($job->{timeout}) || defined($job->{expiration})) {
       $job->{pgid} = $job->{real_pid};
+    } else {
+      $job->{pgid} = getpgrp($job->{real_pid});
     }
   }
   return;
@@ -793,7 +795,6 @@ sub _config_child {
   return;
 }
 
-
 sub _config_debug_child {
   my $job = shift;
   if ($job->{debug} && $job->{undebug}) {
@@ -806,6 +807,7 @@ sub _config_debug_child {
 }
 
 END {
+  no warnings 'internal';
   $INSIDE_END_QUEUE = 1;
   if ($$ == ($Forks::Super::MAIN_PID ||= $$)) {
 
@@ -1004,9 +1006,22 @@ sub init_child {
 
 sub deinit_child {
   Forks::Super::Job::Ipc::deinit_child();
-  close STDOUT if is_pipe(*STDOUT);
-  close STDERR if is_pipe(*STDERR);
-  close STDIN if *STDIN->opened && is_pipe(*STDIN);
+  if (is_pipe(*STDOUT)) {
+    close *STDOUT;
+    untie *STDOUT;
+  }
+  if (is_pipe(*STDERR)) {
+    close *STDERR;
+    untie *STDERR;
+  }
+  if (my $tied = tied *STDIN) {
+    if ($tied->opened && $tied->is_pipe) {
+      $tied->CLOSE;
+    }
+  } elsif ((*STDIN)->opened && is_pipe(*STDIN)) {
+    close *STDIN;
+    untie *STDIN;
+  }
 }
 
 #
@@ -1044,6 +1059,7 @@ sub dispose {
       }
     }
 
+    # XXX - disposed jobs should go to %ARCHIVED_JOBS, @ARCHIVED_JOBS
     my @k = grep { $ALL_JOBS{$_} eq $job } keys %ALL_JOBS;
     delete $ALL_JOBS{$_} for @k;
 
@@ -1083,7 +1099,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.46
+0.47
 
 =head1 SYNOPSIS
 
@@ -1312,6 +1328,14 @@ these attributes correspond to the handles for passing
 standard input to the child process, and reading standard 
 output and standard error from the child process, respectively.
 
+Note that the standard read/write operations on these filehandles
+can also be accomplished through the C<write_stdin>, C<read_stdout>,
+and C<read_stderr> methods of this class. Since these methods
+can adjust their behavior based on the type of IPC channel
+(file, socket, or pipe) or other idiosyncracies of your operating
+system (#@$%^&*! Windows), B<using these methods is preferred
+to using the filehandles directly>.
+
 =back
 
 =cut
@@ -1458,6 +1482,14 @@ input from interprocess communication. Writing to a closed
 handle or writing to a process that is not configured for IPC
 will result in a warning.
 
+Using this method may be preferrable to calling C<print> with the
+process's C<child_stdin> attribute, as the C<write_stdin> method
+will take into account the type of IPC channel (file, socket, or
+pipe) and may alter its behavior because of it. In a near future
+release, it is hoped that the simple C<print> to the child stdin
+filehandle will do the right thing, using tied filehandles and
+other Perl magic.
+
 =back
 
 =head3 read_stdout
@@ -1503,6 +1535,14 @@ is one or more values from the set C<stdin>, C<stdout>, C<stderr>,
 and C<all> to specify which filehandles to close. If no
 parameters are provided, the default behavior is to close all
 configured file handles.
+
+The C<close_fh> method may perform certain cleanup operations
+that are specific to the type and settings of the specified
+handle, so using this method is preferred to:
+
+    # not as good as:  $job->close_fh('stdin','stderr')
+    close $job->{child_stdin};
+    close $job->{child_stderr};
 
 On most systems, open filehandles are a scarce resource and it
 is a very good practice to close filehandles when the jobs that
@@ -1665,7 +1705,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2010, Marty O'Brien.
+Copyright (c) 2009-2011, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.8.8 or,

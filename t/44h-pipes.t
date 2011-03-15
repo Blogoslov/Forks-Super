@@ -55,14 +55,10 @@ ok(!defined($err) || $err eq '',                       ### 11 ###
    "blocking read on empty stderr returns empty");
 ok($t54 <= 1.0, "blocking read on empty stderr fast ${t54}s, expected <1.0s");
 
-# print "\$err = $err, time = $t5, $t54\n";
-
 $out = Forks::Super::read_stdout($pid, "block" => 0);
 my $t6 = Time::HiRes::time() - $t0;
 my $t65 = $t6 - $t5;
 ok(!defined($out) || (defined($out) && $out eq ""), "non-blocking read on empty stdout returns empty \"$out\"");
 ok($t65 <= 1.0, "non-blocking read on empty stdout fast ${t65}s, expected <1.0s");
-
-# print "\$out = $out, time = $t6, $t65\n";
 
 

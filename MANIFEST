@@ -11,9 +11,9 @@ lib/Forks/Super/Job/Timeout.pm
 lib/Forks/Super/LazyEval.pm
 lib/Forks/Super/Tie/BackgroundArray.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
-lib/Forks/Super/Tie/BackgroundZcalar.pm          # experimental v0.38
 lib/Forks/Super/Tie/Enum.pm
-lib/Forks/Super/Tie/IPCFileHandle.pm             # experimental, not used
+lib/Forks/Super/Tie/IPCFileHandle.pm
+lib/Forks/Super/Tie/IPCSocketHandle.pm
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Sighandler.pm
@@ -106,13 +106,9 @@ t/53a-name.t
 t/53b-name.t
 t/53c-name.t
 t/54-reuse.t
+t/55-dispose.t
 t/60-os.t
 t/61-callbacks.t
-t/62a-bg_eval.tt
-t/62ad-bg_eval.t
-t/62aj-bg_eval.t
-t/62ay-bg_eval.t
-t/62ayt-bg_eval.t
 t/62b-bg_eval.tt
 t/62bd-bg_eval.t
 t/62bj-bg_eval.t

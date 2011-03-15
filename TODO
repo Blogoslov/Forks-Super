@@ -15,18 +15,8 @@ Possible TODOs:
 	___ cygwin 5.10: occassionally failure, IPC litter
 	___ linux: make test can hang
 
-    ___ Make Forks::Super usable with v5.6.
-	_X_ No  base
-	_x_ No  Time::HiRes?
-	___ MSWin32 5.6 ActiveState
-	    ___ No  alarm
-	    ___ No  socketpair
-        ___ cygwin 5.6.1 24 fails in harness, passes standalone :-?
-	_X_ linux 5.6.2, failures in 41f, 42f
-	___ linux make stresstest sometimes hangs
-	    _x_ failures related to overloading!  $job||1 idiom looks
-                like trouble in child
-	    I think we can live with intermittent failures for now.
+    _O_ Make Forks::Super usable with v5.6.
+	My 5.6 test environments are getting difficult to maintain.
 
     _x_	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
 	then all IPC should be through sockets or pipes.
@@ -53,7 +43,7 @@ Possible TODOs:
 
 	_X_ Enabled in v0.39
 	_X_ Still enabled in v0.45
-	___ Nothing breaks. Leave it.
+	_X_ Nothing breaks. Leave it.
  
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
@@ -97,7 +87,16 @@ Possible TODOs:
 
     _x_ support stdin=>$input + child_fh=>socket or
                 stdin=>$input + CONFIG(filehandles)==0
-	___ t/25, t/42d, t/42i
+        _X_ pass UNCONFIG_FILEHANDLES=1 to test
+	___ t/25
+	    This looks feasible if we return an IO::Handle
+	    subclass from open2/open3 that converts readline
+	    calls to Forks::Super::Job::_readline.
+	    We could, for example, hijack CORE::GLOBAL::readline
+	    or  use subs q:readline: .
+	    Should probably also get read, sysread, getc.
+	___ t/42d
+	___ t/42i
 
     ___ POSIX::RT::Timer as possible replacement for get/set itimer?
 
@@ -121,6 +120,9 @@ Possible TODOs:
     ___ Require Signals::XSIG. Bundle it?
         ___ The Default.pm module is not quite mature. Can't require
             Signals::XSIG while those tests are still part of the build.
+	    ___ Though really, all the outstanding issues with Signals::XSIG
+		are with the default signal handling behavior; this stuff is
+		not important to Forks::Super.
         ___ Not practical to add functionality as workaround for Signals::XSIG
             not being available. Hard bundling would be ok, though. Or
 	    copying the code into Forks::Super::Sighandler.
@@ -141,4 +143,40 @@ Possible TODOs:
 	standalone? What's up with that?
 	Intermittent failures.
 
-    ___ Cygwin v5.13.9 runaway process during make?
+    _X_ Would it simplify things if we didn't try to use bi-directional
+	sockets? (a csock/psock, csock2/psock2, and new csock3/psock3
+        socket pair for each process) That way we could just
+        shutdown(HANDLE,2) at the end of the process and be done with it.
+	Looks like about 30-100 lines of code.
+
+    _x_ Resume use of IPCFileHandle, IPCSocketHandle. The goal is to be
+        allowed to say
+	        < {$job->{child_stdout}} >
+        instead of having to say
+                $job->read_stdout()
+        to get the blocking and timeout behavior. Then we would change
+	all the creepy   ? _read_socket(*STDIN) : <STDIN>)  constructions
+	in t/43* and t/44* to    <STDIN> , and the user would not have
+	to know whether he was using F::S and whether F::S was using 
+	sockets.
+
+	___ Until we bring pipes into the fold, too, some of the
+	    read input constructions are getting creepier (see 44a, 44b)
+
+	___ Outstanding issues:
+	    Strawberry 43d, 44d sometimes time out
+	    Performance? Is NO_TIES=1 version of some tests faster?
+
+    ___ Forks::Super::Job can overload "<>" (iteration) operator,
+	invoking $job->read_stdout(). Beware of overload bug, though:
+	"Even in list context, the iterator is currently called only
+	once and with scalar context."
+
+    ___ Investigate consequences of calling 'exit' inside child sub with IPC.
+
+    ___ Ipc::_preconfig_fh. Don't create $IPC_DIR unless we will need the
+	IPC files.
+
+    ___ Ipc: track down, fix 2-arg _close calls
+
+    ___ test suspend/resume cycles where child has SIGSTOP/CONT handlers.

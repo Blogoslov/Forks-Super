@@ -78,7 +78,7 @@ my @input = ("tree 1\n","bike 2\n","camera 3\n",
 	     "car 4\n","hand 5\n","gun 6\n");
 my $orig_output = $output;
 $pid = fork {
-	stdin => \@input , 
+	stdin => \@input, 
 	stdout => \$output, 
 	exec => \@cmd, 
 	delay => 2 

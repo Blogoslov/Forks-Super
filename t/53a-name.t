@@ -49,10 +49,12 @@ ok($t <= 2.05,              ### 11 ### was 1.5, obs 1.65,1.76,1.98
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 $j3 = Forks::Super::Job::get($p3);
-ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',
-   "active/queued jobs in correct state");
+ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',    ### 12 ###
+   "active/queued jobs in correct state")
+  or diag("expect job states ACTIVE/DEFERRED, were ",
+	  $j1->{state}, "/", $j2->{state});
 waitall;
 
 ok($j1->{end} <= $j2->{start}, "respected depend_on by name");
-ok($j3->{start} < $j2->{start}, 
+ok($j3->{start} < $j2->{start},                               ### 14 ###
    "non-dependent job started before dependent job");

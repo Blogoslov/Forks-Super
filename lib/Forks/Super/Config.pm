@@ -28,6 +28,7 @@ sub init {
 
   %CONFIG = ();
   $CONFIG{filehandles} = 1;
+  $CONFIG{filehandles} = 0 if $ENV{UNCONFIG_FILEHANDLES};
 
   $IS_TEST = 0;
   $IS_TEST_CONFIG = 0;

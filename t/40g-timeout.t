@@ -108,13 +108,18 @@ SKIP: {
   }
   my ($job, $pgid, $ppgid);
 
+  # job without expiration
   $ppgid = getpgrp();
   my $pid = fork { sub => sub { sleep 5 } };
   $job = Forks::Super::Job::get($pid);
   $pgid = $job->{pgid};
   my $p = waitpid -$ppgid, 0;
-  ok($p == $pid && $pgid == $ppgid, "child pgid set to parent pgid");
+  ok($p == $pid && $pgid == $ppgid, 
+     "child pgid set to parent pgid")
+    or diag("Expect waitpid output $p == pid $pid, ",
+	    "pgid $pgid == ppgid $ppgid");
 
+  # job with expiration
   $pid = fork { timeout => 3, sub => sub { sleep 5 } };
   $job = Forks::Super::Job::get($pid);
   $pgid = $job->{pgid};

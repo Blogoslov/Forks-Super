@@ -10,14 +10,14 @@ SKIP: {
 
 my $pid = fork {
   sub => sub {
-    for (my $i=0; $i<5; $i++) {
+    for (my $i=0; $i<7; $i++) {
       sleep 1;
     }
   } };
 
 my $j = Forks::Super::Job::get($pid);
 ok(isValidPid($pid) && $j->{state} eq "ACTIVE", "$$\\created $pid");
-sleep 1;
+sleep 3;
 $j->suspend;
 ok($j->{state} eq "SUSPENDED", "job was suspended");
 sleep 5;
@@ -36,34 +36,39 @@ ok($t > 2.0, "\"time stopped\" while job was suspended, ${t} >= 3s");
 # waitpid|action=fail returns Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT
 # waitpid|action=resume restarts the job
 
-$pid = fork { sub => sub { sleep 1 for (1..4) } };
+$pid = fork { sub => sub { sleep 1 for (1..6) } };
 $j = Forks::Super::Job::get($pid);
-sleep 1;
+sleep 3;
 $j->suspend;
 
 $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS = 'wait';
 $t = Time::HiRes::time();
 my $p = wait 5.0;
 $t = Time::HiRes::time() - $t;
-ok($p == &Forks::Super::Wait::TIMEOUT, "wait|wait times out $p==TIMEOUT");
-ok($t > 4.95, "wait|wait times out ${t}s, expected ~5s");
-ok($j->{state} eq 'SUSPENDED', "wait|wait does not resume job");
+ok($p == &Forks::Super::Wait::TIMEOUT,                     ### 5 ###
+   "wait|wait times out $p==TIMEOUT");
+ok($t > 4.95,                                              ### 6 ###
+   "wait|wait times out ${t}s, expected ~5s");
+ok($j->{state} eq 'SUSPENDED',                             ### 7 ###
+   "wait|wait does not resume job");
 
 $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS = 'fail';
 $t = Time::HiRes::time();
 $p = wait 5.0;
 $t = Time::HiRes::time() - $t;
-ok($p == &Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT, 
+ok($p == &Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT,    ### 8 ###
    "wait|fail returns invalid");
 ok($t < 1.95, "fast fail ${t}s expected <1s");
-ok($j->{state} eq 'SUSPENDED', "wait|fail does not resume job");
+ok($j->{state} eq 'SUSPENDED',                             ### 10 ###
+   "wait|fail does not resume job");
 
 $Forks::Super::Wait::WAIT_ACTION_ON_SUSPENDED_JOBS = 'resume';
 $t = Time::HiRes::time();
 $p = wait 10.0;
 $t = Time::HiRes::time() - $t;
-ok($p == $pid, "wait|resume makes a process complete");
-ok($t > 1.95 && $t < 9,         ### 12 ###
+ok($p == $pid,                                             ### 11 ###
+   "wait|resume makes a process complete");
+ok($t > 1.95 && $t < 9,                                    ### 12 ###
    "job completes before wait timeout ${t}s, expected 3-4s");
 ok($j->{state} eq "REAPED", "job is complete");
 

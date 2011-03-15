@@ -89,3 +89,4 @@ $x = $pid->read_stdout(block => 1);
 ok($x, "read stdout with block");
 $x = $pid->read_stderr();
 ok(!$x, "read unavail stderr");
+

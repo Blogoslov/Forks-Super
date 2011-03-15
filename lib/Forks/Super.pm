@@ -40,7 +40,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.46';
+our $VERSION = '0.47';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -510,8 +510,6 @@ sub open2 {
   if (!defined $pid) {
     return;
   }
-  my $input = $Forks::Super::CHILD_STDIN{$pid};
-  my $output = $Forks::Super::CHILD_STDOUT{$pid};
   my $job = Forks::Super::Job::get($pid);
   return ($job->{child_stdin},
 	  $job->{child_stdout},
@@ -583,7 +581,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.46
+Version 0.47
 
 =head1 SYNOPSIS
 
@@ -1107,8 +1105,8 @@ can determine whether C<$handle> is reading from or writing to a pipe.
 
 =cut
 
-XXX This is only documentation for the Forks::Super::Util::is_socket/is_pipe
-functions.
+XXX This is the only documentation for the 
+Forks::Super::Util::is_socket/is_pipe functions.
 
 =item *
 
@@ -1782,18 +1780,12 @@ objects. Returns the number of jobs that were successfully
 signalled.
 
 This method "does what you mean" with respect to terminating,
-suspending, or resuming processes. In this way, jobs in the
-job queue (that don't even have a proper PID) may still be
-"signalled". On Windows systems, which do not have a Unix-like
+suspending, or resuming processes. In this way, you may "send
+signals" to jobs in the job queue (that don't even have a proper 
+process id yet). On Windows systems, which do not have a Unix-like
 signals framework, this can be accomplished through 
 the appropriate Windows API calls. It is highly recommended
 that you install the L<Win32::API> module for this purpose.
-
-On Windows, which does not have a Unix-like signals framework,
-this method will sometimes "do what you mean" with respect
-to suspending, resuming, and terminating processes through
-other Windows API calls. It is highly recommended that you
-install the L<Win32::API> module for this purpose.
 
 See also the L<< 
 Forks::Super::Job::suspend|Forks::Super::Job/"$job->suspend" >>
@@ -1835,15 +1827,14 @@ positive integer, but C<isValidPid> is a more portable way
 to test the return value as it also identifies I<psuedo-process IDs>
 on Windows systems, which are typically negative numbers.
 
-If a C<fork> call returns a large negative number to indicate
-that a job has been deferred (see L<"Deferred processes">), 
-and that value is passed to C<isValidPid>, the return value
-will be false. Of course it is possible that the job will run
-later and have a valid process id associated with it.
+C<isValidPid> will return false for a large negative process id,
+which the C<fork> call returns to indicate that a job has been
+deferred (see L<"Deferred processes">). Of course it is possible
+that the job will run later and have a valid process id associated
+with it.
 
 =cut
 
-XXX I don't think that last part was too clear.
 XXX Undocumented second argument to override DWIM behavior
     of treating completed jobs like their real PID and
     other jobs like their initial PID
@@ -2376,6 +2367,15 @@ different processes. A scheme like this works on most systems:
         seek $Forks::Super::CHILD_STDOUT{$pid}, 0, 1;
     }
 
+The L<Forks::Super::Job|Forks::Super::Job> object provides the
+methods C<write_stdin(@msg)>, C<read_stdout(\%options)>, and
+C<read_stderr(\%options)> for object oriented read and write
+operations to and from a child's IPC filehandles. These methods
+can adjust their behavior based on the type of IPC channel
+(file, socket, or pipe) or other idiosyncracies of your operating
+system (#@$%^&*! Windows), B<so using those methods is preferred
+to using the filehandles directly>.
+
 =back
 
 =head3 ALL_JOBS
@@ -2739,11 +2739,6 @@ runs a function that will clean up these directories.
 
 =cut
 
-XXX - See Forks::Super::__sleep. If we install it by default,
-then this section about interrupted system calls won't apply
-to  sleep . The other calls that are subject to interruption
-are more subtle.
-
 =head2 Interrupted system calls
 
 A typical script using this module will have a lot of
@@ -2824,7 +2819,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2010, Marty O'Brien.
+Copyright (c) 2009-2011, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

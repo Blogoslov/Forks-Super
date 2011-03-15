@@ -1,51 +1,45 @@
 #
-# tied filehandle class for interprocess communication file and socket
-# handles. This class is mainly for facilitating testing and debugging.
-# We ought to be able to drop in and drop out this class without
+# tied filehandle class for interprocess communication files created in
+# Forks::Super. Mainly this class is for testing and debugging, though
+# we may think of something to override in the future. 
+#
+# Until then, in principle we can drop this class in and out without
 # changing the behavior of any application using Forks::Super.
 #
+# Suggested usage:
+#
+#     tie before opening
+#     bless the original filehandle to 'Forks::Super::Tie::Delegator'
+#         so that calls like  $fh->autoflush(1)  get executed by the
+#         tied (i.e., the real) filehandle and not the masked one.
+#
+#
+#     $fh = Forks::Super::Job::Ipc::_gensym();
+#     tie *$fh, 'Forks::Super::Tie::ICPFileHandle';
+#     bless $fh, 'Forks::Super::Tie::Delegator';
+#     open $fh, ...
+#
+
 
 # as of Forks::Super v0.35 this package is still being
 # improved and evaluated, and is not being referenced by
-# any other part of this module
+# any other part of this module. Maybe in v0.47 we will turn it on.
 
 package Forks::Super::Tie::IPCFileHandle;
 
 use Exporter;
-our @ISA = qw(Exporter);
-# use base qw(Exporter);
-
+use IO::Handle;
+use Carp;
 use strict;
 use warnings;
-use Carp;
-use IO::Handle;
 # use Time::HiRes;
 
-our @EXPORT = qw(tieopen tiesocketpair);
+our @ISA = qw(Exporter IO::Handle);
+# use base qw(Exporter);
+
 our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
-if ($DEBUG) {
-  open TTY, '>&2';   # original STDERR
-}
 
 *_gensym = \&Forks::Super::Job::Ipc::_gensym;
-
-
-sub _printtty ($$;@) {
-  my ($self,$func,@msg) = @_;
-  return unless $DEBUG;
-  return unless $self;
-  open LOCK, '>>', '/tmp/lock';
-  flock LOCK, 2;
-
-  print TTY $$ == $Forks::Super::MAIN_PID ? "PPPPPP $$ " : "CCCCCC $$ ";
-  print TTY $func, " DEBUG=$DEBUG XFH=$ENV{XFH} ";
-  print TTY " on ", *$self, " ", $$self->{name} || '<unknown>';
-  print TTY " [", $$self->{$func} || '';
-  print TTY "] :";
-  print TTY "@msg\n";
-
-  close LOCK;
-}
 
 sub TIEHANDLE {
   my ($class, %props) = @_;
@@ -62,20 +56,21 @@ sub OPEN {
   $$self->{OPEN}++;
   my ($result, $new_err);
   my $old_err = $!;
-  my $glob = *$self;
-
-  $$self->{mode} = $mode;
-  $$self->{filename} ||= $expr || '';
+  if ($$self->{OPENED}) {
+    # filehandle already open, implicit close
+    $self->CLOSE;
+  }
 
   {
     local $! = 0;
     if (defined $expr) {
-      _printtty $self, "OPEN", " $mode + $expr";
-      $result = open $glob, $mode, $expr;
+      # XXX - we currently don't make calls with the 4+ arg version of open
+      #       so we don't need to support it now
+      $result = open *$self, $mode, $expr;
     } else {
-      _printtty $self, "OPEN", " $mode ";
-      $result = open $glob, $mode;
+      $result = open *$self, $mode;
     }
+    $$self->{opened} = ($$self->{OPENED} = $result) && Time::HiRes::time();
     $$self->{closed} = 1 if !$result;
     $$self->{open_error} = $new_err = $_;
   }
@@ -84,56 +79,44 @@ sub OPEN {
 }
 
 sub BINMODE {
-  my ($self, $discipline) = @_;
+  my ($self, $layer) = @_;
   $$self->{BINMODE}++;
-  return binmode *$self, $discipline || ":raw";
+  return binmode *$self, $layer || ":raw";
 }
 
 sub READLINE {
   my $self = shift;
   $$self->{READLINE}++;
-  my $glob = *$self;
-
-  _printtty $self, "READLINE";
-
-  return <$glob>;
+  return <$self>;
 }
 
 sub FILENO {
   my $self = shift;
   $$self->{FILENO}++;
-  my $glob = *$self;
-  return $$self->{fileno} ||= fileno($glob);
+  return $$self->{fileno} ||= CORE::fileno($self);
 }
 
 sub SEEK {
   my ($self, $whence, $position) = @_;
   $$self->{SEEK}++;
-  my $glob = *$self;
-  return seek $glob, $whence, $position;
+  return seek $self, $whence, $position;
 }
 
 sub GETC {
   my $self = shift;
   $$self->{GETC}++;
-  my $glob = *$self;
-  return getc($glob);
+  return getc($self);
 }
 
 sub READ {
   my ($self, undef, $length, $offset) = @_;
   $$self->{READ}++;
-  my $glob = *$self;
-  return read $glob, $_[1], $length, $offset;
+  return read $self, $_[1], $length, $offset;
 }
 
 sub PRINT {
   my $self = shift;
   $$self->{PRINT}++;
-  my $glob = *$self;
-
-  _printtty $self, "PRINT", "$_[0] ...";
-
   if ($$self->{closed}) {
 
     carp "print on closed fh ", *$self, " ", 
@@ -141,64 +124,53 @@ sub PRINT {
     return;
 
   }
-  my $z = print $glob @_;
-  IO::Handle::flush($glob);
+  my $z = print {$self} @_;
+  IO::Handle::flush($self);
   return $z;
 }
 
 sub PRINTF {
   my $self = shift;
   $$self->{PRINTF}++;
-  my $glob = *$self;
-
-  _printtty $self, "PRINT", "$_[0] ...";
-
   if ($$self->{closed}) {
 
     carp "printf on closed fh ", $$self->{name}, "\n";
     return;
 
   }
-  seek $glob, 0, 2;
-  printf $glob  @_;
+  seek $self, 0, 2;
+  printf {$self} @_;
 }
 
 sub TELL {
   my $self = shift;
   $$self->{TELL}++;
-  my $glob = *$self;
-  return tell $glob;
+  return tell $self;
 }
 
 sub WRITE {
   my ($self, $string, $length, $offset) = @_;
   $$self->{WRITE}++;
-  my $glob = *$self;
-
   if ($$self->{closed}) {
 
     carp "write/syswrite on closed fh ", $$self->{name}, "\n";
     return;
 
   }
-  seek $glob, 0, 2;
-  return syswrite $glob, $string, $length||length($string), $offset||0;
+  seek $self, 0, 2;
+  return syswrite $self, $string, $length||length($string), $offset||0;
 }
 
 sub CLOSE {
   my $self = shift;
   $$self->{CLOSE}++;
-  my $glob = *$self;
-
-  _printtty $self, "CLOSE";
-
   if (!$$self->{closed}) {
     $$self->{closed} = Time::HiRes::time();
 
     my $elapsed = $$self->{closed} - $$self->{opened}||$$self->{created}||$^T;
     $$self->{elapsed} = $elapsed;
-    my $result = close $glob;
-    untie *$self;
+    my $result = close $self;
+    delete $$self->{OPENED};
     return $result;
   }
   return;
@@ -206,47 +178,31 @@ sub CLOSE {
 
 sub EOF {
   my $self = shift;
-  my $glob = *$self;
-  return eof $glob;
+  return eof $self;
 }
 
-######################################################################
-
-sub tieopen (*$;$@) {
-  my $props = pop @_;
-  my ($glob, $mode, $expr, @list) = @_;
-  my $result;
-
-  $glob = _gensym() if !defined $glob;
-
-  my ($pkg, $file, $line) = caller;
-  my $tied;
-  if (1) {
-    $tied = tie *$glob, 'Forks::Super::Tie::IPCFileHandle', %$props;
-    $$tied->{opened} = Time::HiRes::time();
-    $$tied->{open_caller} = "$pkg ; $file:$line";
-    $$tied->{name} = sprintf "%d:%s%s", $$, $mode, 
-      ($expr||$props->{filename}||'') . "@list";
-    foreach my $prop (keys %$props) {
-      $$tied->{$prop} = $props->{$prop};
-    }
-  }
-
-  if (!defined $expr) {
-    $result = open $glob, $mode;
-  } elsif (@list == 0) {
-    $result = open $glob, $mode, $expr;
-  } else {
-    $result = open $glob, $mode, $expr, @list;
-  }
-  $$tied->{open_result} = $result;
-  $_[0] = $glob;
-  if ($result) {
-    $$tied->{fileno} = fileno($glob);
-  }
-  return $result;
+sub is_pipe {
+  return 0;
 }
 
-##################################################################
+sub DESTROY {
+}
+
+
+
+sub Forks::Super::Tie::Delegator::AUTOLOAD {
+  my $method = $Forks::Super::Tie::Delegator::AUTOLOAD;
+  $method =~ s/.*:://;
+  my $tied = tied *{shift @_};
+  if ($tied) {
+    return eval "\$tied->$method(\@_)";
+  } elsif ($method eq 'DESTROY') {
+#    Carp::cluck "Delegation of $method requested for untied object during global destruction ...";
+  } elsif (!$Forks::Super::Job::INSIDE_END_QUEUE) {
+    Carp::confess "Can't delegate method $method from an untied object!";
+  } elsif ($method ne 'DESTROY') {
+    Carp::cluck "Delegation of $method requested for untied object during global destruction ...";
+  }
+}
 
 1;

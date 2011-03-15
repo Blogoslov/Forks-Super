@@ -22,8 +22,14 @@ my $pid = fork {
 };
 
 ok(isValidPid($pid), "$pid is valid pid");
-ok(!is_socket($pid->{child_stdout}) && !is_pipe($pid->{child_stdout}), 
-   "ipc with filehandles");
+SKIP: {
+  if (Forks::Super::Config::CONFIG('filehandles') == 0) {
+    skip "filehandles are unconfigured, ignore handle type test", 1;
+  } else {
+    ok(!is_socket($pid->{child_stdout}) && !is_pipe($pid->{child_stdout}), 
+       "ipc with filehandles");
+  }
+}
 sleep 1;
 my $t0 = Time::HiRes::time();
 my $err = Forks::Super::read_stderr($pid, "block" => 1);

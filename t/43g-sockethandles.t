@@ -23,12 +23,13 @@ ok(isValidPid($pid), "$pid is valid pid");
 ok(is_socket($pid->{child_stdout}), "ipc with sockets");
 sleep 1;
 my $t0 = Time::HiRes::time();
+
 my $err = Forks::Super::read_stderr($pid, "block" => 1);
 my $t1 = Time::HiRes::time() - $t0;
 ok($err =~ /^foo/, "read stderr");
 ok($t1 <= 1.0, "read blocked stderr fast ${t1}s, expected <1s");
 
-my $out = Forks::Super::read_stdout($pid, "block" => 1);
+my $out = Forks::Super::read_stdout($pid, "block" => 1);   # this should block
 my $t2 = Time::HiRes::time() - $t0;
 ok($out =~ /^bar/, "read stdout");
 ok($t2 > 2.95, "read blocked stdout ${t2}s, expected ~4s");
@@ -42,7 +43,8 @@ ok($t32 <= 1.0, "non-blocking read took ${t32}s, expected ~${Forks::Super::SOCKE
 $out = Forks::Super::read_stdout($pid, "block" => 1);
 my $t4 = Time::HiRes::time() - $t0;
 my $t43 = $t4 - $t3;
-ok($out =~ /^baz/, "successful blocking read on stdout");
+ok($out =~ /^baz/, "successful blocking read on stdout")
+  or diag("Got \$out='$out'\nExpected /^baz/\n");
 ok($t43 > 3.5, "read blocked stdout ${t43}s, expected ~5s");
 
 #### no more input on STDOUT or STDERR
@@ -50,9 +52,9 @@ ok($t43 > 3.5, "read blocked stdout ${t43}s, expected ~5s");
 $err = Forks::Super::read_stderr($pid, "block" => 1);
 my $t5 = Time::HiRes::time() - $t0;
 my $t54 = $t5 - $t4;
-ok(!defined($err), "blocking read on empty stderr returns empty");
 ok($t54 <= 1.30, 
    "blocking read on empty stderr fast ${t54}s, expected <1.0s");
+ok(!defined($err), "blocking read on empty stderr returns empty");
 
 # print "\$err = $err, time = $t5, $t54\n";
 

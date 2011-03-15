@@ -79,18 +79,6 @@ ok(is_socket($Forks::Super::CHILD_STDIN{$pid}) &&
    is_socket($Forks::Super::CHILD_STDERR{$pid}),
    "STDxxx handles are socket handles");
 
-#ok(isValidPid($pid), "pid $pid valid");
-#ok(defined $Forks::Super::CHILD_STDIN{$pid},"found stdin fh");
-#ok(defined $Forks::Super::CHILD_STDOUT{$pid},"found stdout fh");
-#ok(defined $Forks::Super::CHILD_STDERR{$pid},"found stderr fh");
-#ok(${$pid->{child_stdin}}->{is_socket}, "sockets used when CONFIG(fh):=0");
-#ok(Forks::Super::Util::is_socket($pid->{child_stdout})
-#   && Forks::Super::Util::is_socket($pid->{child_stderr}),
-#   "sockets used when CONFIG{filehandles}:=0");
-#   && is_socket($pid->{child_stdout})
-#   && is_socket($pid->{child_stderr}),
-#   "sockets used when CONFIG{filehandles):=0");
-	     
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
 my $z = print $fh_in "$msg\n";
@@ -104,7 +92,6 @@ while (time < $t+10) {
   push @out, Forks::Super::read_stdout($pid);
   push @err, Forks::Super::read_stderr($pid);
   sleep 1;
-# print "\@out:\n------\n@out\n\@err:\n-------\n@err\n";
 }
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
@@ -113,10 +100,10 @@ ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);
 
 # account for possible different line endings from sockets
-#grep { s/[\r\n]+$// } @out, @err;
 for (@out,@err) { s/[\r\n]+$// }
 
-ok($out[0] eq "0:$msg", "got Expected first line \"0:$msg\" from child output \"$out[0]\"");
+ok($out[0] eq "0:$msg", 
+   "got Expected first line \"0:$msg\" from child output \"$out[0]\"");
 ok($out[1] eq "1:$msg", "got Expected second line from child output");
 ok($out[2] eq "2:$msg", "got Expected third line from child output");
 ok($err[-1] eq "$msg", "got Expected line from child error");

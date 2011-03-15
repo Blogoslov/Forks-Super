@@ -32,23 +32,30 @@ print STDERR "\n";
 my $ps = $ENV{PERL_SIGNALS} || "";
 print STDERR "\$ENV{PERL_SIGNALS} = $ps\n";
 
+my $locale = $ENV{LOCALE} || "";
+print STDERR "\$ENV{LOCALE} = $locale\n";
+
 print STDERR "Forks::Super::Job is overloaded: ",
 	$Forks::Super::Job::OVERLOAD_ENABLED, "\n";
+print STDERR "Using tied IPC filehandles: ",
+	" $Forks::Super::Job::Ipc::USE_TIE_FH",
+	" $Forks::Super::Job::Ipc::USE_TIE_SH",
+	" $Forks::Super::Job::Ipc::USE_TIE_PH\n";
 
 print STDERR "\n";
 
 my $sys = $Forks::Super::SysInfo::SYSTEM;
 my $vers = $Forks::Super::SysInfo::PERL_VERSION;
 
-# XXX - this test is too strong. Important things are
+# this test is too strong. Important things are
 #       %Forks::Super::SysInfo::CONFIG settings match actual behavior
 #       $Forks::Super::SysInfo::MAX_FORK is not too high for current sys
 
 ok($^O eq $Forks::Super::SysInfo::SYSTEM
    && $] eq $Forks::Super::SysInfo::PERL_VERSION,
    "test perl is same as build perl")
-or diag( qq{The version of Perl used to test this module ($^O/$])
-is different from the version used to build this module ($sys/$vers).
-This could cause problems after installation, so you should
-"make clean" and rebuild the module with this version of Perl.} );
+or diag( qq{    The version of Perl used to test this module ($^O/$])
+    is different from the version used to build this module ($sys/$vers).
+    This could cause problems after installation, so you should
+    "make clean" and rebuild the module with this version of Perl.} );
 

@@ -17,16 +17,23 @@ if (${^TAINT}) {
 my $prog1 = "$^X -e \"print qq/Hello|world|/.<>\"";
 my $prog2 = "$^X -ne \"print uc\"";
 
-my $pid = fork {
-  cmd => "$prog1 | $prog2",
-  stdin => "foo\n",
-  timeout => 5,
-  child_fh => "all"
-};
-# print STDERR "Job is: ", $pid->toFullString(), "\n";
-waitall;
-my @out = Forks::Super::read_stdout($pid);
-my @err = Forks::Super::read_stderr($pid);
-ok(isValidPid($pid), "launched piped command");
-ok(@out==1 && $out[0] eq "HELLO|WORLD|FOO\n", "got expected output: @out");
-ok(@err==0, "got no error output @err");
+SKIP: {
+
+  if (Forks::Super::Config::CONFIG('filehandles') == 0) {
+    skip "cmd-exec style fork not allowed with CONFIG{'filehandles'}==0", 3;
+  }
+
+  my $pid = fork {
+    cmd => "$prog1 | $prog2",
+    stdin => "foo\n",
+    timeout => 5,
+    child_fh => "all"
+  };
+  waitall;
+
+  my @out = Forks::Super::read_stdout($pid);
+  my @err = Forks::Super::read_stderr($pid);
+  ok(isValidPid($pid), "launched piped command");
+  ok(@out==1 && $out[0] eq "HELLO|WORLD|FOO\n", "got expected output: @out");
+  ok(@err==0, "got no error output @err");
+}

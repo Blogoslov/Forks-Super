@@ -4,10 +4,18 @@ use Test::More tests => 9;
 use strict;
 use warnings;
 
-sub _read_socket {
+sub _read_pipe_that_might_be_a_socket {
+  # on MSWin32, we almost never use pipes
   my $handle = shift;
-  return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+  return $Forks::Super::Job::Ipc::USE_TIE_SH || !Forks::Super::Util::is_socket($handle)
+      ? <$handle>
+      : Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
+
+#sub _read_socket {
+#  my $handle = shift;
+#  return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+#}
 
 #
 # test whether a parent process can have access to the
@@ -30,10 +38,7 @@ sub repeater {
   binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    while ($_ = Forks::Super::Util::is_socket(*STDIN) 
-		? _read_socket(*STDIN) : <STDIN>) {
-    # while (<STDIN>) {
+    while ($_ = _read_pipe_that_might_be_a_socket(*STDIN)) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
 	$input_found = 1;
