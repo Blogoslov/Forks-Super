@@ -40,7 +40,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.47';
+our $VERSION = '0.48';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -323,16 +323,28 @@ sub close_fh {
 
 ######################################################################
 
+sub kill_all {
+  my ($signal) = @_;
+  my @all_jobs;
+  if ($signal eq 'CONT') {
+    @all_jobs = grep { $_->is_suspended } @Forks::Super::ALL_JOBS;
+  } elsif ($signal eq 'STOP') {
+    @all_jobs = grep { $_->is_active || $_->{state} eq 'DEFERRED' }
+      @Forks::Super::ALL_JOBS;
+  } else {
+    @all_jobs = grep { $_->is_active } @Forks::Super::ALL_JOBS;
+  }
+  Forks::Super::kill $signal, @all_jobs;
+}
 
 sub kill {
   my ($signal, @jobs) = @_;
   my $kill_proc_group = $signal =~ s/^-//;
   my $num_signalled = 0;
   my $run_queue_needed = 0;
-  if ($signal !~ /\D/) {
-    # convert to canonical signal name.
-    $signal = Forks::Super::Util::signal_name($signal);
-  }
+
+  # convert to canonical signal name.
+  $signal = Forks::Super::Util::signal_name($signal);
   if ($signal eq '') {
     carp "Forks::Super::kill: invalid signal spec $_[0]\n";
     return 0;
@@ -346,26 +358,9 @@ sub kill {
 
   my @deferred_jobs = grep { $_->is_deferred } @jobs;
   if (@deferred_jobs > 0) {
-    foreach my $j (@deferred_jobs) {
-      if (Forks::Super::Util::is_kill_signal($signal)) {
-	$j->_mark_complete;
-	$j->{status} = Forks::Super::Util::signal_number($signal) || -1;
-	$j->_mark_reaped;
-	$num_signalled++;
-      } elsif ($signal eq 'STOP') {
-	$j->{state} = 'SUSPENDED-DEFERRED';
-	$num_signalled++;
-      } elsif ($signal eq 'CONT') {
-	$j->{state} = 'DEFERRED';
-	$run_queue_needed++;
-	$num_signalled++;
-      } elsif ($signal eq 'ZERO') {
-	$num_signalled++;
-      } else {
-	carp_once [$signal], "Received signal '$signal' on deferred job(s),",
-	  " Ignoring.\n";
-      }
-    }
+    my @sdj_result = _signal_deferred_jobs($signal, @deferred_jobs);
+    $num_signalled += $sdj_result[0];
+    $run_queue_needed += $sdj_result[1];
     @jobs = grep { ! $_->is_deferred } @jobs;
     if (@jobs == 0) {
       return $num_signalled;
@@ -378,111 +373,82 @@ sub kill {
   }
   my @terminated = ();
 
-  if (@pids > 0) {
+  if (&IS_WIN32) {
 
-    if (&IS_WIN32) {
+    # preferred way to kill a MSWin32 pseudo-process
+    # is with the Win32 API "TerminateThread". Using Perl's kill
+    # usually doesn't work
 
-      # preferred way to kill a MSWin32 pseudo-process
-      # is with the Win32 API "TerminateThread". Using Perl's kill
-      # usually doesn't work
+    my ($signalled, $termref)
+      = Forks::Super::Job::OS::Win32::signal_procs(
+			$signal, $kill_proc_group, @pids);
+    $num_signalled += $signalled;
+    push @terminated, @$termref;
 
-      foreach my $pid (sort {$a <=> $b} @pids) {
-	if ($pid < 0) {
-	  local $! = 0;
-	  my $signalled = 0;
-
-	  if (Forks::Super::Util::is_kill_signal($signal)) {
-	    if (Forks::Super::Job::OS::Win32::terminate_thread(-$pid)) {
-	      $signalled = 1;
-	      $num_signalled++;;
-	      push @terminated, $pid;
-	    }
-	  } elsif ($signal eq 'STOP') {
-	    if (Forks::Super::Job::OS::Win32::suspend_thread(-$pid)) {
-	      $signalled = 1;
-	      $num_signalled++;
-	    }
-	  } elsif ($signal eq 'CONT') {
-	    if (Forks::Super::Job::OS::Win32::resume_thread(-$pid)) {
-	      $signalled = 1;
-	      $num_signalled++;
-	    }
-	  } else {
-	    carp_once [$signal], "Forks::Super::kill(): ",
-	      "Called on MSWin32 with SIG$signal\n",
-	      "Ignored because this module can't find a suitable way to\n",
-	      "express that signal on MSWin32.\n";
-	  }
-
-	  if (!$signalled) {
-	    if (!CONFIG('Win32::API')) {
-	      carp_once "Using potentially unsafe kill() command ",
-		"on MSWin32 psuedo-process.\n",
-		"Install Win32::API module for a safer alternative.\n";
-	    }
-	    local $! = 0;
-	    $num_signalled += CORE::kill($kill_proc_group 
-					 ? -$signal : $signal, $pid);
-	    carp "MSWin32 kill error $! $^E\n" if $!;
-	  }
-	} else {
-	  $num_signalled += CORE::kill($kill_proc_group 
-				       ? -$signal : $signal, $pid);
-        }
-      }
-    } elsif (@pids > 0) {
-      local $! = 0;
-      if (Forks::Super::Util::is_kill_signal($signal)) {
-	foreach my $pid (@pids) {
-	  $! = 0;
-	  if (CORE::kill $signal, $pid) {
-	    $num_signalled++;
-	    push @terminated, $pid;
-	  }
-	  if ($!) {
-	    carp "kill error $! $^E\n";
-	  }
+  } elsif (@pids > 0) {
+    if (Forks::Super::Util::is_kill_signal($signal)) {
+      foreach my $pid (@pids) {
+	local $! = 0;
+	if (CORE::kill $signal, $pid) {
+	  $num_signalled++;
+	  push @terminated, $pid;
 	}
-      } else {
-	$num_signalled += CORE::kill $signal, @pids;
 	if ($!) {
 	  carp "kill error $! $^E\n";
 	}
       }
-    }
-  }
-
-  if (@terminated > 0) {
-    my $old_status = $?;
-    foreach my $pid (@terminated) {
-      if ($pid == waitpid $pid, 0, 1.0) {
-	# unreap.
-	my $j = Forks::Super::Job::get($pid);
-	$j->{state} = 'COMPLETE';
-	delete $j->{reaped};
-	$? = $old_status;
+    } else {
+      local $! = 0;
+      $num_signalled += CORE::kill $signal, @pids;
+      if ($!) {
+	carp "kill error $! $^E\n";
       }
     }
   }
 
-  if ($run_queue_needed) {
-    Forks::Super::Queue::check_queue();
-  }
+  _unreap(@terminated);
+  $run_queue_needed && Forks::Super::Queue::check_queue();
   return $num_signalled;
 }
 
-sub kill_all {
-  my ($signal) = @_;
-  my @all_jobs;
-  if ($signal eq 'CONT') {
-    @all_jobs = grep { $_->is_suspended } @Forks::Super::ALL_JOBS;
-  } elsif ($signal eq 'STOP') {
-    @all_jobs = grep { $_->is_active || $_->{state} eq 'DEFERRED' }
-      @Forks::Super::ALL_JOBS;
-  } else {
-    @all_jobs = grep { $_->is_active } @Forks::Super::ALL_JOBS;
+sub _signal_deferred_jobs {
+  my ($signal, @jobs) = @_;
+  my $num_signalled = 0;
+  my $run_queue_needed = 0;
+  foreach my $j (@jobs) {
+    if (Forks::Super::Util::is_kill_signal($signal)) {
+      $j->_mark_complete;
+      $j->{status} = Forks::Super::Util::signal_number($signal) || -1;
+      $j->_mark_reaped;
+      $num_signalled++;
+    } elsif ($signal eq 'STOP') {
+      $j->{state} = 'SUSPENDED-DEFERRED';
+      $num_signalled++;
+    } elsif ($signal eq 'CONT') {
+      $j->{state} = 'DEFERRED';
+      $run_queue_needed++;
+      $num_signalled++;
+    } elsif ($signal eq 'ZERO') {
+      $num_signalled++;
+    } else {
+      carp_once [$signal], "Received signal '$signal' on deferred job(s),",
+	" Ignoring.\n";
+    }
   }
-  Forks::Super::kill $signal, @all_jobs;
+  return ($num_signalled, $run_queue_needed);
+}
+
+sub _unreap {
+  my (@pids) = @_;
+  my $old_status = $?;
+  foreach my $pid (@pids) {
+    if ($pid == waitpid $pid, 0, 1.0) {
+      my $j = Forks::Super::Job::get($pid);
+      $j->{state} = 'COMPLETE';
+      delete $j->{reaped};
+      $? = $old_status;
+    }
+  }
 }
 
 #############################################################################
@@ -581,7 +547,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.47
+Version 0.48
 
 =head1 SYNOPSIS
 

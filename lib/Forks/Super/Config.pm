@@ -12,13 +12,11 @@ package Forks::Super::Config;
 use Forks::Super::Debug qw(debug);
 use Forks::Super::SysInfo;
 use Carp;
-
 use Exporter;
-our @ISA = qw(Exporter);
-
 use strict;
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(CONFIG CONFIG_module);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %signo);

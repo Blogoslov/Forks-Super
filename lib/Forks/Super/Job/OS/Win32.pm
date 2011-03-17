@@ -236,6 +236,67 @@ sub get_current_thread_id {
 
 #############################################################################
 
+# DWIM Unix-style signal to Windows processes and threads
+sub signal_procs {
+  my ($signal, $kill_proc_group, @pids) = @_;
+
+  my $num_signalled = 0;
+  my @terminated = ();
+  foreach my $pid (sort {$a <=> $b} @pids) {
+    if ($pid < 0) {
+      my ($signalled, $termref)	= signal_thread($signal,-$pid);
+
+      if ($signalled) {
+	$num_signalled++;
+	push @terminated, @$termref;
+      } else {
+	if (!CONFIG('Win32::API')) {
+	  carp_once "Using potentially unsafe kill() command ",
+	    "on MSWin32 psuedo-process.\n",
+	    "Install Win32::API module for a safer alternative.\n";
+	}
+	local $! = 0;
+	$num_signalled += CORE::kill($kill_proc_group 
+				     ? -$signal : $signal, $pid);
+	carp "MSWin32 kill error $! $^E\n" if $!;
+      }
+    } else {
+      $num_signalled += CORE::kill($kill_proc_group 
+				   ? -$signal : $signal, $pid);
+    }
+  }
+  return ($num_signalled, \@terminated);
+}
+
+# DWIM Unix-style signal to a Win32 thread
+sub signal_thread {
+  my ($signal, $thread_id) = @_;
+  local $! = 0;
+  my $signalled = 0;
+  my @terminated = ();
+
+  if (Forks::Super::Util::is_kill_signal($signal)) {
+    if (terminate_thread($thread_id)) {
+      $signalled = 1;
+      push @terminated, -$thread_id;
+    }
+  } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
+    if (suspend_thread($thread_id)) {
+      $signalled = 1;
+    }
+  } elsif ($signal eq 'CONT') {
+    if (resume_thread($thread_id)) {
+      $signalled = 1;
+    }
+  } else {
+    carp_once [$signal], "Forks::Super::kill(): ",
+	      "Called on MSWin32 with SIG$signal\n",
+	      "Ignored because this module can't find a suitable way to\n",
+	      "express that signal on MSWin32.\n";
+  }
+  return ($signalled, \@terminated);
+}
+
 sub terminate_thread {
   my ($thread_id) = @_;
   my $handle = get_thread_handle($thread_id, 'terminate');

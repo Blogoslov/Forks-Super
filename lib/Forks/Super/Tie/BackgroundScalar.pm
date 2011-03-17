@@ -151,7 +151,7 @@ sub _decode {
 	return;
       }
     }
-    my $decoded = eval "$data";
+    my $decoded = eval "$data";  ## no critic (StringyEval)
     return $decoded;
   } elsif ($protocol eq 'YAML::Tiny') {
     require YAML::Tiny;

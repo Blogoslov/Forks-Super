@@ -1,5 +1,6 @@
 use Forks::Super ':test';
 use Test::More tests => 9;
+use Carp;
 use strict;
 use warnings;
 no warnings 'once';

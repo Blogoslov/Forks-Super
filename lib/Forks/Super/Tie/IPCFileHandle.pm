@@ -195,7 +195,7 @@ sub Forks::Super::Tie::Delegator::AUTOLOAD {
   $method =~ s/.*:://;
   my $tied = tied *{shift @_};
   if ($tied) {
-    return eval "\$tied->$method(\@_)";
+    return eval "\$tied->$method(\@_)";  ## no critic (StringyEval)
   } elsif ($method eq 'DESTROY') {
 #    Carp::cluck "Delegation of $method requested for untied object during global destruction ...";
   } elsif (!$Forks::Super::Job::INSIDE_END_QUEUE) {

@@ -38,13 +38,6 @@ Possible TODOs:
 	_X_ warn => 0|1
 	_X_ timeout => max number of seconds to wait for input
 
-    _X_ Turn installation of bundled packages on by default for a couple
-	of CPAN testing cycles. See what breaks.
-
-	_X_ Enabled in v0.39
-	_X_ Still enabled in v0.45
-	_X_ Nothing breaks. Leave it.
- 
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
         has solved this problem better than I did?
@@ -87,7 +80,8 @@ Possible TODOs:
 
     _x_ support stdin=>$input + child_fh=>socket or
                 stdin=>$input + CONFIG(filehandles)==0
-        _X_ pass UNCONFIG_FILEHANDLES=1 to test
+        _X_ can pass UNCONFIG_FILEHANDLES=1 to test
+	    also can pass IPC_DIR=undef
 	___ t/25
 	    This looks feasible if we return an IO::Handle
 	    subclass from open2/open3 that converts readline
@@ -122,7 +116,7 @@ Possible TODOs:
             Signals::XSIG while those tests are still part of the build.
 	    ___ Though really, all the outstanding issues with Signals::XSIG
 		are with the default signal handling behavior; this stuff is
-		not important to Forks::Super.
+		not important to Forks::Super. Bundling would be ok.
         ___ Not practical to add functionality as workaround for Signals::XSIG
             not being available. Hard bundling would be ok, though. Or
 	    copying the code into Forks::Super::Sighandler.
@@ -142,12 +136,6 @@ Possible TODOs:
     ___ Fails t/20 t/21 on OpenBSD run as make test, but succeed as
 	standalone? What's up with that?
 	Intermittent failures.
-
-    _X_ Would it simplify things if we didn't try to use bi-directional
-	sockets? (a csock/psock, csock2/psock2, and new csock3/psock3
-        socket pair for each process) That way we could just
-        shutdown(HANDLE,2) at the end of the process and be done with it.
-	Looks like about 30-100 lines of code.
 
     _x_ Resume use of IPCFileHandle, IPCSocketHandle. The goal is to be
         allowed to say

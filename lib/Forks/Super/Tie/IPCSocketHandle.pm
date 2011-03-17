@@ -229,6 +229,7 @@ sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
   my $delegate = $$delegator->{DELEGATE};
   return unless $delegator && $delegate;
 
+  ## no critic (StringyEval)
   if (wantarray) {
     my @r = eval "\$delegate->$method(\@_)";
     if ($@) {

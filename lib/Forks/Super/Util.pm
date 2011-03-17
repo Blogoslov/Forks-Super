@@ -17,7 +17,7 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.47';
+our $VERSION = '0.48';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -173,6 +173,9 @@ sub qualify_sub_name {
 
 sub signal_name {
   my $num = shift;
+  if ($num =~ /\D/) {
+    return $num;
+  }
   _load_signal_data();
   return $SIG_NAME[$num];
 }

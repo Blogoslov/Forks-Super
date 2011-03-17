@@ -157,6 +157,9 @@ sub MY::postamble {
 fasttest :: pure_all
 	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q
 
+fastertest :: pure_all
+	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q -m 15 -s
+
 # ------ stress test: run all tests in parallel 100 times
 
 stresstest :: pure_all

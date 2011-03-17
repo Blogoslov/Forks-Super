@@ -6,15 +6,12 @@
 package Forks::Super::Debug;
 use Forks::Super::Util;
 use IO::Handle;
-
 use Exporter;
-our @ISA = qw(Exporter);
-#use base 'Exporter';
-
 use Carp;
 use strict;
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
 

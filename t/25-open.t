@@ -78,9 +78,9 @@ SKIP: {
     skip "alarm(), sleep() incompatible, can't test additional options", 7;
   }
 
-  $cmd[3] = "-s=5";
+  $cmd[3] = "-s=10";
   ($fh_in, $fh_out, $fh_err, $pid, $job) 
-    = Forks::Super::open3(@cmd, {timeout => 3});
+    = Forks::Super::open3(@cmd, {timeout => 5});
   
   Forks::Super::Debug::_use_Carp_Always();
 
@@ -93,7 +93,7 @@ SKIP: {
   $z = print $fh_in "$msg\n";
   Forks::Super::close_fh($pid,'stdin');
   ok($z > 0, "open3: print to input handle ok = $z");
-  sleep 3;
+  sleep 5;
   @out = <$fh_out>;
   Forks::Super::close_fh($pid, 'stdout');
   @err = <$fh_err>;
@@ -109,42 +109,3 @@ SKIP: {
 #############################################################################
 
 __END__
-
-SKIP: {
-
-#  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-#    skip "no alarm(), can't test additional option", 7;
-#  }
-#  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-#    skip "alarm(), sleep() incompatible, can't test additional options", 7;
-#  }
-
-  $cmd[3] = "-s=5";
-  ($fh_in, $fh_out, $pid, $job) 
-    = Forks::Super::open2(@cmd, {delay => 3});
-
-  ok(!isValidPid($pid), "open2 with delay");
-  ok(defined($job), "open3: received job object");
-  ok($job->{state} eq "DEFERRED", "job state is DEFERRED");
-  Forks::Super::Util::pause(4.0);
-  ok($job->{state} eq "ACTIVE", "job state is ACTIVE after waiting");
-
-  $msg = sprintf "%05x", rand() * 99999;
-  $z = print $fh_in "$msg\n";
-  Forks::Super::close_fh($pid,'stdin');
-  ok($z > 0, "open3: print to input handle ok = $z");
-  sleep 3;
-  @out = <$fh_out>;
-  Forks::Super::close_fh($pid, 'stdout');
-  @err = <$fh_err>;
-  Forks::Super::close_fh($pid, 'stderr');
-
-  ok(@out == 1 && $out[0] =~ /^Hello/, 
-     "open3: time out  \@out='@out'" . scalar @out);
-  ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out");
-  waitpid $pid,0;
-  ok($job->{status} != 0, "open3: job timed out status $job->{status}!=0");
-
-}
-
-# unlink 'null';

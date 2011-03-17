@@ -51,7 +51,7 @@ $pid->close_fh('stdin');
 my $t = Time::HiRes::time();
 waitpid $pid, 0;
 $t = Time::HiRes::time() - $t;
-ok($t > 1.01 && $t < 6.15,              ### 8 ### was 1.25/5.05,obs 1.05/6.12
+ok($t > 1.01 && $t < 6.25,              ### 8 ### was 1.25/5.05,obs 1.05/6.12
    "compound command took ${t}s, expected ~2s");
 sleep 1;
 

@@ -14,18 +14,15 @@ use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
 use Forks::Super::Sighandler;
-
 use Exporter;
-our @ISA = qw(Exporter);
-#use base 'Exporter';
-
 use Carp;
 use IO::Handle;
 use strict;
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.47';
+our $VERSION = '0.48';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -126,7 +123,10 @@ sub wait {
 
 sub kill {
   my ($job, $signal) = @_;
-  return Forks::Super::kill($signal || Forks::Super::Util::signal_number('INT') || 1, $job);
+  if (!defined($signal) || $signal eq '') {
+    $signal = Forks::Super::Util::signal_number('INT') || 1;
+  }
+  return Forks::Super::kill($signal, $job);
 }
 
 sub state {
@@ -222,7 +222,7 @@ sub _mark_reaped {
 # determine whether a job is eligible to start
 #
 sub can_launch {
-  no strict 'refs';
+  no strict 'refs';      ## no critic (NoStrict)
 
   my $job = shift;
   $job->{last_check} = Time::HiRes::time();
@@ -230,7 +230,6 @@ sub can_launch {
     if (ref $job->{can_launch} eq 'CODE') {
       return $job->{can_launch}->($job);
     } elsif (ref $job->{can_launch} eq '') {
-      #no strict 'refs';
       my $can_launch_sub = $job->{can_launch};
       return $can_launch_sub->($job);
     }
@@ -253,7 +252,6 @@ sub _can_launch_delayed_start_check {
   #  delay + block  is like sleep + fork
 
   $job->{_on_busy} = 'QUEUE' if not defined $job->{on_busy};
-  #$job->{_on_busy} = 'QUEUE' if not defined $job->{_on_busy};
   return 0;
 }
 
@@ -400,50 +398,64 @@ sub launch {
   }
 
 
-  if (Forks::Super::Util::isValidPid($pid)) { # parent
-    $ALL_JOBS{$pid} = $job;
-    if (defined $job->{state} &&
-	$job->{state} ne 'NEW' &&
-	$job->{state} ne 'LAUNCHING' &&
-	$job->{state} ne 'DEFERRED') {
-      warn "Forks::Super::Job::launch(): ",
-	"job $pid already has state: $job->{state}\n";
-    } else {
-      $job->{state} = 'ACTIVE';
+  if (Forks::Super::Util::isValidPid($pid)) {
 
-      #
-      # it is possible that this child exited quickly and has already
-      # been reaped in the SIGCHLD handler. In that case, the signal
-      # handler should have made an entry in %Forks::Super::BASTARD_DATA
-      # for this process.
-      #
-      if (defined $Forks::Super::BASTARD_DATA{$pid}) {
-	warn "Forks::Super::Job::launch: ",
-	  "Job $pid reaped before parent initialization.\n";
-	$job->_mark_complete;
-	($job->{end}, $job->{status})
-	  = @{delete $Forks::Super::BASTARD_DATA{$pid}};
-      }
-    }
-    $job->{real_pid} = $pid;
-    $job->{pid} = $pid unless defined $job->{pid};
-    $job->{start} = Time::HiRes::time();
+    # parent
+    return _postlaunch_parent($pid, $job);
 
-    $job->_config_parent;
-    $job->run_callback('start');
-    Forks::Super::Sigchld::handle_CHLD(-1);
+  } elsif ($pid == 0) {
 
-    if ($OVERLOAD_ENABLED) {
-      return $job;
-    } else {
-      return $pid;
-    }
-  } elsif ($pid != 0) {
+    _postlaunch_child($job);
+    return 0;
+
+  } else {
+
     Carp::confess "Forks::Super::launch(): ",
-	"Somehow we got pid=$pid from fork call.";
-  }
+	"Somehow we got invalid pid=$pid from fork call.";
+    return;
 
-  # child
+  }
+}
+
+sub _postlaunch_parent {
+  my ($pid, $job) = @_;
+  $ALL_JOBS{$pid} = $job;
+  if (defined $job->{state} &&
+      $job->{state} ne 'NEW' &&
+      $job->{state} ne 'LAUNCHING' &&
+      $job->{state} ne 'DEFERRED') {
+    warn "Forks::Super::Job::launch(): ",
+      "job $pid already has state: $job->{state}\n";
+  } else {
+    $job->{state} = 'ACTIVE';
+
+    #
+    # it is possible that this child exited quickly and has already
+    # been reaped in the SIGCHLD handler. In that case, the signal
+    # handler should have made an entry in %Forks::Super::BASTARD_DATA
+    # for this process.
+    #
+    if (defined $Forks::Super::BASTARD_DATA{$pid}) {
+      warn "Forks::Super::Job::launch: ",
+	"Job $pid reaped before parent initialization.\n";
+      $job->_mark_complete;
+      ($job->{end}, $job->{status})
+	= @{delete $Forks::Super::BASTARD_DATA{$pid}};
+    }
+  }
+  $job->{real_pid} = $pid;
+  $job->{pid} = $pid unless defined $job->{pid};
+  $job->{start} = Time::HiRes::time();
+
+  $job->_config_parent;
+  $job->run_callback('start');
+  Forks::Super::Sigchld::handle_CHLD(-1);
+
+  return $OVERLOAD_ENABLED ? $job : $pid;
+}
+
+sub _postlaunch_child {
+  my $job = shift;
   Forks::Super::init_child() if defined &Forks::Super::init_child;
   $job->_config_child;
   if ($job->{style} eq 'cmd') {
@@ -480,7 +492,7 @@ sub launch {
     debug("Exec'ing [ @{$job->{exec}} ]") if $job->{debug};
     exec( @{$job->{exec}} );
   } elsif ($job->{style} eq 'sub') {
-    no strict 'refs';
+    no strict 'refs';          ## no critic (NoStrict)
 
     my $sub = $job->{sub};
     my @args = @{$job->{args}};
@@ -643,7 +655,7 @@ sub _preconfig_style {
   return;
 }
 
-sub _preconfig_style_run {
+sub _preconfig_style_run {    ### for future use
   my $job = shift;
   if (ref $job->{run} ne 'ARRAY') {
     $job->{run} = [ $job->{run} ];
@@ -698,11 +710,14 @@ sub _preconfig_start_time {
       = Time::HiRes::time() 
 	+ Forks::Super::Job::Timeout::_time_from_natural_language(
 		$job->{delay}, 1);
-    #$start_after = Time::HiRes::time() +  $job->{delay};
   }
   if (defined $job->{start_after}) {
-    my $start_after2 = Forks::Super::Job::Timeout::_time_from_natural_language($job->{start_after}, 0);
-    $start_after = $start_after2 if $start_after < $start_after2;
+    my $start_after2 
+      = Forks::Super::Job::Timeout::_time_from_natural_language(
+		$job->{start_after}, 0);
+    if ($start_after < $start_after2) {
+      $start_after = $start_after2 
+    }
   }
   if ($start_after) {
     $job->{start_after} = $start_after;
@@ -1006,22 +1021,7 @@ sub init_child {
 
 sub deinit_child {
   Forks::Super::Job::Ipc::deinit_child();
-  if (is_pipe(*STDOUT)) {
-    close *STDOUT;
-    untie *STDOUT;
-  }
-  if (is_pipe(*STDERR)) {
-    close *STDERR;
-    untie *STDERR;
-  }
-  if (my $tied = tied *STDIN) {
-    if ($tied->opened && $tied->is_pipe) {
-      $tied->CLOSE;
-    }
-  } elsif ((*STDIN)->opened && is_pipe(*STDIN)) {
-    close *STDIN;
-    untie *STDIN;
-  }
+  return;
 }
 
 #
@@ -1099,7 +1099,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.47
+0.48
 
 =head1 SYNOPSIS
 
