@@ -127,9 +127,10 @@ sub _retrieve_value {
     $self->{value_set} = 1;
   } elsif ($self->{style} eq 'qx') {
     my @result = ();
-    if (defined $self->{delimiter}) {
-      @result = split /$self->{delimiter}/, $self->{stdout};
-      @result = grep { $_ .= $self->{delimiter} } @result;
+    if (defined($self->{delimiter}) && length($self->{delimiter}) > 0) {
+      @result = map { 
+	$_ . $self->{delimiter} 
+      } split /$self->{delimiter}/, $self->{stdout};
     } else {
       @result = ($self->{stdout});
     }

@@ -52,7 +52,8 @@ SKIP: {
   $y = bg_qx "$^X t/external-command.pl -s=5 -s=5 -e=$z", { timeout => 2 };
   $t = Time::HiRes::time();
 
-  ok(!defined($y) || $y eq "" || $y eq "\n", "scalar bg_qx empty on failure")
+  ok(!defined($y) || $y eq "" || $y eq "\n",
+     "scalar bg_qx empty on failure")  ### 12 ###
 	or diag("\$y was $y, expected empty or undefined\n");
   ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
   $t = Time::HiRes::time() - $t;

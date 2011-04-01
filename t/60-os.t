@@ -25,7 +25,7 @@ SKIP: {
   sleep 1;
   my $p1 = get_os_priority($pid1);
 
-  if ($p1 == 20) { # min priority on Unix
+  if ($p1 >= 19) { # min priority on Unix
     skip "update priority test. Process is already at min priority", 2;
   }
   # change of plus 1 from default should be meaningful 

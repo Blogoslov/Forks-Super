@@ -44,6 +44,7 @@ printF('FILE_NOT_FOUND_ERRNO', $info{fnf_errno}, '2.0');
 printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
 printF('SLEEP_ALARM_COMPATIBLE', &sleep_alarm_compat, '""');
+printF('TIME_HIRES_TOL', $info{TimeHiRes_tol}, '0.00');
 
 if (defined $info{ncpu}) {
   printF('NUM_PROCESSORS', $info{ncpu}, '1');
@@ -94,7 +95,7 @@ close F;
 
 sub printF {
   my ($varName, $value, $defaultValue) = @_;
-  $value = $defaultValue if $value eq "''";
+  $value = $defaultValue if defined($value) && $value eq "''";
   $value ||= $defaultValue;
   $value = "0" if $value eq "000";
 

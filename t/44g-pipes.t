@@ -78,7 +78,7 @@ $pid = fork {
   }
 };
 my $x = $pid->read_stderr(timeout => 1);
-ok($x, "read avail stderr with timeout");
+ok($x, "read avail stderr with timeout");          ### 15 ###
 $x = $pid->read_stdout(timeout => 2);
 ok(!$x, "read unavail stdout with timeout");
 $x = $pid->read_stdout(timeout => 5);

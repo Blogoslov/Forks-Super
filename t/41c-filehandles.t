@@ -40,18 +40,20 @@ waitall;
 foreach (@pids) {
   push @cdata, Forks::Super::read_stdout($_);
 }
-ok(@pdata == @cdata, "Master/slave produced ".scalar @pdata."/".scalar @cdata." lines"); ### 21 ###
+ok(@pdata == @cdata,                                              ### 1 ###
+   "Master/slave produced ".scalar @pdata."/".scalar @cdata." lines")
+ or do {
+   no warnings 'uninitialized';
+   print STDERR "\@pdata: @pdata[0..19]\n";
+   print STDERR "--------------\n\@cdata: ",
+     join ' ', map { $_ || '"undef"' . "\n" } @cdata[0..19], "\n";
+};
 
-if (@pdata != @cdata) {
-  print STDERR "\@pdata: @pdata[0..100]\n";
-  print STDERR "--------------\n\@cdata: @cdata[0..100]\n";
-}
-
-@pdata = sort @pdata;
-@cdata = sort @cdata;
+@pdata = sort grep defined,@pdata;
+@cdata = sort grep defined,@cdata;
 my $pc_equal = 1;
 for (my $i=0; $i<@pdata; $i++) {
-  if (!defined $pdata[$i] || !defined $cdata[$i] 
+  if (!defined($pdata[$i]) || !defined($cdata[$i])
 	|| $pdata[$i] ne $cdata[$i]) {
     $pc_equal=0 
   }

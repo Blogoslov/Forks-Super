@@ -9,7 +9,7 @@ package Forks::Super::Job::Timeout;
 use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(IS_WIN32);
-use Forks::Super::Sighandler;
+use Signals::XSIG;
 use POSIX;
 use Carp;
 use strict;
@@ -89,24 +89,27 @@ sub Forks::Super::Job::_config_timeout_child {
   # see the END{} block that covers child cleanup below
   #
   if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    $ORIG_PGRP = getpgrp(0);
-    setpgrp(0, $$);
-    $NEW_PGRP = $job->{pgid} = getpgrp(0);
-    $NEW_SETSID = 0;
-    if ($NEW_PGRP ne $ORIG_PGRP) {
-      if ($job->{debug}) {
-	debug("Forks::Super::Job::_config_timeout_child: ",
-	     "Child process group changed to $job->{pgid}");
+    if (eval { $ORIG_PGRP = getpgrp(0);1 }) {
+      setpgrp(0, $$);
+      $NEW_PGRP = $job->{pgid} = getpgrp(0);
+      $NEW_SETSID = 0;
+      if ($NEW_PGRP ne $ORIG_PGRP) {
+	if ($job->{debug}) {
+	  debug("Forks::Super::Job::_config_timeout_child: ",
+		"Child process group changed to $job->{pgid}");
+	}
+      } else {
+	# setpgrp didn't work, try POSIX::setsid
+	$NEW_SETSID = POSIX::setsid();
+	$job->{pgid} = $NEW_PGRP = getpgrp(0);
+	if ($job->{debug}) {
+	  debug("Forks::Super::Job::_config_timeout_child: ",
+		"Child process started new session $NEW_SETSID, ",
+		"process group $NEW_PGRP");
+	}
       }
     } else {
-      # setpgrp didn't work, try POSIX::setsid
-      $NEW_SETSID = POSIX::setsid();
-      $job->{pgid} = $NEW_PGRP = getpgrp(0);
-      if ($job->{debug}) {
-	debug("Forks::Super::Job::_config_timeout_child: ",
-	       "Child process started new session $NEW_SETSID, ",
-	       "process group $NEW_PGRP");
-      }
+      $Forks::Super::SysInfo::CONFIG{'getpgrp'} = 0;
     }
   }
 
@@ -117,8 +120,7 @@ sub Forks::Super::Job::_config_timeout_child {
     croak "Forks::Super::Job::_config_timeout_child(): quick timeout";
   }
 
-  # $SIG{ALRM} = \&_child_timeout;
-  register_signal_handler("ALRM", 1, \&_child_timeout);
+  $XSIG{ALRM}[1] = \&_child_timeout;
 
   $EXPIRATION = Time::HiRes::time() + $timeout - 1.0;
   alarm $timeout;
@@ -137,7 +139,7 @@ sub _child_timeout {
   # child to exit.
 
   return if $Forks::Super::SysInfo::CONFIG{'setitimer'}
-    && Time::HiRes::time() < $EXPIRATION;
+    && Time::HiRes::time() < $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL;
 
   warn "Forks::Super: child process timeout\n";
   $TIMEDOUT = 1;
@@ -185,7 +187,7 @@ sub _child_timeout {
 	my $result = system("TASKKILL /F /T /PID $pid > nul");
       } elsif ($proc eq '__system__') {
 	$proc = undef;
-	if (defined $Forks::Super::Job::self
+	if (defined($Forks::Super::Job::self)
 	    && $Forks::Super::Job::self->{debug}) {
 	  
 	  debug("Job ", $Forks::Super::Job::self->toShortString(),
@@ -230,7 +232,7 @@ sub _cleanup_child {
       # to its children/process group. We intended the exit status
       # here to be as if it had die'd.
       
-      $? = 255 << 8;
+      $? = 255;
     }
     if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
       # try to kill off any grandchildren

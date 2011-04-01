@@ -18,7 +18,8 @@ sub _read_pipe_that_might_be_a_socket {
   # Forks::Super::Tie::IPCPipeHandle class is ready), we can really
   # clean up the read handle interfaces.
   my $handle = shift;
-  return $Forks::Super::Job::Ipc::USE_TIE_SH || !Forks::Super::Util::is_socket($handle)
+  return $Forks::Super::Job::Ipc::USE_TIE_SH 
+		|| !Forks::Super::Util::is_socket($handle)
       ? <$handle>
       : Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
@@ -37,9 +38,6 @@ sub repeater {
   binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-#    while ($_ = Forks::Super::Util::is_socket(*STDIN) 
-#	? _read_socket(*STDIN) : <STDIN>) {
     while ($_ = _read_pipe_that_might_be_a_socket(*STDIN)) {
 
       if ($Forks::Super::DEBUG) {
@@ -78,14 +76,14 @@ my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ],
 		 child_fh => "in,out,err,pipe" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $Forks::Super::CHILD_STDIN{$pid} 
-   && defined fileno($Forks::Super::CHILD_STDIN{$pid}),
+ok(defined($Forks::Super::CHILD_STDIN{$pid})
+   && defined(fileno($Forks::Super::CHILD_STDIN{$pid})),
    "found stdin fh");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid} 
-   && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),
+ok(defined($Forks::Super::CHILD_STDOUT{$pid})
+   && defined(fileno($Forks::Super::CHILD_STDOUT{$pid})),
    "found stdout fh");
-ok(defined $Forks::Super::CHILD_STDERR{$pid} 
-   && defined fileno($Forks::Super::CHILD_STDERR{$pid}),
+ok(defined($Forks::Super::CHILD_STDERR{$pid})
+   && defined(fileno($Forks::Super::CHILD_STDERR{$pid})),
    "found stderr fh");
 SKIP: {
   if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {

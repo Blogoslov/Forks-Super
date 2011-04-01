@@ -18,6 +18,7 @@ my $pid = fork {
     print STDOUT "bar\n";
     sleep 5;
     print STDOUT "baz\n";
+    exit 0 unless Forks::Super::Util::is_socket(*STDOUT);
   }
 };
 
@@ -62,7 +63,7 @@ $err = Forks::Super::read_stderr($pid, "block" => 1);
 my $t5 = Time::HiRes::time() - $t0;
 my $t54 = $t5 - $t4;
 ok(!defined($err), "blocking read on empty stderr returns empty");
-ok($t54 <= 5.0, 
+ok($t54 <= 5.0,                                       ### 12 ###
    "blocking read on empty stderr can take a moment ${t54}s, expected ~3s");
 
 # print "\$err = $err, time = $t5, $t54\n";
@@ -85,17 +86,18 @@ $pid = fork {
     print STDOUT "bar\n";
     sleep 5;
     print STDOUT "baz\n";
+    exit 5;
   }
 };
 my $x = $pid->read_stderr(timeout => 1);
 ok($x, "read avail stderr with timeout");
 $x = $pid->read_stdout(timeout => 2);
-ok(!$x, "read unavail stdout with timeout");
+ok(!$x, "read unavail stdout with timeout");        ### 16 ###
 $x = $pid->read_stdout(timeout => 5);
 ok($x, "read avail stdout with timeout");
 $x = $pid->read_stdout(timeout => 1);
 ok(!$x, "read unavail stdout with timeout");
 $x = $pid->read_stdout(block => 1);
-ok($x, "read stdout with block");
+ok($x, "read stdout with block");                   ### 19 ###
 $x = $pid->read_stderr();
 ok(!$x, "read unavail stderr");

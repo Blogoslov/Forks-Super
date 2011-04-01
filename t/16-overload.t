@@ -1,5 +1,5 @@
-use Forks::Super ':test_CA', 'overload';
-use Test::More tests => 48;
+use Forks::Super ':test', 'overload';
+use Test::More tests => 56;
 use strict;
 use warnings;
 
@@ -104,3 +104,38 @@ ok(ref $pid2 eq 'Forks::Super::Job',
 
 my $status = eval { $job_pid->status };
 ok(!$@ && $status eq "0", "->status() method");
+
+##################################################################
+
+ok($Forks::Super::Job::OVERLOAD_ENABLED != 0,
+   "\$OVERLOAD_ENABLED is set");
+Forks::Super::Job::disable_overload();
+ok($Forks::Super::Job::OVERLOAD_ENABLED == 0,
+   "FSJ::disable_overload resets \$OVERLOAD_ENABLED");
+
+$job_pid = fork { sub => sub { sleep 1 } };
+ok(!ref($job_pid),
+   "overload disabled fork returns simple number");
+
+$state = eval { $job_pid->{state} };
+ok(!defined($state) && $@,
+   "job member not accessible through fork return when overload disabled");
+
+##################################################################
+
+Forks::Super::Job::enable_overload();
+ok($Forks::Super::Job::OVERLOAD_ENABLED != 0,
+   "\$OVERLOAD_ENABLED is set on renable");
+$job_pid = fork { sub => sub { sleep 1 } };
+ok(ref($job_pid), "reenabled overload fork returns ref to FSJ");
+
+Forks::Super::Job::disable_overload();
+ok($Forks::Super::Job::OVERLOAD_ENABLED == 0,
+   "\$OVERLOAD_ENABLED is unset on redisable");
+$job_pid = fork { sub => sub { sleep 1 } };
+ok(!ref($job_pid), "redisabled overload fork returns simple num");
+
+
+waitall;
+
+

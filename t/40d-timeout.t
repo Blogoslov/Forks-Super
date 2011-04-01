@@ -34,8 +34,10 @@ my $t = Time::HiRes::time();
 my $p = wait;
 $t = Time::HiRes::time() - $t;
 ok($p == $pid, "$$\\wait successful");
-ok($t < 5.95, "wait took ${t}s, expected ~3s");  ### 11 ###
-ok($? != 0, "job expired with non-zero STATUS $? should be != 0"); ### 12 ###
+ok($t < 5.95, "wait took ${t}s, expected ~3s");                    ### 2 ###
+
+## this is an intermittent (5%?) failure point on solaris, v0.44-0.49.
+ok($? != 0, "job expired with non-zero STATUS $? should be != 0"); ### 3 ###
 
 # script dies intermittently here?
 

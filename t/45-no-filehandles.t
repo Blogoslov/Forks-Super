@@ -9,7 +9,12 @@ use warnings;
 
 sub _read_socket {
   my $handle = shift;
-  return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+
+  if ($Forks::Super::Job::Ipc::USE_TIE_SH) {
+    return <$handle>;
+  } else {
+    return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+  }
 }
 
 sub repeater {
@@ -68,12 +73,12 @@ $Forks::Super::Config::CONFIG{"filehandles"} = 0;
 my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
 		   child_fh => "all" };
 
-ok(defined $Forks::Super::CHILD_STDIN{$pid}
-   && defined fileno($Forks::Super::CHILD_STDIN{$pid}),"found stdin fh");
-ok(defined $Forks::Super::CHILD_STDOUT{$pid}
-   && defined fileno($Forks::Super::CHILD_STDOUT{$pid}),"found stdout fh");
-ok(defined $Forks::Super::CHILD_STDERR{$pid}
-   && defined fileno($Forks::Super::CHILD_STDERR{$pid}),"found stderr fh");
+ok(defined($Forks::Super::CHILD_STDIN{$pid})
+   && defined(fileno($Forks::Super::CHILD_STDIN{$pid})),"found stdin fh");
+ok(defined($Forks::Super::CHILD_STDOUT{$pid})
+   && defined(fileno($Forks::Super::CHILD_STDOUT{$pid})),"found stdout fh");
+ok(defined($Forks::Super::CHILD_STDERR{$pid})
+   && defined(fileno($Forks::Super::CHILD_STDERR{$pid})),"found stderr fh");
 ok(is_socket($Forks::Super::CHILD_STDIN{$pid}) &&
    is_socket($Forks::Super::CHILD_STDOUT{$pid}) &&
    is_socket($Forks::Super::CHILD_STDERR{$pid}),

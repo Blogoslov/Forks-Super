@@ -5,11 +5,7 @@
 #
 
 package Forks::Super::Util;
-
 use Exporter;
-our @ISA = qw(Exporter);
-# use base 'Exporter';
-
 use Carp;
 use strict;
 use warnings;
@@ -17,7 +13,8 @@ use warnings;
 use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
-our $VERSION = '0.48';
+our @ISA = qw(Exporter);
+our $VERSION = '0.49';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -26,7 +23,7 @@ our (%SIG_NO, @SIG_NAME, $Time_HiRes_avail,
     $something_productive, $something_else_productive);
 our ($DEFAULT_PAUSE, $_PAUSE) = (0.10, 0);
 
-$Time_HiRes_avail = eval "use Time::HiRes; 1" || 0;
+$Time_HiRes_avail = eval  { use Time::HiRes; 1 } || 0;
 if (!$Time_HiRes_avail) {
   *Time::HiRes::time = \&time;
   *Time::HiRes::sleep = \&__fake_Time_HiRes_sleep;
@@ -82,7 +79,7 @@ sub isValidPid {
       $pid = $pid->{pid};
     }
   }
-  return 0 if !defined $pid || !is_number($pid);
+  return 0 if !defined($pid) || !is_number($pid);
   return &IS_WIN32 ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
 }
 
@@ -133,6 +130,7 @@ sub pause {
       if ($stall >= 1) {
 	CORE::sleep $stall;
       } else {
+	# emulate sleep with 4-arg select
 	select undef, undef, undef, $stall < $delay ? $stall : $delay;
       }
       $delay -= $stall;
@@ -234,7 +232,7 @@ sub is_pipe {
   if (defined $handle->{std_delegate}) {
     $handle = $handle->{std_delegate};
   }
-  return eval '$handle->opened' && -p $handle;
+  return eval { $handle->opened } && -p $handle;
 }
 
 1;

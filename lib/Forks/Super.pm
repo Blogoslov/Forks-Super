@@ -13,9 +13,9 @@ use Forks::Super::Config qw(:all);
 use Forks::Super::Queue qw(:all);
 use Forks::Super::Wait qw(:all);
 use Forks::Super::Tie::Enum;
-use Forks::Super::Sighandler;
 use Forks::Super::Sigchld;
 use Forks::Super::LazyEval;
+use Signals::XSIG;   # replaces Forks::Super::Sighandler
 use strict;
 use warnings;
 
@@ -40,7 +40,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.48';
+our $VERSION = '0.49';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -182,8 +182,7 @@ sub _init {
 
   Forks::Super::Queue::init();
 
-  # $SIG{CHLD} = \&Forks::Super::Sigchld::handle_CHLD;
-  register_signal_handler("CHLD", 10, \&Forks::Super::Sigchld::handle_CHLD);
+  $XSIG{CHLD}[-1] = \&Forks::Super::Sigchld::handle_CHLD;
   return;
 }
 
@@ -249,7 +248,12 @@ sub init_child {
   Forks::Super::Queue::init_child();
 
   @ALL_JOBS = ();
-  $SIG{CHLD} = $SIG{CLD} = 'DEFAULT';
+
+  # XXX - if $F::S::CHILD_FORK_OK > 0, when do we reset $XSIG{CHLD} ?
+  $XSIG{CHLD} = [];
+  $SIG{CHLD} = 'DEFAULT';
+  #$XSIG{CLD} = [];
+  #$SIG{CLD} = 'DEFAULT';
 
   Forks::Super::Config::init_child();
   Forks::Super::Job::init_child();
@@ -477,6 +481,7 @@ sub open2 {
     return;
   }
   my $job = Forks::Super::Job::get($pid);
+
   return ($job->{child_stdin},
 	  $job->{child_stdout},
 	  $pid, $job);
@@ -530,7 +535,7 @@ sub _set_last_job {
 }
 
 sub _is_test {
-  return defined $IMPORT{':test'} && $IMPORT{':test'};
+  return defined($IMPORT{':test'}) && $IMPORT{':test'};
 }
 
 ###################################################################
@@ -547,7 +552,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.48
+Version 0.49
 
 =head1 SYNOPSIS
 
@@ -846,11 +851,10 @@ not positive, or the expiration is earlier than the current time),
 then the child process will die immediately after it is created.
 
 Note that this feature uses the Perl L<alarm|perlfunc/"alarm">
-call with a
-handler for C<SIGALRM>. If you use this feature and also specify a
-L<"sub"> to invoke, and that subroutine also tries to use the
-C<alarm> feature or set a handler for C<SIGALRM>, the results
-will be undefined.
+call and installs its own handler for C<SIGALRM>. Do not use this
+feature with a child L<sub|"sub"> that also uses C<alarm> or that
+installs another C<SIGALRM> handler, or the results will be
+undefined.
 
 The C<timeout> and C<expiration> options cannot be used with the
 L<"exec"> option, since the child process will not be able to
@@ -1031,7 +1035,12 @@ pipe capacity of your system, if you are interested.>
 =item *
 
 On Windows, sockets and pipes are blocking, and care must be taken
-to prevent your script from reading on an empty socket
+to prevent your script from reading on an empty socket. In
+addition, sockets to the input/output streams of external
+programs on Windows is a little flaky, so you are almost always
+better off using filehandles for IPC if your Windows program
+needs external commands (the C<cmd> or C<exec> options to
+C<Forks::Super::fork>).
 
 =back
 
@@ -1985,8 +1994,9 @@ and will block, fail, or defer a job in accordance with all the other rules
 of this module. Additional options may be passed to C<bg_eval> that will
 be provided to the C<fork> call. Most valid options to the C<fork> call
 are also valid for the C<bg_eval> call, including timeouts, delays, job
-dependencies, names, and callbacks. This example will populate C<$result> with the
-value C<undef> if the C<bg_eval> operation takes longer than 60 seconds. 
+dependencies, names, and callbacks. This example will populate C<$result>
+with the value C<undef> if the C<bg_eval> operation takes longer 
+than 60 seconds. 
 
     # run task in background, but timeout after 20 seconds
     $result = bg_eval {
@@ -1998,6 +2008,13 @@ value C<undef> if the C<bg_eval> operation takes longer than 60 seconds.
     } else {
         # operation probably succeeded, use $result
     }
+
+An additional option that is recognized by C<bg_eval> (and L<"bg_qx">,
+see below) is C<untaint>. If you are running perl in "taint" mode, the
+value(s) returned by C<bg_eval> and C<bg_qx> are likely to be "tainted".
+By passing the C<untaint> option (assigned to a true value), the values
+returned by C<bg_eval> and C<bg_qx> will be taint clean.
+
 
 Calls to C<bg_eval> (and L<"bg_qx">) will populate the 
 variables C<$Forks::Super::LAST_JOB> and C<$Forks::Super::LAST_JOB_ID>
@@ -2384,9 +2401,11 @@ C<IPC_DIR> and for an C<IPC_DIR> parameter on module import
 
 ) for suggestions about where to store the IPC files.
 
-Setting this value to C<undef> will disable file-based interprocess
-communication for your program. The module will fall back to 
-using sockets or pipes (probably sockets) for IPC.
+Setting this value to C<undef> (the string literal C<"undef">,
+not the Perl special value C<undef>) will disable 
+file-based interprocess communication for your program. 
+The module will fall back to using sockets or pipes 
+(probably sockets) for all IPC.
 
 =back
 
@@ -2747,6 +2766,18 @@ systems. It is possible that some features will not work
 as advertised. Please report any problems you encounter 
 to E<lt>mob@cpan.orgE<gt> and I'll see what I can do 
 about it.
+
+=head2 Avoid C<exit> from child subroutine when using socket-based IPC
+
+When using sockets for interprocess communication, this module
+must perform some cleanup at the end of the subroutine or
+external command invoked in the child. If the child subroutine
+calls C<exit> (or equivalent calls such as C<POSIX::_exit>), this
+cleanup code will be skipped and the parent may be unable to
+retrieve the child's output.
+
+Subroutines in the child are run inside an C<eval> block, so it
+is fine to break out of the sub with C<die> or C<croak>.
 
 =head2 Segfaults during cleanup
 

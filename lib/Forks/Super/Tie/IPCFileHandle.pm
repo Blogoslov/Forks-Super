@@ -66,6 +66,10 @@ sub OPEN {
     if (defined $expr) {
       # XXX - we currently don't make calls with the 4+ arg version of open
       #       so we don't need to support it now
+
+      # suppress "Filehandle %s reopened as %s only for input/output",
+      # which can occur when we close and reopen the STDxxx filehandles
+      no warnings 'io';
       $result = open *$self, $mode, $expr;
     } else {
       $result = open *$self, $mode;

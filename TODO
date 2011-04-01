@@ -14,18 +14,23 @@ Possible TODOs:
 	Can test with  PERL_SIGNALS=unsafe make test .
 	___ cygwin 5.10: occassionally failure, IPC litter
 	___ linux: make test can hang
+        _X_ don't know specifically what I did, but 
+            PERL_SIGNALS=unsafe make test/fasttest are usually successful now,
+	    at least for v0.49
 
     _O_ Make Forks::Super usable with v5.6.
 	My 5.6 test environments are getting difficult to maintain.
 
     _x_	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
 	then all IPC should be through sockets or pipes.
-	___ Document? Come up with a better way to set this feature?
+	_X_ Document? Come up with a better way to set this feature?
+	    The way to set this feature is $ENV{IPC_DIR} = "undef";
 
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. What can be done
 	to tighten up performance? What can be done to reduce overhead
 	when there are many short tasks?
+	___ disable $FSJ::Ipc::USE_TIE_?H
 
     ___ Test needed, Win32+cmd, See Job.pm:344 (416?) 
         (FSJO::Win32::openX_win32_process?)
@@ -80,17 +85,16 @@ Possible TODOs:
 
     _x_ support stdin=>$input + child_fh=>socket or
                 stdin=>$input + CONFIG(filehandles)==0
-        _X_ can pass UNCONFIG_FILEHANDLES=1 to test
-	    also can pass IPC_DIR=undef
+        _X_ can pass IPC_DIR=undef to test
 	___ t/25
-	    This looks feasible if we return an IO::Handle
-	    subclass from open2/open3 that converts readline
-	    calls to Forks::Super::Job::_readline.
-	    We could, for example, hijack CORE::GLOBAL::readline
-	    or  use subs q:readline: .
-	    Should probably also get read, sysread, getc.
-	___ t/42d
-	___ t/42i
+	    Works from command line, make test, not from make fasttest?
+	    Works when PGID==PPID, fails when PGID!=PPID
+	    Works now when we don't close STDIN. (except on MSWin32)
+	_X_ t/42d
+	_X_ t/42i
+	_X_ For cmd/exec style fork's without file communication,
+            we need to convert to a popen style and print $stdin
+	    to the proc's input and then close the proc?
 
     ___ POSIX::RT::Timer as possible replacement for get/set itimer?
 
@@ -112,14 +116,18 @@ Possible TODOs:
 	___ Maybe this is something for 1.0 ...
 
     ___ Require Signals::XSIG. Bundle it?
-        ___ The Default.pm module is not quite mature. Can't require
+        _x_ The Default.pm module is not quite mature. Can't require
             Signals::XSIG while those tests are still part of the build.
-	    ___ Though really, all the outstanding issues with Signals::XSIG
+	    _X_ Though really, all the outstanding issues with Signals::XSIG
 		are with the default signal handling behavior; this stuff is
 		not important to Forks::Super. Bundling would be ok.
-        ___ Not practical to add functionality as workaround for Signals::XSIG
+        _X_ Not practical to add functionality as workaround for Signals::XSIG
             not being available. Hard bundling would be ok, though. Or
 	    copying the code into Forks::Super::Sighandler.
+	___ test program were caller also uses a SIGALRM handler
+	___ Replacing Forks::Super::Sighandler with Signals::XSIG
+	    breaks Solaris? 
+	    ___ See how solaris does with t/11b.tt
 
     ___ make SysInfo.pm.PL capable of managing config for multiple $^O,$]?
 	Or more generally, what if the installed SysInfo.pm is set up for
@@ -151,7 +159,7 @@ Possible TODOs:
 	___ Until we bring pipes into the fold, too, some of the
 	    read input constructions are getting creepier (see 44a, 44b)
 
-	___ Outstanding issues:
+	_X_ Outstanding issues:
 	    Strawberry 43d, 44d sometimes time out
 	    Performance? Is NO_TIES=1 version of some tests faster?
 
@@ -160,11 +168,26 @@ Possible TODOs:
 	"Even in list context, the iterator is currently called only
 	once and with scalar context."
 
-    ___ Investigate consequences of calling 'exit' inside child sub with IPC.
+    _X_ Investigate consequences of calling 'exit' inside child sub with IPC.
+	Don't do it with sockets.
 
-    ___ Ipc::_preconfig_fh. Don't create $IPC_DIR unless we will need the
+    _X_ Ipc::_preconfig_fh. Don't create $IPC_DIR unless we will need the
 	IPC files.
 
-    ___ Ipc: track down, fix 2-arg _close calls
+    _X_ Ipc: track down, fix 2-arg _close calls (there was only one)
 
-    ___ test suspend/resume cycles where child has SIGSTOP/CONT handlers.
+    ___ test suspend/resume cycles where child has SIGSTOP/CONT handlers
+
+    ___ "Don't exit from child sub with socket IPC" -- can we address this?
+	A child-specific END{} block in Forks/Super/Job.pm ?
+
+    ___ Forks::Super::Sigchld notes in a comment that dates back to v0.16
+        that Cygwin might not clean up deferred jobs correctly. Is this
+	still an issue? Doesn't look like it ...
+
+    _X_ 40d problem on solaris
+	___ will we ever use setitimer for timeout/expiration?
+
+    ___ Understand why Windows hack needed for socket write (see 
+	FSJ::Ipc::write_stdin, FST::IPCSocketHandle::trivial_pause).
+	Is there a better solution?

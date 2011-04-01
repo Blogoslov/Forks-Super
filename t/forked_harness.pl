@@ -117,8 +117,9 @@ my $result = GetOptions("harness" => \$use_harness,
 	   "z|socket" => \$use_socket,
 	   "abort-on-fail" => \$abort_on_first_error);
 my %fail = ();
-if (${^TAINT}) {
+if ($ENV{TAINT_CHECK} || ${^TAINT}) {
   @perl_opts = map { /(.*)/ } @perl_opts;
+  push @perl_opts, "-T";
 }
 
 $test_verbose ||= 0;
@@ -173,6 +174,7 @@ if ($^O eq 'MSWin32' || $glob_required) {
 my @test_files = (@ARGV) x $xrepeat;
 my @result = ();
 my $total_status = 0;
+my $total_fail = 0;
 my $iteration;
 my $ntests = scalar @test_files;
 if ($debug) {
@@ -185,7 +187,8 @@ my (%j,$count);
 &main;
 &summarize;
 &check_endgame if $check_endgame;
-exit +($total_status > 254 ? 254 : $total_status) >> 8;
+exit ($total_fail > 254 ? 254 : $total_fail);
+# exit ($total_status > 254 << 8 ? 254 : $total_status >> 8);
 
 ##################################################################
 #
@@ -499,6 +502,7 @@ sub process_test_output {
   # print "$dashes\n";
 
   $total_status = $status if $total_status < $status;
+  $total_fail += $status >> 8 if $status > 0;
   if ($status != 0) {
     if (!$use_harness 
 	|| (grep /Result: FAIL/, @stdout)

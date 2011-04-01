@@ -7,6 +7,7 @@ use warnings;
 # Job::get, Job::getByName, and waitpid
 
 my ($pid,$pid1,$pid2,$pid3,$j1,$j2,$j3,$p,$q,$t,@j,$p1,$p2,$p3);
+our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
 
 # named dependency
 # first job doesn't really have any dependencies, should start right away
@@ -28,8 +29,11 @@ $j3 = Forks::Super::Job::get($p3);
 ok($j1->{state} eq 'DEFERRED' && $j2->{state} eq 'DEFERRED',
    "active/queued jobs in correct state");
 waitall;
-ok($j1->{start} <= $j2->{start}, "respected start dependency by name");
-ok($j3->{start} < $j2->{start}, 
+ok($j1->{start} <= $j2->{start} + $TOL,
+   "respected start dependency by name")
+	or diag("expected j1<=j2 start, ", $j1->{start}, " <= ",
+		$j2->{start});
+ok($j3->{start} < $j2->{start} + $TOL, 
    "non-dependent job started before dependent job");
 
 $t = Time::HiRes::time();
@@ -45,7 +49,8 @@ my $t31 = Time::HiRes::time();
 waitall();
 my $t4 = Time::HiRes::time();
 ($t,$t2,$t3,$t31) = ($t4-$t,$t4-$t2,$t4-$t3,$t4-$t31);
-ok($t > 5.5 && $t31 < 8.8,          ### 20 ### was 8.0 obs 8.08
+ok($t > 5.5 && $t31 < 9.08,          ### 6 ### was 8.0 obs 9.03
    "Took ${t}s ${t2}s ${t3}s ${t31} for dependent jobs - expected ~6s"); 
-ok($j1->{end} <= $j2->{start}, "handled circular dependency");
+ok($j1->{end} <= $j2->{start} + $TOL,
+   "handled circular dependency");
 

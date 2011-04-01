@@ -244,7 +244,7 @@ sub kill_Win32_process_tree {
   my (@pids) = @_;
   my $count = 0;
   foreach my $pid (@pids) {
-    next if !defined $pid || $pid == 0;
+    next if !defined($pid) || $pid == 0;
 
     # How many ways are there to kill a process in Windows?
     # How many do you need?

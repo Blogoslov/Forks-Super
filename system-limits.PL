@@ -37,6 +37,12 @@ if ($^O eq 'cygwin') {
 * that say "WFSO timed out after longjmp" five  *
 * minutes from now, they came from this script  *
 *              and they are normal.             *
+*                                               *
+*    You may also see an error message like:    *
+*                                               *
+* *** fatal error - CreateThread failed for ... *
+*                                               *
+*    with a stack dump. This is also normal.    *
 *************************************************\n!;
 
 }
@@ -52,6 +58,26 @@ if ($pid) {
   print STDERR "\n\n";
   if (! -r $limits_file) {
     warn "System limitations file $limits_file still not found.\n ";
+  }
+  if ($^O eq 'cygwin') {
+    # clean up the stray process with the same PGID as this process.
+    # If that works, it will suppress the "WSFO time out ..." error.
+    my $target_pgid = $$;
+    if (fork() == 0) {
+      sleep 30;
+      my @proc_table = qx(/usr/bin/ps);
+      shift @proc_table;             # skip header
+      foreach my $ps (@proc_table) {
+	next if $ps =~ m(/usr/bin/ps);
+	$ps =~ s/^\s+//;
+	my @ps = split /\s+/, $ps;
+	if ($ps[2] == $target_pgid && $ps[0] != $target_pgid) {
+	  sleep 10;
+	  system("taskkill /f /pid $ps[3]");
+        }
+      }
+      exit;
+    }
   }
   exit;
 }
@@ -74,6 +100,7 @@ $LIMITS{version} = $];
 
 # XXX - what else is interesting? max pending signals?
 
+&get_Time_HiRes_tolerance;
 &checkif_sleep_alarm_compatible;
 &count_number_of_cpus;
 &find_max_open_filehandles;     # on some systems:  ulimit -n
@@ -101,6 +128,37 @@ sub write_limits {
 }
 
 #############################################################################
+
+sub get_Time_HiRes_tolerance {
+  # I found an insidious bug where this code:
+  #    do {
+  #       $t1 = Time::HiRes::time();
+  #       $t2 = Time::HiRes::time();
+  #       $t2 < $t1
+  #    };
+  # could return *TRUE*. 
+  #
+  # On opensolaris 5.11 (running on Oracle VM Virtualbox, which was
+  # running on Windows 7), this can be as much as 0.03s.
+  #
+  # Even on Windows 7/Cygwin, it can be 0.0005s
+  #
+
+  # Ideally, this subroutine is run on a lightly loaded system.
+
+  unless (eval { use Time::HiRes (); 1 }) {
+    write_limits(TimeHiRes_tol => 0.0);
+  }
+  my ($max,$t,$u) = (0, Time::HiRes::time());
+  my $v = $t + 10;
+  while ($t < $v) {
+    ($u,$t) = ($t,Time::HiRes::time());
+    if ($u-$t > $max) {
+      $max = $u-$t;
+    }
+  }
+  write_limits(TimeHiRes_tol => $max * 1.1);
+}
 
 sub checkif_sleep_alarm_compatible {
   my $compatible = -1;
@@ -375,8 +433,11 @@ __END_SLAVE_CODE__
     # hopefully, one of these will do the job on your system
     kill ('TERM', $pid)
       || kill ('HUP', $pid)
-      || system ("TASKKILL /f /pid $pid")
-      || system ("kill -TERM $pid") 
+      || !system ("TASKKILL /f /pid $pid")
+      || do {
+	warn "Attempts to kill pid \"$pid\" failing ...\n"; 0
+      }
+      || !system ("kill -TERM $pid") 
       || kill ('BREAK', $pid);
     exit 0;
   }

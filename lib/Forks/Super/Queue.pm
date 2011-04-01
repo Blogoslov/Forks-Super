@@ -8,16 +8,13 @@ use Forks::Super::Config;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Tie::Enum;
 use Forks::Super::Util qw(IS_WIN32);
-use Forks::Super::Sighandler;
+use Signals::XSIG;
 use Carp;
-
 use Exporter;
-our @ISA = qw(Exporter);
-#use base 'Exporter';
-
 use strict;
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our $VERSION = $Forks::Super::Util::VERSION;
@@ -111,16 +108,15 @@ sub _launch_queue_monitor_setitimer {
 
   $QUEUE_MONITOR_PPID = $$;
   $QUEUE_MONITOR_PID = 'setitimer';
-  # $Forks::Super::Sighandler::DEBUG = 1;
-  register_signal_handler("ALRM", 2, \&_check_queue);
-						   
+  $XSIG{ALRM}[2] = \&_check_queue;
+
   Time::HiRes::setitimer(
 	&Time::HiRes::ITIMER_REAL, $QUEUE_MONITOR_FREQ, $QUEUE_MONITOR_FREQ);
 }
 
 sub _launch_queue_monitor_fork {
 
-  if (!(defined $Forks::Super::QUEUE_INTERRUPT
+  if (!(defined($Forks::Super::QUEUE_INTERRUPT)
 	&& $Forks::Super::QUEUE_INTERRUPT)) {
     debug("_lqm returning: \$Forks::Super::QUEUE_INTERRUPT not set")
       if $QUEUE_DEBUG;
@@ -190,8 +186,8 @@ sub _kill_queue_monitor {
 	
       if ($QUEUE_MONITOR_PID eq 'setitimer') {
 
-	register_signal_handler("ALRM", 1, undef);
-	register_signal_handler("ALRM", 2, undef);
+	$XSIG{ALRM}[1] = undef;
+	$XSIG{ALRM}[2] = undef;
 	Time::HiRes::setitimer(&Time::HiRes::ITIMER_REAL, 0);
 	undef $QUEUE_MONITOR_PID;
 	undef $QUEUE_MONITOR_PPID;
@@ -245,7 +241,7 @@ sub queue_job {
   @QUEUE = @q;
   if (@QUEUE > 0 && !$QUEUE_MONITOR_PID && !$INHIBIT_QUEUE_MONITOR) {
     _launch_queue_monitor();
-  } elsif (@QUEUE == 0 && defined $QUEUE_MONITOR_PID) {
+  } elsif (@QUEUE == 0 && defined($QUEUE_MONITOR_PID)) {
     _kill_queue_monitor();
   }
   return;
@@ -298,7 +294,7 @@ sub run_queue {
     $job_was_launched = 0;
     $_REAP = 0;
     my @deferred_jobs = grep {
-      defined $_->{state} && $_->{state} eq 'DEFERRED'
+      defined($_->{state}) && $_->{state} eq 'DEFERRED'
     } @Forks::Super::ALL_JOBS;
     @deferred_jobs = sort {
       ($b->{queue_priority} || 0) 
@@ -328,8 +324,8 @@ sub run_queue {
 	}
 	my $pid = $job->launch();
 	if ($pid == 0) {
-	  if (defined $job->{sub} or defined $job->{cmd}
-	      or defined $job->{exec}) {
+	  if (defined($job->{sub}) || defined($job->{cmd})
+	      || defined($job->{exec})) {
 	    $_LOCK--;
 	    croak "Forks::Super::run_queue(): ",
 	      "fork on deferred job unexpectedly returned ",
@@ -353,7 +349,7 @@ sub run_queue {
 
 sub suspend_resume_jobs {
   my @jobs = grep {
-    defined $_->{suspend} &&
+    defined($_->{suspend}) &&
       ($_->{state} eq 'ACTIVE' || $_->{state} eq 'SUSPENDED')
     } @Forks::Super::ALL_JOBS;
   return if @jobs <= 0;

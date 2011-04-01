@@ -3,16 +3,13 @@
 #
 
 package Forks::Super::LazyEval;
-
-use Exporter;
-our @ISA = qw(Exporter);
-#use base 'Exporter';
-
 use Forks::Super::Config qw(:all);
+use Exporter;
 use Carp; 
 use strict; 
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT = qw(bg_eval bg_qx);
 
 $Forks::Super::LazyEval::USE_ZCALAR = 0;   # enable experimental feature

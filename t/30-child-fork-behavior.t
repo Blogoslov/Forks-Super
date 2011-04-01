@@ -37,13 +37,14 @@ if ($pid3 == 0) {
 }
 $p = wait;
 ok($p == $pid3, "blocking wait");
-ok(25 == $? >> 8, "child fork used CORE::fork STATUS $?");
+ok(25 == $? >> 8, "child fork used CORE::fork STATUS $?")       ### 6 ###
+	or diag("Expected 25<<8, was $?");
 
 
 
 sub try_to_fork_from_child {
   my $child_fork_pid = fork();
-  if (not defined $child_fork_pid  or  !isValidPid($child_fork_pid)) {
+  if (not defined($child_fork_pid)  or  !isValidPid($child_fork_pid)) {
     # child fork failed.
     exit 23;
   }

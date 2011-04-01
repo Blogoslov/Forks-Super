@@ -33,8 +33,6 @@ if (${^TAINT}) {
   ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
-Forks::Super::Debug::_use_Carp_Always();
-
 ##########################################################
 
 # exercise stdout, stdin, stderr 

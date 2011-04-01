@@ -28,7 +28,7 @@ $DEBUG_fh->autoflush(1);
 $DEBUG = !!$ENV{FORKS_SUPER_DEBUG} || '0';
 
 # open filehandle to tty for emergency debugging as we may clobber STDERR
-open ::__XXXXXX__, $^O eq 'MSWin32' ? ">>CON" : ">>/dev/tty";
+open ::__XXXXXX__, '>>', $^O eq 'MSWin32' ? "CON" : "/dev/tty";
 (*::__XXXXXX__)->autoflush(1);
 
 sub init {
@@ -55,7 +55,6 @@ sub carp_once {
 
 # load or emulate Carp::Always for the remainder of the program
 sub _use_Carp_Always {
-#  eval "use Carp::Always;1" || _emulate_Carp_Always();
   _emulate_Carp_Always();
 }
 

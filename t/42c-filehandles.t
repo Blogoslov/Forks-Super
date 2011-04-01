@@ -17,8 +17,6 @@ if (${^TAINT}) {
 }
 
 
-Forks::Super::Debug::_use_Carp_Always();
-
 #######################################################
 my (@cmd,$pid,$fh_in,$z,$t,@out,@err,$msg);
 @cmd = ($^X, "t/external-command.pl", "-s=2", "-y=2");

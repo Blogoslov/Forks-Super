@@ -16,6 +16,7 @@ my $pid = fork {
     print STDOUT "bar\n";
     sleep 5;
     print STDOUT "baz\n";
+    die "OK to die from child with socket based IPC, but don't exit.\n";
   }
 };
 
@@ -77,6 +78,7 @@ $pid = fork {
     print STDOUT "bar\n";
     sleep 5;
     print STDOUT "baz\n";
+    exit 0;
   }
 };
 my $x = $pid->read_stderr(timeout => 1);

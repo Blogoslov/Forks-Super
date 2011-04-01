@@ -31,8 +31,8 @@ our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
 
 *_gensym = \&Forks::Super::Job::Ipc::_gensym;
 
-# XXXXXX Windows hack. To get smoothly running sockets on Windows it
-#        seems we have to do a slight pause after each write op.
+# XXX Windows hack. To get smoothly running sockets on Windows it
+#     seems we have to do a slight pause after each write op.
 sub trivial_pause { return $^O eq 'MSWin32' 
 		      && Forks::Super::Util::pause(0.001) };
 

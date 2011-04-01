@@ -29,7 +29,7 @@ ok(defined $Forks::Super::CHILD_STDIN{$pid},  "\%CHILD_STDIN defined");
 ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "\%CHILD_STDOUT defined");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "\%CHILD_STDERR defined");
 
-if ($^O eq 'MSWin32') {
+if ($^O eq 'MSWin32' && defined($Forks::Super::IPC_DIR)) {
   ok(!is_socket($Forks::Super::CHILD_STDIN{$pid}),
      "CHILD_STDIN is not a socket for cmd-style fork on MSWin32");
   ok(!is_socket($Forks::Super::CHILD_STDOUT{$pid}),
@@ -65,7 +65,7 @@ ok(@out == 15, "got 15==" . scalar @out . " lines of output")
 # makes it to the $cmd error output stream.
 
 ok(@err == 2 || @err==4, "got " . scalar @err . "==2 or 4 lines of error")
-	; diag("Error was:\n------\n@err\n-------\n");
+	or diag("Error was:\n------\n@err\n-------\n");
 ok($out[0] eq "$msg\n", "got expected output from child");
 ok($err[0] =~ /received message $msg/, "got expected error from child");
 Forks::Super::close_fh($pid, 'stdin');

@@ -110,7 +110,7 @@ $t = Time::HiRes::time();
 my %others = %$x;
 my $t2 = Time::HiRes::time();
 ($t,$t0) = ($t2-$t,$t2-$t0);
-ok($t0 >= 1.95 && $t <= 5.04,           ### 25 ### was 3.25 obs 3.56,3.75,4.97
+ok($t0 >= 1.95 && $t <= 5.04,           ### 25 ### was 5.04 obs 8.54
    "listref bg_eval took ${t0}s ${t}s expected ~2s");
 ok(scalar(keys %others) > 0, "listref bg_eval");
 $x = [ "a", "v", "rst" ];

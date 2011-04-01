@@ -10,7 +10,7 @@ if (${^TAINT}) {
 }
 
 my @cmd = ($^X, "t/external-command.pl",
-	   "-e=Hello", "-s=2", "-y=1", "-e=whirled");
+	   "-e=Hello", "-s=4", "-y=1", "-e=whirled");
 
 my ($fh_in, $fh_out, $pid, $job) = Forks::Super::open2(@cmd);
 
@@ -21,15 +21,18 @@ ok(defined($job), "open2: received job object");
 ok($job->{state} eq 'ACTIVE', "open2: job is active " . $job->{state});
 
 my $msg = sprintf "%05x", rand() * 99999;
-my $z = print $fh_in "$msg\n";
+my $z = print {$fh_in} "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open2: print to input handle ok = $z");
-sleep 3;
-# my @out = <$fh_out>;
+sleep 6;
+
 my @out = Forks::Super::read_stdout($pid);
 Forks::Super::close_fh($pid, 'stdout');
-ok(@out == 2, "open2: got right number of output lines 2 == " . scalar @out);
-ok($out[0] eq "Hello $msg\n", "got right output");
+ok(@out == 2,                                                      ### 6 ###
+   "open2: got right number of output lines 2 == " . scalar @out)
+  or diag("Output was:\n@out\nExpected 2 lines");
+ok($out[0] eq "Hello $msg\n", "got right output")                  ### 7 ###
+  or diag("Got \"$out[0]\", expected \"Hello $msg\\n\"");
 Forks::Super::pause();
 ok($job->{state} eq 'COMPLETE', "job complete");
 ok($pid == waitpid($pid,0), "job reaped");
@@ -57,11 +60,16 @@ Forks::Super::close_fh($pid, 'stdout');
 
 my @err = Forks::Super::read_stderr($pid);
 Forks::Super::close_fh($pid, 'stderr');
-ok(@out == 4, "open3: got right number of output lines");
-ok($out[0] eq "Hello $msg\n", "got right output (1)");
-ok($out[1] eq "$msg\n", "got right output (2)");
+ok(@out == 4, "open3: got right number of output lines")            ### 15 ###
+  or diag("open3 output was:\n@out\nExpected 4 lines");
+ok($out[0] eq "Hello $msg\n", "got right output (1)")               ### 16 ###
+  or diag("First output was \"$out[0]\", expected \"Hello $msg\\n\"");
+ok($out[1] eq "$msg\n", "got right output (2)")                     ### 17 ###
+  or diag("2nd output was \"$out[1]\", expected \"$msg\\n\"");
 ok(@err == 1, "open3: got right error lines");
-ok($err[0] eq "received message $msg\n", "open3: got right error"); ### 19 ###
+ok($err[0] eq "received message $msg\n", "open3: got right error")  ### 19 ###
+  or diag("Error was \"$err[0]\",\n",
+	  "Expected \"received message $msg\\n\"");
 Forks::Super::pause();
 ok($job->{state} eq 'COMPLETE', 
    "job state " . $job->{state} . " == 'COMPLETE'");
@@ -103,7 +111,9 @@ SKIP: {
      "open3: time out  \@out='@out'" . scalar @out);
   ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out");
   waitpid $pid,0;
-  ok($job->{status} != 0, "open3: job timed out status $job->{status}!=0");
+  ok($job->{status} != 0, 
+     "open3: job timed out status $job->{status}!=0")  ### 28 ###
+    or diag("status was $job->{status}, expected ! 0");
 }
 
 #############################################################################

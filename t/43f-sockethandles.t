@@ -32,8 +32,6 @@ sub repeater {
   binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
-    #while (defined ($_ = Forks::Super::_read_socket(undef, *STDIN, 0))) {
     while (defined ($_ = _read_socket(*STDIN))) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
@@ -71,12 +69,12 @@ my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ],
 		 child_fh => "in,out,err,socket" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $pid->{child_stdin}
-   && defined fileno($pid->{child_stdin}),"found stdin fh");
-ok(defined $pid->{child_stdout}
-   && defined fileno($pid->{child_stdout}),"found stdout fh");
-ok(defined $pid->{child_stderr}
-   && defined fileno($pid->{child_stderr}),"found stderr fh");
+ok(defined($pid->{child_stdin})
+   && defined(fileno($pid->{child_stdin})),"found stdin fh");
+ok(defined($pid->{child_stdout})
+   && defined(fileno($pid->{child_stdout})),"found stdout fh");
+ok(defined($pid->{child_stderr})
+   && defined(fileno($pid->{child_stderr})),"found stderr fh");
 ok(is_socket($pid->{child_stdin}) &&
    is_socket($pid->{child_stdout}) &&
    is_socket($pid->{child_stderr}),

@@ -74,7 +74,7 @@ sub read_value {
 sub write_value {
   my ($value) = @_;
 
-  no warnings 'unopened';
+  no warnings 'unopened', 'io';
 
   # don't suspend while we're in the middle of changing the ipc file
   open my $xx, '>>', "$file.block-suspend";
@@ -113,7 +113,8 @@ SKIP: {
   my $t1 = 0.5 * ($t0 + Time::HiRes::time());
   my $job = Forks::Super::Job::get($pid);
 
-  local $SIG{STOP} = $SIG{TSTP} = sub { croak "SIG$_[0] received in PARENT process" };
+  local $SIG{STOP} = $SIG{TSTP} 
+	= sub { croak "SIG$_[0] received in PARENT process" };
 
   # sub should proceed normally for 5 seconds
   # then process should be suspended

@@ -32,7 +32,10 @@ our $FILES_TO_CLEAN
 
 our %META_MERGE
   = (recommends => \%RECOMMENDED,
-     no_index => { 'package' => ['Sys::CpuAffinity', 'Signals::XSIG'] });
+     no_index => { 
+	'package' => ['Sys::CpuAffinity', 
+		      'Signals::XSIG',
+		      'Signals::XSIG::Default'] });
 
 ######################################################################
 
@@ -122,9 +125,11 @@ sub install_bundled_modules {
 }
 
 sub probe_system {
-  print STDERR "Gathering information on current system $^O.$]\n";
-  print STDERR "and creating Forks::Super::SysInfo package.\n";
-  system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
+  unless ($ENV{NOLIMITS}) {
+    print STDERR "Gathering information on current system $^O.$]\n";
+    print STDERR "and creating Forks::Super::SysInfo package.\n";
+    system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
+  }
 }
 
 

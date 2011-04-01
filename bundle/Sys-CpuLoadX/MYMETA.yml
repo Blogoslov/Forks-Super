@@ -6,7 +6,7 @@ build_requires:
   Module::Build: 0.25
   Test::More: 0
 dynamic_config: 0
-generated_by: 'Module::Build version 0.38, CPAN::Meta::Converter version 2.110580'
+generated_by: 'Module::Build version 0.38, CPAN::Meta::Converter version 2.110440'
 keywords:
   - cpu
   - load

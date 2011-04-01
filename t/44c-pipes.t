@@ -7,15 +7,11 @@ use warnings;
 sub _read_pipe_that_might_be_a_socket {
   # on MSWin32, we almost never use pipes
   my $handle = shift;
-  return $Forks::Super::Job::Ipc::USE_TIE_SH || !Forks::Super::Util::is_socket($handle)
+  return $Forks::Super::Job::Ipc::USE_TIE_SH
+		 || !Forks::Super::Util::is_socket($handle)
       ? <$handle>
       : Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
-
-#sub _read_socket {
-#  my $handle = shift;
-#  return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
-#}
 
 #
 # test whether a parent process can have access to the
@@ -109,11 +105,11 @@ SKIP: {
   if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
     skip "using sockets instead of pipes on Win32", 3;
   }
-  ok((defined $Forks::Super::CHILD_STDIN{$pid}
+  ok((defined($Forks::Super::CHILD_STDIN{$pid})
       and is_pipe($Forks::Super::CHILD_STDIN{$pid})), "CHILD_STDIN is a pipe");
-  ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
+  ok(!defined($Forks::Super::CHILD_STDOUT{$pid}),
      "CHILD_STDOUT not defined pid $pid");
-  ok((defined $Forks::Super::CHILD_STDERR{$pid})
+  ok((defined($Forks::Super::CHILD_STDERR{$pid}))
      && is_pipe($Forks::Super::CHILD_STDERR{$pid}), "CHILD_STDERR is a pipe");
 }
 Forks::Super::close_fh($pid, 'stdin');

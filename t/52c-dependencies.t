@@ -4,6 +4,8 @@ use Carp;
 use strict;
 use warnings;
 
+our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
+
 #
 # test that jobs respect their dependencies.
 # a job won't start before another job starts that
@@ -39,7 +41,10 @@ ok($j4->{state} eq "DEFERRED", "job 4 waiting");
 Forks::Super::Queue::run_queue();
 
 waitall;
-ok($j4->{start} >= $j2->{start}, "job 4 respected depend_start for job2");
-ok($j3->{start} >= $j2->{end}, "job 3 respected depend_on for job2");
-ok($j4->{start} < $j3->{start}, "low priority job 4 start before job 3");
+ok($j4->{start} + $TOL >= $j2->{start}, 
+   "job 4 respected depend_start for job2");
+ok($j3->{start} + $TOL >= $j2->{end}, 
+   "job 3 respected depend_on for job2");
+ok($j4->{start} - $TOL < $j3->{start}, 
+   "low priority job 4 start before job 3");
 

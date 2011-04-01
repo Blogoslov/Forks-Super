@@ -407,9 +407,10 @@ sub open_win32_process {
   my $cmd = join ' ', @{$job->{cmd}};
 
 
-  # PIPE OPEN FAILS IN TAINT MODE -- WHY?
+  # XXX - PIPE OPEN FAILS IN TAINT MODE -- WHY?
+  ($cmd) = $cmd =~ /(.*)/s;
 
-  my $pid = open my $proch, "-|", "$cmd"; 
+  my $pid = open my $proch, "-|", "$cmd";
   $Forks::Super::Job::WIN32_PROC = 0;
 
   Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
@@ -485,7 +486,7 @@ sub open3_win32_process {
   $Forks::Super::Job::WIN32_PROC_PID = $pid;
   $Forks::Super::Job::WIN32_PROC = '__open3__';
 
-  if (defined $job->{cpu_affinity} && CONFIG('Sys::CpuAffinity')) {
+  if (defined($job->{cpu_affinity}) && CONFIG('Sys::CpuAffinity')) {
     Sys::CpuAffinity::setAffinity($pid, $job->{cpu_affinity});
   }
 

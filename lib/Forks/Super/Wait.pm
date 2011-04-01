@@ -12,21 +12,17 @@ use Forks::Super::Config;
 use Forks::Super::Queue;
 use Forks::Super::Tie::Enum;
 use POSIX ':sys_wait_h';
-
 use Exporter;
-our @ISA = qw(Exporter);
-#use base 'Exporter';
-
 use Carp;
 use strict;
 use warnings;
 
+our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 our $VERSION = $Forks::Super::Util::VERSION;
 
 our ($productive_pause_code, $productive_waitpid_code);
-#our $REAP_NOTHING_MSGS = 0;
 
 tie our $WAIT_ACTION_ON_SUSPENDED_JOBS, 
   'Forks::Super::Tie::Enum', qw(wait fail resume);
@@ -85,7 +81,9 @@ sub waitpid {
     return -1;
   } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if ($target == 0) {
-      $target = getpgrp(0);
+      unless (eval { $target = getpgrp(0) } ) {
+	$target = -$$;
+      }
     } else {
       $target = -$target;
     }
@@ -193,10 +191,6 @@ sub _reap {
   my ($nactive1, $nalive, $nactive2)
       = Forks::Super::Job::count_processes($reap_bg_ok, $optional_pgid);
 
-  #if ($nactive1 > 0) {
-  #  ++$REAP_NOTHING_MSGS; # I think this is obsolete
-  #}
-
   return -1 if not wantarray;
   if ($DEBUG) {
     debug('Forks::Super::_reap(): nothing to reap now. ',
@@ -229,8 +223,9 @@ sub _waitpid_any {
     }
   }
   if (defined $ALL_JOBS{$pid}) {
-    pause() while not defined $ALL_JOBS{$pid}->{status};
-    $? = $ALL_JOBS{$pid}->{status};
+    my $job = Forks::Super::Job::get($ALL_JOBS{$pid});
+    pause() while not defined $job->{status};
+    $? = $job->{status};
   }
   return $pid;
 }

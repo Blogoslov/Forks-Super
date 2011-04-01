@@ -31,7 +31,6 @@ sub repeater {
   binmode STDERR;  # has no bad effect on other OS
   Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
   while (time < $end_at) {
-    # use idiom for "cantankerous" IO implementations -- see perldoc -f seek
     while (defined ($_ = _read_socket(*STDIN))) {
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);

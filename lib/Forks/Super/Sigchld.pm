@@ -5,7 +5,7 @@
 package Forks::Super::Sigchld;
 use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(:all);
-use Forks::Super::Sighandler;
+use Signals::XSIG;
 use POSIX ':sys_wait_h';
 # use Time::HiRes;  # not installed on ActiveState 5.6 :-(
 use strict;
@@ -78,7 +78,7 @@ sub handle_CHLD {
       $j->{status} = $status;
       $j->_mark_complete;
     } else {
-      # There are (at least) two reasons that we get to this code branch:
+      # There are (at least) two^H^H^H THREE reasons we reach this code branch:
       #
       # 1. A child process completes so quickly that it is reaped in 
       #    this subroutine *before* the parent process has finished 
@@ -87,6 +87,12 @@ sub handle_CHLD {
       #    parent process knows about this process.
       # 2. In Cygwin, the system sometimes fails to clean up the process
       #    correctly. I notice this mainly with deferred jobs.
+      #    XXX - this comment dates back to at least v0.16.
+      #          Maybe this isn't still an issue.
+      # 3. This is a child process with $CHILD_FORK_OK>0, reaping a process
+      #    started with a system fork (system or exec XXX-qx?), not 
+      #    a F::S::fork call from within the child process.
+      #    XXX - how to distinguish? how to test?
 
       debug("Forks::Super::handle_CHLD(): got CHLD signal ",
 	    "but can't find child to reap; pid=$pid") if $DEBUG;
@@ -153,8 +159,6 @@ We want a framework where we can add and remove jobs
 for the signal handlers to do at will. If end user
 also wishes to add a signal handler, the framework
 should be able to accomodate that, too. And transparently.
-
-Let's spike it out ...
 
 
 

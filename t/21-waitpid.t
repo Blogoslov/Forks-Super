@@ -31,7 +31,6 @@ if ($p != $pid) {
 	$s = $?;
 	my $state2 = $j->{state};
 	$tt = Time::HiRes::time() - $tt;
-	print STDERR "... Took ${tt}s to reap $p/$pid $state1/$state2\n";
     }
   SKIP: {
     if ($p == $pid) {

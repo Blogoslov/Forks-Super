@@ -7,6 +7,7 @@ use warnings;
 # Job::get, Job::getByName, and waitpid
 
 my ($pid,$pid1,$pid2,$pid3,$j1,$j2,$j3,$p,$q,$t,@j,$p1,$p2,$p3);
+our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
 
 $pid = fork { sub => sub {sleep 2}, name => "sleeper" };
 $j1 = Forks::Super::Job::get($pid);
@@ -55,6 +56,7 @@ ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',    ### 12 ###
 	  $j1->{state}, "/", $j2->{state});
 waitall;
 
-ok($j1->{end} <= $j2->{start}, "respected depend_on by name");
-ok($j3->{start} < $j2->{start},                               ### 14 ###
+ok($j1->{end} <= $j2->{start} + $TOL,
+   "respected depend_on by name");
+ok($j3->{start} < $j2->{start} + $TOL,                        ### 14 ###
    "non-dependent job started before dependent job");

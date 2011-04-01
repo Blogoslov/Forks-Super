@@ -13,7 +13,7 @@ use Forks::Super::Job::Timeout;
 use Forks::Super::Queue qw(queue_job);
 use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
-use Forks::Super::Sighandler;
+use Signals::XSIG;
 use Exporter;
 use Carp;
 use IO::Handle;
@@ -22,7 +22,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.48';
+our $VERSION = '0.49';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -35,6 +35,7 @@ if (!defined($use_overload)) {
 if ($use_overload) {
   enable_overload();
 } else {
+  enable_overload();
   disable_overload();
 }
 
@@ -86,29 +87,29 @@ sub reuse {
 
 sub is_complete {
   my $job = shift;
-  return defined $job->{state} &&
+  return defined($job->{state}) &&
     ($job->{state} eq 'COMPLETE' || $job->{state} eq 'REAPED');
 }
 
 sub is_started {
   my $job = shift;
   return $job->is_complete || $job->is_active || 
-    (defined $job->{state} && $job->{state} eq 'SUSPENDED');
+    (defined($job->{state}) && $job->{state} eq 'SUSPENDED');
 }
 
 sub is_active {
   my $job = shift;
-  return defined $job->{state} && $job->{state} eq 'ACTIVE';
+  return defined($job->{state}) && $job->{state} eq 'ACTIVE';
 }
 
 sub is_suspended {
   my $job = shift;
-  return defined $job->{state} && $job->{state} =~ /SUSPENDED/;
+  return defined($job->{state}) && $job->{state} =~ /SUSPENDED/;
 }
 
 sub is_deferred {
   my $job = shift;
-  return defined $job->{state} && $job->{state} =~ /DEFERRED/;
+  return defined($job->{state}) && $job->{state} =~ /DEFERRED/;
 }
 
 sub waitpid {
@@ -202,8 +203,8 @@ sub toShortString {
 
 sub _mark_complete {
   my $job = shift;
-  $job->{state} = 'COMPLETE';
   $job->{end} = Time::HiRes::time();
+  $job->{state} = 'COMPLETE';
 
   $job->run_callback('collect');
   $job->run_callback('finish');
@@ -240,7 +241,7 @@ sub can_launch {
 
 sub _can_launch_delayed_start_check {
   my $job = shift;
-  return 1 if !defined $job->{start_after} ||
+  return 1 if !defined($job->{start_after}) ||
     Time::HiRes::time() >= $job->{start_after};
 
   debug('Forks::Super::Job::_can_launch(): ',
@@ -257,8 +258,8 @@ sub _can_launch_delayed_start_check {
 
 sub _can_launch_dependency_check {
   my $job = shift;
-  my @dep_on = defined $job->{depend_on} ? @{$job->{depend_on}} : ();
-  my @dep_start = defined $job->{depend_start} ? @{$job->{depend_start}} : ();
+  my @dep_on = defined($job->{depend_on}) ? @{$job->{depend_on}} : ();
+  my @dep_start = defined($job->{depend_start}) ? @{$job->{depend_start}} : ();
 
   foreach my $dj (@dep_on) {
     my $j = $ALL_JOBS{$dj};
@@ -300,11 +301,11 @@ sub _can_launch {
   no warnings qw(once);
 
   my $job = shift;
-  my $max_proc = defined $job->{max_proc}
+  my $max_proc = defined($job->{max_proc})
     ? $job->{max_proc} : $Forks::Super::MAX_PROC;
-  my $max_load = defined $job->{max_load}
+  my $max_load = defined($job->{max_load})
     ? $job->{max_load} : $Forks::Super::MAX_LOAD;
-  my $force = defined $job->{max_load} && $job->{force};
+  my $force = defined($job->{max_load}) && $job->{force};
 
   if ($force) {
     debug('Forks::Super::Job::_can_launch(): force attr set. launch ok')
@@ -375,7 +376,7 @@ sub launch {
 
 
   my $pid = _CORE_fork();
-  while (!defined $pid && $retries-- > 0) {
+  while (!defined($pid) && $retries-- > 0) {
     warn "Forks::Super::launch: ",
       "system fork call returned undef. Retrying ...\n";
     $Forks::Super::Job::_RETRY_PAUSE ||= 1.0;
@@ -420,7 +421,7 @@ sub launch {
 sub _postlaunch_parent {
   my ($pid, $job) = @_;
   $ALL_JOBS{$pid} = $job;
-  if (defined $job->{state} &&
+  if (defined($job->{state}) &&
       $job->{state} ne 'NEW' &&
       $job->{state} ne 'LAUNCHING' &&
       $job->{state} ne 'DEFERRED') {
@@ -450,6 +451,9 @@ sub _postlaunch_parent {
   $job->_config_parent;
   $job->run_callback('start');
   Forks::Super::Sigchld::handle_CHLD(-1);
+  if ($$ != $Forks::Super::MAIN_PID) {
+    $XSIG{CHLD}[-1] = \&Forks::Super::Sigchld::handle_CHLD;
+  }
 
   return $OVERLOAD_ENABLED ? $job : $pid;
 }
@@ -458,7 +462,23 @@ sub _postlaunch_child {
   my $job = shift;
   Forks::Super::init_child() if defined &Forks::Super::init_child;
   $job->_config_child;
-  if ($job->{style} eq 'cmd') {
+
+  if (($job->{style} eq 'cmd' || $job->{style} eq 'exec')
+      && defined($job->{fh_config}->{stdin})
+      && defined($job->{fh_config}->{sockets})) {
+
+    my $proch = Forks::Super::Job::Ipc::_gensym();
+    $job->{cmd} ||= $job->{exec};
+    my $p1 = open $proch, '|-', @{$job->{cmd}};
+    print $proch $job->{fh_config}->{stdin};
+    close $proch;
+    my $c1 = $?;
+
+    debug("Exit code of $$ was $c1 ", $c1>>8) if $job->{debug};
+    deinit_child();
+    exit $c1 >> 8;
+
+  } elsif ($job->{style} eq 'cmd') {
 
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
 
@@ -481,6 +501,7 @@ sub _postlaunch_child {
 	$c1 = Forks::Super::Job::OS::Win32::system_win32_process($job);
       }
     } else {
+
       $c1 = system( @{$job->{cmd}} );
     }
     debug("Exit code of $$ was $c1 ", $c1>>8) if $job->{debug};
@@ -494,12 +515,22 @@ sub _postlaunch_child {
   } elsif ($job->{style} eq 'sub') {
     no strict 'refs';          ## no critic (NoStrict)
 
-    my $sub = $job->{sub};
-    my @args = @{$job->{args}};
-    $sub->(@args);
 
-    debug("Job $$ subroutine call has completed") if $job->{debug};
+    my $sub = $job->{sub};
+    my @args = @{$job->{args} || []};
+    eval { $sub->(@args) };
+    my $error = $@;
+
+    if ($job->{debug}) {
+      if ($error) {
+	debug("JOB $$ SUBROUTINE CALL HAD AN ERROR: $@");
+      }
+      debug("Job $$ subroutine call has completed");
+    }
     deinit_child();
+    if ($error) {
+      die $error;
+    }
     exit 0;
   }
   return 0;
@@ -520,7 +551,7 @@ sub _launch_from_child {
 	  "Will create child of child with CORE::fork()\n";
 
     my $pid = _CORE_fork();
-    if (defined $pid && $pid == 0) {
+    if (defined($pid) && $pid == 0) {
       # child of child
       if (defined &Forks::Super::init_child) {
 	Forks::Super::init_child();
@@ -758,7 +789,7 @@ sub _resolve_names {
   foreach my $id (@in) {
     if (ref $id eq 'Forks::Super::Job') {
       push @out, $id;
-    } elsif (is_number($id) && defined $ALL_JOBS{$id}) {
+    } elsif (is_number($id) && defined($ALL_JOBS{$id})) {
       push @out, $id;
     } else {
       my @j = Forks::Super::Job::getByName($id);
@@ -793,7 +824,10 @@ sub _config_parent {
     if (defined($job->{timeout}) || defined($job->{expiration})) {
       $job->{pgid} = $job->{real_pid};
     } else {
-      $job->{pgid} = getpgrp($job->{real_pid});
+      if (not eval { $job->{pgid} = getpgrp($job->{real_pid}) }) {
+	$Forks::Super::SysInfo::CONFIG{'getpgrp'} = 0;
+	$job->{pgid} = $job->{real_pid};
+      }
     }
   }
   return;
@@ -814,7 +848,7 @@ sub _config_debug_child {
   my $job = shift;
   if ($job->{debug} && $job->{undebug}) {
     if (Forks::Super::_is_test()) {
-      debug("Disabling debugging in child $job->{pid}");
+      debug("Disabling debugging in child $$");
     }
     $Forks::Super::Debug::DEBUG = 0;
     $job->{debug} = 0;
@@ -836,7 +870,6 @@ END {
     } else {
       $SIG{CHLD} = 'IGNORE';
     }
-    register_signal_handler("CHLD", 1, undef);
 
     Forks::Super::Queue::_cleanup();
     Forks::Super::Job::Ipc::_cleanup();
@@ -852,7 +885,7 @@ sub enable_overload {
   if (!$OVERLOAD_ENABLED) {
     $OVERLOAD_ENABLED = 1;
 
-    eval <<'__enable_overload__';
+    eval {
     use overload
       '""' => sub { $_[0]->{pid} },
       '+' => sub { $_[0]->{pid} + $_[1] },
@@ -878,8 +911,8 @@ sub enable_overload {
       'int'  => sub { int $_[0]->{pid} },
       'abs'  => sub { abs $_[0]->{pid} },
       'atan2' => sub { $_[2] ? atan2($_[1],$_[0]->{pid}) : atan2($_[0]->{pid},$_[1]) };
-__enable_overload__
-;
+    };
+
     if ($@) {
       carp "Error enabling overloading on Forks::Super::Job objects: $@\n";
     } elsif ($Forks::Super::Debug::DEBUG) {
@@ -891,9 +924,7 @@ __enable_overload__
 sub disable_overload {
   if ($OVERLOAD_ENABLED) {
     $OVERLOAD_ENABLED = 0;
-    my $all_ops = join(",", map {'$_'} map {split/\s+/,$_
-					  } values %overload::ops);
-    eval "no overload $all_ops";
+    eval { no overload values %overload::ops };
   }
 }
 
@@ -915,8 +946,8 @@ sub get {
 sub getByPid {
   my $id = shift;
   if (is_number($id)) {
-    my @j = grep { (defined $_->{pid} && $_->{pid} == $id) ||
-		   (defined $_->{real_pid} && $_->{real_pid} == $id)
+    my @j = grep { (defined($_->{pid}) && $_->{pid} == $id) ||
+		   (defined($_->{real_pid}) && $_->{real_pid} == $id)
 		 } @ALL_JOBS;
     return $j[0] if @j > 0;
   }
@@ -925,7 +956,7 @@ sub getByPid {
 
 sub getByName {
   my $id = shift;
-  my @j = grep { defined $_->{name} && $_->{name} eq $id } @ALL_JOBS;
+  my @j = grep { defined($_->{name}) && $_->{name} eq $id } @ALL_JOBS;
   if (@j > 0) {
     return wantarray ? @j : $j[0];
   }
@@ -954,7 +985,7 @@ sub count_active_processes {
       $_->{state} eq 'ACTIVE'
 	and $_->{pgid} == $optional_pgid } @ALL_JOBS;
   }
-  return scalar grep { defined $_->{state}
+  return scalar grep { defined($_->{state})
 			 && $_->{state} eq 'ACTIVE' } @ALL_JOBS;
 }
 
@@ -1014,7 +1045,6 @@ sub count_processes {
 }
 
 sub init_child {
-  Forks::Super::Sighandler::init_child();
   Forks::Super::Job::Ipc::init_child();
   return;
 }
@@ -1048,7 +1078,7 @@ sub dispose {
 
     foreach my $attr ('f_in','f_out','f_err') {
       my $file = $job->{fh_config} && $job->{fh_config}->{$attr};
-      if (defined $file && -f $file) {
+      if (defined($file) && -f $file) {
 	$! = 0;
 	if (unlink $file) {
 	  delete $Forks::Super::Job::Ipc::IPC_FILES{$file};
@@ -1099,7 +1129,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.48
+0.49
 
 =head1 SYNOPSIS
 

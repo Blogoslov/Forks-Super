@@ -16,9 +16,10 @@ lib/Forks/Super/Tie/IPCFileHandle.pm
 lib/Forks/Super/Tie/IPCSocketHandle.pm
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
-lib/Forks/Super/Sighandler.pm
 lib/Forks/Super/Util.pm
 lib/Forks/Super/Wait.pm
+lib/Signals/XSIG.pm                       # v0.10 bundled with v0.49
+lib/Signals/XSIG/Default.pm               # v0.10 bundled with v0.49
 Makefile.PL
 MANIFEST
 README
@@ -66,6 +67,7 @@ t/41b-filehandles.t
 t/41c-filehandles.t
 t/41d-filehandles.t
 t/41f-filehandles.t
+t/41g-filehandles.t
 t/42a-filehandles.t
 t/42b-filehandles.t
 t/42c-filehandles.t

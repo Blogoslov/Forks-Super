@@ -47,11 +47,11 @@ $SIG{CHLD} = \&child_signal_hijacker;
 $SIGNAL::TIME = Time::HiRes::time();
 
 my $pid = fork();
-if (defined $pid && $pid == 0) {
+if (defined($pid) && $pid == 0) {
   sleep 2;
   exit 0;
 }
-ok(defined $pid && isValidPid($pid), "$$\\valid pid $pid");
+ok(defined($pid) && isValidPid($pid), "$$\\valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 
@@ -59,7 +59,7 @@ ok($j->{state} eq "ACTIVE", "active state");
 # let's set up a couple more processes to send SIGCHLD
 #for my $n (3,4,5,6) {
 #  my $pidn = fork();
-#  if (defined $pidn && $pidn == 0) {
+#  if (defined($pidn) && $pidn == 0) {
 #    sleep $n;
 #    exit 0;
 #  }
@@ -92,7 +92,7 @@ ok($j->{state} eq "COMPLETE", "job state is COMPLETE");
 SKIP: {
   skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
-  # XXXXXX - pass test (1) and fail test (2) would be ok
+  # XXX - pass test (1) and fail test (2) would be ok
   ok(defined $LAST::COMPLETE{$j}, 
      "job caught in SIGCHLD handler/$j/" . $j->{pid}); ### 5 ###
   ok($LAST::COMPLETE eq $j, 
@@ -114,11 +114,11 @@ ok($j->{reaped} - $j->{end} > 0, "reap occurred after job completed");
 # try  Forks::Super::pause  for uninterruptible sleep
 
 $pid = fork();
-if (defined $pid && $pid == 0) {
+if (defined($pid) && $pid == 0) {
   sleep 2;
   exit 0;
 }
-ok(defined $pid && isValidPid($pid), "valid pid $pid");
+ok(defined($pid) && isValidPid($pid), "valid pid $pid");
 $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 $t = Time::HiRes::time();
@@ -130,7 +130,7 @@ ok($j->{state} eq 'COMPLETE', "complete state " . $j->{state});
 SKIP: {
   skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
-  # XXXXXX - pass test (1) and fail test (2) would be ok
+  # XXX - pass test (1) and fail test (2) would be ok
   ok(defined $LAST::COMPLETE{$j}, 
      "job in SIGCHLD handler/$j/" . $j->{pid});    ### 15 ###
   ok($LAST::COMPLETE eq $j,

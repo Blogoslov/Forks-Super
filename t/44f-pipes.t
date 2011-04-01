@@ -15,7 +15,8 @@ $| = 1;
 sub _read_pipe_that_might_be_a_socket {
   # on MSWin32, we almost never use pipes
   my $handle = shift;
-  return $Forks::Super::Job::Ipc::USE_TIE_SH || !Forks::Super::Util::is_socket($handle)
+  return $Forks::Super::Job::Ipc::USE_TIE_SH
+		 || !Forks::Super::Util::is_socket($handle)
       ? <$handle>
       : Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
@@ -71,14 +72,14 @@ my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ],
 		 child_fh => "in,out,err,pipe" };
 
 ok(isValidPid($pid), "pid $pid valid");
-ok(defined $pid->{child_stdin} 
-   && defined fileno($pid->{child_stdin}),
+ok(defined($pid->{child_stdin}) 
+   && defined(fileno($pid->{child_stdin})),
    "found stdin fh");
-ok(defined $pid->{child_stdout} 
-   && defined fileno($pid->{child_stdout}),
+ok(defined($pid->{child_stdout})
+   && defined(fileno($pid->{child_stdout})),
    "found stdout fh");
-ok(defined $pid->{child_stderr} 
-   && defined fileno($pid->{child_stderr}),
+ok(defined($pid->{child_stderr}) 
+   && defined(fileno($pid->{child_stderr})),
    "found stderr fh");
 SKIP: {
   if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {

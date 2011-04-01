@@ -62,8 +62,6 @@ sub repeater {
     }
     close $F_IN;
   }
-  close STDOUT;
-  close STDERR;
 }
 
 #######################################################

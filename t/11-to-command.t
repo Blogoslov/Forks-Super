@@ -25,7 +25,8 @@ my $pid = fork {cmd => \@cmd };
 ok(isValidPid($pid), "$$\\fork to \@command successful");
 my $p = Forks::Super::wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child STATUS \$? == 0");
+ok($? == 0, "child STATUS \$? == 0")
+   or diag("Child status was $?, expected 0");
 my $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Whirled $pid";

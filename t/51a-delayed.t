@@ -9,6 +9,8 @@ use warnings;
 # go directly to the job queue.
 #
 
+our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
+
 $Forks::Super::ON_BUSY = "block";
 
 my $now = Time::HiRes::time();
@@ -24,10 +26,13 @@ ok($j1->{state} eq "DEFERRED", "deferred job has DEFERRED state");
 ok($j2->{state} eq "DEFERRED", "deferred job has DEFERRED state");
 ok(!defined $j1->{start}, "deferred job has not started");
 waitall;
-ok($j1->{start} >= $now + 5, "deferred job started after delay");
-ok($j2->{start} >= $future, "deferred job started after delay");
-ok($j1->{start} - $j1->{created} >= 5, "job start time after creation time");
+ok($j1->{start} + $TOL >= $now + 5,
+   "deferred job started after delay");
+ok($j2->{start} + $TOL >= $future, 
+   "deferred job started after delay");
+ok($j1->{start} - $j1->{created} >= 5 - $TOL,
+   "job start time after creation time");
 my $j2_diff = $j2->{start} - $j2->{created};
-ok($j2_diff >= 8.95,                     ### 9 ###
+ok($j2_diff + $TOL >= 8.95,                     ### 9 ###
    "j2 took ${j2_diff}s between creation/start, expected 10s diff");
 
