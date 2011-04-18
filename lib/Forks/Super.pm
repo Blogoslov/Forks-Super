@@ -40,7 +40,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.50';
+our $VERSION = '0.51';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -553,7 +553,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.50
+Version 0.51
 
 =head1 SYNOPSIS
 
@@ -1949,6 +1949,16 @@ their output regularly is beyond the scope of this module.
 
 On an otherwise non-blocking filehandle, waits up to the
 specified number of seconds for input to become available.
+
+The C<< <> >> operator has been overloaded for the 
+L<Forks::Super::Job|Forks::Super::Job> package such that 
+calling
+
+    <$job>
+
+is equivalent to calling
+
+    scalar $job->read_stdout()
 
 =back
 

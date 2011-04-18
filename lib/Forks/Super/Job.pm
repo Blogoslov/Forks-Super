@@ -15,6 +15,7 @@ use Forks::Super::Job::OS;
 use Forks::Super::Job::Callback qw(run_callback);
 use Signals::XSIG;
 use Exporter;
+use POSIX ':sys_wait_h';
 use Carp;
 use IO::Handle;
 use strict;
@@ -22,7 +23,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.50';
+our $VERSION = '0.51';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -119,6 +120,9 @@ sub waitpid {
 
 sub wait {
   my ($job, $timeout) = @_;
+  if (defined($timeout) && $timeout == 0) { # ZZZ
+    return Forks::Super::Wait::waitpid($job->{pid}, &WNOHANG);
+  }
   return Forks::Super::Wait::waitpid($job->{pid}, 0, $timeout || 0);
 }
 
@@ -909,31 +913,49 @@ sub enable_overload {
     $OVERLOAD_ENABLED = 1;
 
     eval {
-    use overload
-      '""' => sub { $_[0]->{pid} },
-      '+' => sub { $_[0]->{pid} + $_[1] },
-      '*' => sub { $_[0]->{pid} * $_[1] },
-      '&' => sub { $_[0]->{pid} & $_[1] },
-      '|' => sub { $_[0]->{pid} | $_[1] },
-      '^' => sub { $_[0]->{pid} ^ $_[1] },
-      '~' => sub { ~$_[0]->{pid} },         # since 0.37
-      '<=>' => sub { $_[2] ? $_[1] <=> $_[0]->{pid} : $_[0]->{pid} <=> $_[1] },
-      'cmp' => sub { $_[2] ? $_[1] cmp $_[0]->{pid} : $_[0]->{pid} cmp $_[1] },
-      '-'   => sub { $_[2] ? $_[1]  -  $_[0]->{pid} : $_[0]->{pid}  -  $_[1] },
-      '/'   => sub { $_[2] ? $_[1]  /  $_[0]->{pid} : $_[0]->{pid}  /  $_[1] },
-      '%'   => sub { $_[2] ? $_[1]  %  $_[0]->{pid} : $_[0]->{pid}  %  $_[1] },
-      '**'  => sub { $_[2] ? $_[1]  ** $_[0]->{pid} : $_[0]->{pid}  ** $_[1] },
-      '<<'  => sub { $_[2] ? $_[1]  << $_[0]->{pid} : $_[0]->{pid}  << $_[1] },
-      '>>'  => sub { $_[2] ? $_[1]  >> $_[0]->{pid} : $_[0]->{pid}  >> $_[1] },
-      'x'   => sub { $_[2] ? $_[1]  x  $_[0]->{pid} : $_[0]->{pid}  x  $_[1] },
-      'cos'  => sub { cos $_[0]->{pid} },
-      'sin'  => sub { sin $_[0]->{pid} },
-      'exp'  => sub { exp $_[0]->{pid} },
-      'log'  => sub { log $_[0]->{pid} },
-      'sqrt' => sub { sqrt $_[0]->{pid} },
-      'int'  => sub { int $_[0]->{pid} },
-      'abs'  => sub { abs $_[0]->{pid} },
-      'atan2' => sub { $_[2] ? atan2($_[1],$_[0]->{pid}) : atan2($_[0]->{pid},$_[1]) };
+      use overload
+	'""' => sub { $_[0]->{pid} },
+	'+' => sub { $_[0]->{pid} + $_[1] },
+        '*' => sub { $_[0]->{pid} * $_[1] },
+        '&' => sub { $_[0]->{pid} & $_[1] },
+        '|' => sub { $_[0]->{pid} | $_[1] },
+        '^' => sub { $_[0]->{pid} ^ $_[1] },
+        '~' => sub { ~$_[0]->{pid} },         # since 0.37
+        '<=>' => sub { $_[2] ? $_[1] <=> $_[0]->{pid} 
+			     : $_[0]->{pid} <=> $_[1] },
+        'cmp' => sub { $_[2] ? $_[1] cmp $_[0]->{pid} 
+			     : $_[0]->{pid} cmp $_[1] },
+        '-'   => sub { $_[2] ? $_[1]  -  $_[0]->{pid} 
+			     : $_[0]->{pid}  -  $_[1] },
+        '/'   => sub { $_[2] ? $_[1]  /  $_[0]->{pid} 
+			     : $_[0]->{pid}  /  $_[1] },
+        '%'   => sub { $_[2] ? $_[1]  %  $_[0]->{pid} 
+			     : $_[0]->{pid}  %  $_[1] },
+        '**'  => sub { $_[2] ? $_[1]  ** $_[0]->{pid} 
+			     : $_[0]->{pid}  ** $_[1] },
+        '<<'  => sub { $_[2] ? $_[1]  << $_[0]->{pid} 
+			     : $_[0]->{pid}  << $_[1] },
+        '>>'  => sub { $_[2] ? $_[1]  >> $_[0]->{pid} 
+			     : $_[0]->{pid}  >> $_[1] },
+        'x'   => sub { $_[2] ? $_[1]  x  $_[0]->{pid} 
+			     : $_[0]->{pid}  x  $_[1] },
+        'cos'  => sub { cos $_[0]->{pid} },
+        'sin'  => sub { sin $_[0]->{pid} },
+        'exp'  => sub { exp $_[0]->{pid} },
+        'log'  => sub { log $_[0]->{pid} },
+        'sqrt' => sub { sqrt $_[0]->{pid} },
+        'int'  => sub { int $_[0]->{pid} },
+        'abs'  => sub { abs $_[0]->{pid} },
+        'atan2' => sub { $_[2] ? atan2($_[1],$_[0]->{pid}) 
+			       : atan2($_[0]->{pid},$_[1]) };
+
+      # XXX - why doesn't it work when I include
+      #       '<>' => sub { ... }
+      #    in the  use overload  block?
+      no strict 'refs';
+      *{'Forks::Super::Job::(<>'} = sub {
+	return $_[0]->read_stdout();
+      };
     };
 
     if ($@) {
@@ -1152,7 +1174,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.50
+0.51
 
 =head1 SYNOPSIS
 
@@ -1450,6 +1472,11 @@ process (the process that spawned the background job).
 Convenience method to wait until or test whether the specified
 job has completed. See L<Forks::Super::waitpid|Forks::Super/"waitpid">.
 
+The calls C<< $job->wait >> and C<< $job->wait() >> will block until a 
+job has completed. But C<< $job->wait(0) >> will call C<wait> with
+a timeout of zero seconds, so it will be equivalent to a call of
+C<< waitpid $job, &WNOHANG >>.
+
 =back
 
 =head3 kill
@@ -1716,6 +1743,17 @@ C<Forks::Super::Job> object.
 
     $job_or_pid->{real_pid}
     $job_or_pid->suspend
+
+Since v0.51, the C<< <> >> iteration operator has been overloaded
+for the C<Forks::Super::Job> package. It can be used to read
+one line of output from a background job's standard output,
+and to allow you to treat the background job object
+syntactically like a readable filehandle.
+
+    my $job = fork { cmd => $command };
+    while (<$job>) {
+        print "Output from $job: $_\n";
+    }
 
 Since v0.41, this feature is enabled by default.
 

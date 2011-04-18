@@ -71,7 +71,7 @@ sub OPEN {
     }
     $$self->{opened} = ($$self->{OPENED} = $result) && Time::HiRes::time();
     $$self->{closed} = 1 if !$result;
-    $$self->{open_error} = $new_err = $_;
+    $$self->{open_error} = $new_err = $!;
   }
   $! = $new_err || $old_err;
   return $result;

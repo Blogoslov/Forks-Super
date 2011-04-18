@@ -133,10 +133,13 @@ Possible TODOs:
 	    Strawberry 43d, 44d sometimes time out
 	    Performance? Is NO_TIES=1 version of some tests faster?
 
-    ___ Forks::Super::Job can overload "<>" (iteration) operator,
+    _X_ Forks::Super::Job can overload "<>" (iteration) operator,
 	invoking $job->read_stdout(). Beware of overload bug, though:
 	"Even in list context, the iterator is currently called only
 	once and with scalar context."
+	___ Actually, maybe it can't. Can't define even the buggy
+            version of Forks::Super::Job::(<> except with some
+	    crazy machinations.
 
     ___ test suspend/resume cycles where child has SIGSTOP/CONT handlers
 

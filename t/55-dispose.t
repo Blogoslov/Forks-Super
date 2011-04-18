@@ -42,10 +42,11 @@ ok(exists $Forks::Super::Job::ALL_JOBS{$j->{real_pid}},
    "job present in \%ALL_JOBS before dispose");
 waitpid $j, 0;
 ok(4 << 8 == $j->{status}, "job finished");
-my $q = $j->read_stdout();
+
+#my $q = $j->read_stdout();
+my $q = <$j>;
 ok($q eq "foo fee\n", "stdout accessible before dispose")
   or diag("\$q = $q");
-
 
 my $pid = $j->{real_pid};
 $j->dispose();

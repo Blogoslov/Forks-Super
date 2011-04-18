@@ -14,6 +14,7 @@ lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
 lib/Forks/Super/Tie/IPCFileHandle.pm
 lib/Forks/Super/Tie/IPCSocketHandle.pm
+lib/Forks/Super/Tie/IPCPipeHandle.pm
 lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Util.pm
@@ -68,6 +69,7 @@ t/41c-filehandles.t
 t/41d-filehandles.t
 t/41f-filehandles.t
 t/41g-filehandles.t
+t/41j-filehandles.t
 t/42a-filehandles.t
 t/42b-filehandles.t
 t/42c-filehandles.t

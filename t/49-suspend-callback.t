@@ -113,8 +113,10 @@ SKIP: {
   my $t1 = 0.5 * ($t0 + Time::HiRes::time());
   my $job = Forks::Super::Job::get($pid);
 
-  local $SIG{STOP} = $SIG{TSTP} 
-	= sub { croak "SIG$_[0] received in PARENT process" };
+  local $SIG{STOP} = sub { croak "SIG$_[0] received in PARENT process" };
+  if (exists $SIG{TSTP}) {
+    $SIG{TSTP} = $SIG{STOP};
+  }
 
   # sub should proceed normally for 5 seconds
   # then process should be suspended
