@@ -20,11 +20,6 @@
 #     open $fh, ...
 #
 
-
-# as of Forks::Super v0.35 this package is still being
-# improved and evaluated, and is not being referenced by
-# any other part of this module. Maybe in v0.47 we will turn it on.
-
 package Forks::Super::Tie::IPCFileHandle;
 
 use Exporter;

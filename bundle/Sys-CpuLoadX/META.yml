@@ -1,6 +1,6 @@
 ---
 name: Sys-CpuLoadX
-version: 0.02
+version: 0.03
 author:
   - "Marty O'Brien <mob@cpan.org>"
 abstract: a module to retrieve system load averages.
@@ -16,7 +16,7 @@ recommends:
 provides:
   Sys::CpuLoadX:
     file: lib/Sys/CpuLoadX.pm
-    version: 0.02
+    version: 0.03
 generated_by: Module::Build version 0.280802
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html

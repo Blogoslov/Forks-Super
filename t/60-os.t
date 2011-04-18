@@ -1,6 +1,6 @@
 use Forks::Super ':test';
 use Forks::Super::Config ':all';
-use Test::More tests => 5;
+use Test::More tests => 6;
 use strict;
 use warnings;
 
@@ -43,22 +43,22 @@ SKIP: {
 
 SKIP: {
   if (!Forks::Super::Config::CONFIG_module("Sys::CpuAffinity")) {
-    skip "cpu affinity test: requires Sys::CpuAffinity", 1;
+    skip "cpu affinity test: requires Sys::CpuAffinity", 2;
   }
 
   my $np = Sys::CpuAffinity::getNumCpus();
   if ($np == 1) {
-    skip "cpu affinity test: single-core system detected", 1;
+    skip "cpu affinity test: single-core system detected", 2;
   }
   if ($np <= 0) {
-    skip "cpu affinity test: could not detect number of processors!", 1;
+    skip "cpu affinity test: could not detect number of processors!", 2;
   }
   if ($^O =~ /darwin/i || $^O =~ /aix/i || $^O =~ /^hp/i) {
-    skip "cpu affinity test: unsupported or poorly supported platform", 1;
+    skip "cpu affinity test: unsupported or poorly supported platform", 2;
   }
-  if (Sys::CpuAffinity::getAffinity($$) <= 0) {
+  if ((Sys::CpuAffinity::getAffinity($$)||0) <= 0) {
     skip "cpu affinity test: "
-      . "Sys::CpuAffinity::getAffinity() not functioning on $^O/$]", 1;
+      . "Sys::CpuAffinity::getAffinity() not functioning on $^O/$]", 2;
   }
 
   my $pid3 = fork { sub => sub { sleep 10 }, cpu_affinity => 0x02 };
@@ -68,6 +68,15 @@ SKIP: {
     sleep 5;
     my $affinity = Sys::CpuAffinity::getAffinity($pid3);
     ok($affinity == 0x02, "set cpu affinity $affinity==2");
+  }
+
+  my $pid4 = fork { sub => sub { sleep 10 }, cpu_affinity => [ 0 ] };
+  if (!isValidPid($pid4)) {
+    ok(0, "fork failed with cpu_affinity => \\\@list option");
+  } else {
+    sleep 5;
+    my $affinity = Sys::CpuAffinity::getAffinity($pid4);
+    ok($affinity == 1, "set cpu affinity $affinity==1 with arrayref");
   }
 }
 

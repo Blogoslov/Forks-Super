@@ -14,9 +14,7 @@ $| = 1;
 
 sub _read_pipe_that_might_be_a_socket {
   # on MSWin32, we almost never use pipes.
-  # When we bring pipes into the tied filehandle fold (i.e., when
-  # Forks::Super::Tie::IPCPipeHandle class is ready), we can really
-  # clean up the read handle interfaces.
+
   my $handle = shift;
   return $Forks::Super::Job::Ipc::USE_TIE_SH 
 		|| !Forks::Super::Util::is_socket($handle)

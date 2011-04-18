@@ -17,14 +17,10 @@ Possible TODOs:
         _X_ don't know specifically what I did, but 
             PERL_SIGNALS=unsafe make test/fasttest are usually successful now,
 	    at least for v0.49
+	    
 
     _O_ Make Forks::Super usable with v5.6.
 	My 5.6 test environments are getting difficult to maintain.
-
-    _x_	Make CONFIG{filehandles} meaningful. If we set CONFIG{filehandles}=0,
-	then all IPC should be through sockets or pipes.
-	_X_ Document? Come up with a better way to set this feature?
-	    The way to set this feature is $ENV{IPC_DIR} = "undef";
 
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. What can be done
@@ -83,19 +79,6 @@ Possible TODOs:
         _X_ Removes entry from @ALL_JOBS, %ALL_JOBS
 	   ___ move to @ARCHIVED_JOBS, %ARCHIVED_JOBS?
 
-    _x_ support stdin=>$input + child_fh=>socket or
-                stdin=>$input + CONFIG(filehandles)==0
-        _X_ can pass IPC_DIR=undef to test
-	___ t/25
-	    Works from command line, make test, not from make fasttest?
-	    Works when PGID==PPID, fails when PGID!=PPID
-	    Works now when we don't close STDIN. (except on MSWin32)
-	_X_ t/42d
-	_X_ t/42i
-	_X_ For cmd/exec style fork's without file communication,
-            we need to convert to a popen style and print $stdin
-	    to the proc's input and then close the proc?
-
     ___ POSIX::RT::Timer as possible replacement for get/set itimer?
 
     _-_ daemonize => 1  option to close/reopen STDxxx fhs to /dev/null,
@@ -114,20 +97,6 @@ Possible TODOs:
 	    what is the grandchild's PID ... 
         ___ Use Proc::Daemon if available? Any::Daemon
 	___ Maybe this is something for 1.0 ...
-
-    ___ Require Signals::XSIG. Bundle it?
-        _x_ The Default.pm module is not quite mature. Can't require
-            Signals::XSIG while those tests are still part of the build.
-	    _X_ Though really, all the outstanding issues with Signals::XSIG
-		are with the default signal handling behavior; this stuff is
-		not important to Forks::Super. Bundling would be ok.
-        _X_ Not practical to add functionality as workaround for Signals::XSIG
-            not being available. Hard bundling would be ok, though. Or
-	    copying the code into Forks::Super::Sighandler.
-	___ test program were caller also uses a SIGALRM handler
-	___ Replacing Forks::Super::Sighandler with Signals::XSIG
-	    breaks Solaris? 
-	    ___ See how solaris does with t/11b.tt
 
     ___ make SysInfo.pm.PL capable of managing config for multiple $^O,$]?
 	Or more generally, what if the installed SysInfo.pm is set up for
@@ -156,8 +125,9 @@ Possible TODOs:
 	to know whether he was using F::S and whether F::S was using 
 	sockets.
 
-	___ Until we bring pipes into the fold, too, some of the
+	_X_ Until we bring pipes into the fold, too, some of the
 	    read input constructions are getting creepier (see 44a, 44b)
+	    _X_ Meh. This isn't really true. Without tied sockethandles,
 
 	_X_ Outstanding issues:
 	    Strawberry 43d, 44d sometimes time out
@@ -168,20 +138,12 @@ Possible TODOs:
 	"Even in list context, the iterator is currently called only
 	once and with scalar context."
 
-    _X_ Investigate consequences of calling 'exit' inside child sub with IPC.
-	Don't do it with sockets.
-
-    _X_ Ipc::_preconfig_fh. Don't create $IPC_DIR unless we will need the
-	IPC files.
-
-    _X_ Ipc: track down, fix 2-arg _close calls (there was only one)
-
     ___ test suspend/resume cycles where child has SIGSTOP/CONT handlers
 
-    ___ "Don't exit from child sub with socket IPC" -- can we address this?
+    _x_ "Don't exit from child sub with socket IPC" -- can we address this?
 	A child-specific END{} block in Forks/Super/Job.pm ?
 
-    ___ Forks::Super::Sigchld notes in a comment that dates back to v0.16
+    _X_ Forks::Super::Sigchld notes in a comment that dates back to v0.16
         that Cygwin might not clean up deferred jobs correctly. Is this
 	still an issue? Doesn't look like it ...
 
@@ -191,3 +153,11 @@ Possible TODOs:
     ___ Understand why Windows hack needed for socket write (see 
 	FSJ::Ipc::write_stdin, FST::IPCSocketHandle::trivial_pause).
 	Is there a better solution?
+
+    ___ Upgrade bundles Sys::CpuAffinity to 1.00.
+
+    _X_ dir => directory  option to run the child process from
+	a particular directory.
+	Child dies if not able to change to the specificed directory.
+
+    _X_ allow cpu_affinity => [ @list ] style

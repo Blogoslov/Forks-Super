@@ -18,7 +18,7 @@ my $pid = fork {
     print STDOUT "bar\n";
     sleep 5;
     print STDOUT "baz\n";
-    exit 0 unless Forks::Super::Util::is_socket(*STDOUT);
+    exit 0; # unless Forks::Super::Util::is_socket(*STDOUT);
   }
 };
 
@@ -55,7 +55,7 @@ $out = Forks::Super::read_stdout($pid, "block" => 1);
 my $t4 = Time::HiRes::time() - $t0;
 my $t43 = $t4 - $t3;
 ok($out =~ /^baz/, "successful blocking read on stdout");
-ok($t43 > 3.5, "read blocked stdout ${t43}s, expected ~5s");
+ok($t43 > 3.25, "read blocked stdout ${t43}s, expected ~5s");
 
 #### no more input on STDOUT or STDERR
 

@@ -39,8 +39,6 @@ sub repeater {
 
     # not using pipes on MSWin32 -- using sockets instead
     while (defined ($_ = _read_pipe_that_might_be_a_socket(*STDIN))) {
-	#Forks::Super::Util::is_socket(*STDIN) 
-	#   ? _read_socket(*STDIN) : <STDIN>)) {
 
       if ($Forks::Super::DEBUG) {
 	$input = substr($_,0,-1);
@@ -78,7 +76,7 @@ sub repeater {
 
 # test join, read_stdout
 
-my $pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 10,
+my $pid = fork { sub => \&repeater , args => [ 2, 1 ] , timeout => 12,
 		child_fh => [ "in", "out", "join", "pipe" ] };
 ok(isValidPid($pid), "started job with join");
 

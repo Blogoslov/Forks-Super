@@ -71,7 +71,7 @@ $Forks::Super::ON_BUSY = "fail";
 my $pid = fork { sub => 
 	sub { # a subroutine that will make the processor busy for a while
 	  my $z=0;
-	  my $timeout = time + ($^O eq 'MSWin32' ? 10 : 30);
+	  my $timeout = time + ($^O eq 'MSWin32' ? 15 : 45);
 	  while (time < $timeout) {
 	    $z += rand()-rand() 
 	  }
@@ -89,9 +89,9 @@ SKIP: {
     $load = Forks::Super::Job::get_cpu_load();
     print STDERR "Cpu load: $load\n";
     last if $load > 0.1;
-    sleep 1;
+    sleep $i+1;
   }
-  if ($load == 0.0) {
+  if ($load < 0.01) {
     skip "test could not generate a cpu load on this machine", 1;
   }
   $pid2 = fork { sub => sub { sleep 4 } };

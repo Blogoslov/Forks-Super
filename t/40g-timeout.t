@@ -127,6 +127,7 @@ SKIP: {
   $p = waitpid -$ppgid, 0;
   ok($p == -1, "waitpid on parent pgid returns -1");
   $p = waitpid -$pgid, 0;
-  ok($p == $pid, "waitpid on child pgid returns child pid");
+  ok($p == $pid, "waitpid on child pgid returns child pid")
+	or diag("waitpid returned $p, expected $pid");
 } # end SKIP
 

@@ -54,6 +54,13 @@
 #  TEST_VERBOSE          if true, use verbose test harness [like -v flag]
 #
 
+BEGIN {
+  if ($^O eq 'MSWin32' && $ENV{IPC_DIR} eq 'undef') {
+    delete $ENV{IPC_DIR};
+    push @ARGV, "-E", "undef";
+  }
+}
+
 use lib qw(blib/lib blib/arch lib .);
 use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
 use IO::Handle;
@@ -279,8 +286,10 @@ sub launch_test_file {
     $test_harness .= ",'$_'" foreach @use_libs;
     $test_harness .= ")";
     if ($] < 5.007) {
-      @cmd = ($^X, "-Iblib/lib", "-Iblib/arch", "-e",
-	      'use Test::Harness qw(&runtests $verbose);$verbose=0;runtests @ARGV',
+      @cmd = ($^X, '-Iblib/lib', '-Iblib/arch', 
+	      '-e', 'use Test::Harness qw(&runtests $verbose);',
+	      '-e', '$verbose=0;', 
+	      '-e', 'runtests @ARGV',
 	      $test_file);
     } else {
       @cmd = ($^X, "-MExtUtils::Command::MM", "-e",
@@ -639,7 +648,7 @@ sub maxproc_initial {
   }
   my @mask = Sys::CpuAffinity::getAffinity($$);
   if (@mask < $n) {
-    $n = @mask;
+    $n = @mask || $n;
   }
   if ($n == 1) {
     return 4;

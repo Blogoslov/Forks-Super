@@ -34,7 +34,9 @@ sub import {
       s/^\d+\. //;
       s/^SIG//;
       my ($sig, $num, $behavior) = /^(\w+)\s+\[(\d*)\]\s+=>\s+(.+)/;
-      $DEFAULT_BEHAVIOR{$sig} = $behavior;
+      if (defined $sig) {
+	$DEFAULT_BEHAVIOR{$sig} = $behavior;
+      }
     }
   }
 }

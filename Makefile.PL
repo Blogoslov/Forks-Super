@@ -27,7 +27,7 @@ our $FILES_TO_CLEAN
 		 lib/Forks/Super/SysInfo.pm t/out/spawn*
 		 t/out/sigchld.debug t/out/test* t/out/.lock-*
 		 t/out/49.* t/out/debug1-* t/out/limits.*
-		 t/out/ipc* t/out/new-ipc* *.stackdump
+		 t/out/ipc* t/out/new-ipc* *.stackdump t/dir*
 		 lib/_Inline *.stackdump _Inline);
 
 our %META_MERGE

@@ -22,7 +22,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.49';
+our $VERSION = '0.50';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -146,7 +146,7 @@ sub status {
 sub toString {
   my $job = shift;
   my @to_display = qw(pid state create);
-  foreach my $attr (qw(real_pid style cmd exec sub args start end reaped
+  foreach my $attr (qw(real_pid style cmd exec sub args dir start end reaped
 		       status closure pgid child_fh queue_priority
 		       timeout expiration)) {
     push @to_display, $attr if defined $job->{$attr};
@@ -518,9 +518,15 @@ sub _postlaunch_child {
 
     my $sub = $job->{sub};
     my @args = @{$job->{args} || []};
-    eval { $sub->(@args) };
-    my $error = $@;
 
+    my $error;
+    eval {
+      $job->{_cleanup_code} = \&deinit_child;
+      $sub->(@args);
+      delete $job->{_cleanup_code};
+    };
+    $error = $@;
+ 
     if ($job->{debug}) {
       if ($error) {
 	debug("JOB $$ SUBROUTINE CALL HAD AN ERROR: $@");
@@ -841,6 +847,7 @@ sub _config_child {
   $job->_config_timeout_child;
   $job->_config_os_child;
   $job->_config_fh_child;
+  $job->_config_dir;
   return;
 }
 
@@ -852,6 +859,17 @@ sub _config_debug_child {
     }
     $Forks::Super::Debug::DEBUG = 0;
     $job->{debug} = 0;
+  }
+}
+
+sub _config_dir {
+  my $job = shift;
+  $job->{dir} ||= $job->{chdir};
+  if (defined $job->{dir}) {
+    if (!chdir $job->{dir}) {
+      croak "Forks::Super::Job::launch(): ",
+	"Invalid \"dir\" option: \"$job->{dir}\" $!\n";
+    }
   }
 }
 
@@ -874,6 +892,11 @@ END {
     Forks::Super::Queue::_cleanup();
     Forks::Super::Job::Ipc::_cleanup();
   } else {
+    if (defined($Forks::Super::Job::self)
+       && defined($Forks::Super::Job::self->{_cleanup_code})) {
+      no strict 'refs';
+      $Forks::Super::Job::self->{_cleanup_code}->();
+    }
     Forks::Super::Job::Timeout::_cleanup_child();
   }
 }
@@ -1129,7 +1152,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.49
+0.50
 
 =head1 SYNOPSIS
 

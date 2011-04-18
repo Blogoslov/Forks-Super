@@ -92,7 +92,7 @@ sub set_cpu_affinity {
   my ($job) = @_;
   my $n = $job->{cpu_affinity};
 
-  if ($n == 0) {
+  if ($n == 0 || (ref($n) eq 'ARRAY' && @$n==0)) {
     carp "Forks::Super::Job::_config_os_child(): ",
       "desired cpu affinity set to zero. Is that what you really want?\n";
   }
@@ -108,19 +108,31 @@ sub set_cpu_affinity {
 
 sub validate_cpu_affinity {
   my $job = shift;
-  my $bitmask = $job->{cpu_affinity};
+  $job->{_cpu_affinity} = $job->{cpu_affinity};
   my $np = get_number_of_processors();
   $np = 0 if $np <= 0;
-  if ($np > 0 && $bitmask >= (2 ** $np)) {
-    $job->{_cpu_affinity} = $bitmask;
-    $bitmask &= (2 ** $np) - 1;
-    $job->{cpu_affinity} = $bitmask;
-  }
-  if ($bitmask <= 0) {
-    carp "Forks::Super::Job::_config_os_child: ",
-      "desired cpu affinity $bitmask does not specify any of the ",
-      "valid $np processors that seem to be available on your system.\n";
-    return 0;
+  if (ref($job->{cpu_affinity}) eq 'ARRAY') {
+    my @cpu_list = grep { $_ >= 0 && $_ < $np } @{$job->{cpu_affinity}};
+    if (@cpu_list == 0) {
+      carp "Forks::Super::Job::_config_os_child: ",
+	"desired cpu affinity [ @{$job->{cpu_affinity}} ] ",
+	"does not specify any of the valid $np processors ",
+	"available on your system.\n";
+      return 0;
+    }
+    if (@cpu_list < @{$job->{cpu_affinity}}) {
+      $job->{cpu_affinity} = [ @cpu_list ];
+    }
+  } else {
+    if ($np > 0 && $job->{cpu_affinity} >= (2 ** $np)) {
+      $job->{cpu_affinity} &= (2 ** $np) - 1;
+    }
+    if ($job->{cpu_affinity} <= 0) {
+      carp "Forks::Super::Job::_config_os_child: ",
+	"desired cpu affinity $job->{_cpu_affinity} does not specify any of the ",
+	  "valid $np processors that seem to be available on your system.\n";
+      return 0;
+    }
   }
   return 1;
 }

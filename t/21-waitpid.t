@@ -71,6 +71,7 @@ $Forks::Super::MAX_PROC = 100;
 my @rand = map { rand } 0..19;
 my $t0 = Time::HiRes::time();
 for (my $i=0; $i<20; $i++) {
+  # OpenBSD failure point?
   my $pid = fork { sub => sub {my $d=int(2+8*$rand[$i]); sleep $d; exit $i} };
   ok(isValidPid($pid), "Launched $pid"); ### 13-32 ###
   $x{$pid} = $i;

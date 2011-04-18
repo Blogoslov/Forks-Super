@@ -40,12 +40,13 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.49';
+our $VERSION = '0.50';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
 our ($DONT_CLEANUP, $CHILD_FORK_OK, $QUEUE_INTERRUPT, $PKG_INITIALIZED);
 our (%IMPORT, $LAST_JOB, $LAST_JOB_ID, %BASTARD_DATA);
+push @Devel::DumpTrace::EXCLUDE_PATTERN, '^Signals::XSIG';
 
 sub import {
   my ($class,@args) = @_;
@@ -552,7 +553,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.49
+Version 0.50
 
 =head1 SYNOPSIS
 
@@ -590,6 +591,10 @@ Version 0.49
                   timeout => 30 };            # kill child if not done in 30s
     $pid = fork { sub => $subRef , args => [ @args ],
                   expiration => 1260000000 }; # complete by 8AM Dec 5, 2009 UTC
+
+    # run a child process starting from a different directory
+    $pid = fork { dir => "some/other/directory",
+                  cmd => ["command", "--that", "--runs=somewhere", "else"] };
 
     # obtain standard filehandles for the child process
     $pid = fork { child_fh => "in,out,err" };
@@ -673,7 +678,7 @@ Version 0.49
     $pid7 = fork { cmd => $job7, 
                    depend_on => "group C" };        # wait for jobs 5 & 6 to complete
 
-    # manage OS settings on jobs -- not available on all systems
+    # manage OS settings on jobs -- may not be available on all systems
     $pid1 = fork { os_priority => 10 };    # like nice(1) on Un*x
     $pid2 = fork { cpu_affinity => 0x5 };  # background task will prefer CPUs #0 and #2
 
@@ -867,6 +872,26 @@ natural language:
     $pid = fork { timeout => "in 5 minutes", sub => ... };
 
     $pid = fork { expiration => "next Wednesday", cmd => $long_running_cmd };
+
+=back
+
+=head3 dir
+
+=over 4
+
+=item C<< fork { dir => $directory } >>
+
+=item C<< fork { chdir => $directory } >>
+
+Causes the child process to be run from a different directory 
+than the parent.
+
+If the specified directory does not exist or if the C<chdir>
+call fails (e.g, if the caller does not have permission to 
+change to the directory), then the child process immediately
+exits and will have a non-zero exit status.
+
+C<chdir> and C<dir> are synonyms.
 
 =back
 
@@ -1260,7 +1285,10 @@ otherwise cannot be downloaded from CPAN.
 =item C<< fork { on_busy => "block" | "fail" | "queue" } >>
 
 Dictates the behavior of C<fork> in the event that the module is not allowed
-to launch the specified job for whatever reason.
+to launch the specified job for whatever reason. If you are using
+C<Forks::Super> to throttle (see L<max_fork, $Forks::Super::MAX_PROC|"max_fork">)
+or impose dependencies on (see L<depend_start|"depend_start">, L<depend_on|"depend_on">)
+background processes, then failure to launch a job should be expected.
 
 =over 4
 
@@ -1516,17 +1544,30 @@ On unsupported systems, this option is ignored.
 
 =item C<< fork { cpu_affinity => $bitmask } >>
 
+=item C<< fork { cpu_affinity => [ @list_of_processors ] } >>
+
 On supported operating systems with multiple cores,
 and after the successful creation of the child process,
 attempt to set the child process's CPU affinity.
-Each bit of the bitmask represents one processor. Set a bit to 1
-to allow the process to use the corresponding processor, and set it to
-0 to disallow the corresponding processor. There may be additional
-restrictions on the valid range of values imposed by the operating
-system.
 
-This feature requires the L<Sys::CpuAffinity> module. The
-C<Sys::CpuAffinity> module is bundled with C<Forks::Super>,
+In the scalar style of this option, each bit of the bitmask represents
+one processor. Set a bit to 1 to allow the process to use the 
+corresponding processor, and set it to 0 to disallow the corresponding
+processor.
+
+For example, to bind a new child process to use CPU #s 2 and 3
+on a system with (at least) 4 processors, you would call one of
+
+    fork { cpu_affinity => 12 , ... } ;    # 12 = 1<<2 + 1<<3
+    fork { cpu_affinity => [2,3] , ... };
+
+There may be additional restrictions on the range of valid
+values for the C<cpu_affinity> option imposed by the operating
+system. See L<the Sys::CpuAffinity docs|Sys::CpuAffinity> for
+discussion of some of these restrictions.
+
+This feature requires the L<Sys::CpuAffinity|Sys::CpuAffinity>
+module. The C<Sys::CpuAffinity> module is bundled with C<Forks::Super>,
 or it may be obtained from CPAN.
 
 =back
@@ -2766,18 +2807,6 @@ systems. It is possible that some features will not work
 as advertised. Please report any problems you encounter 
 to E<lt>mob@cpan.orgE<gt> and I'll see what I can do 
 about it.
-
-=head2 Avoid C<exit> from child subroutine when using socket-based IPC
-
-When using sockets for interprocess communication, this module
-must perform some cleanup at the end of the subroutine or
-external command invoked in the child. If the child subroutine
-calls C<exit> (or equivalent calls such as C<POSIX::_exit>), this
-cleanup code will be skipped and the parent may be unable to
-retrieve the child's output.
-
-Subroutines in the child are run inside an C<eval> block, so it
-is fine to break out of the sub with C<die> or C<croak>.
 
 =head2 Segfaults during cleanup
 

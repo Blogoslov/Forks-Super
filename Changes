@@ -1,5 +1,12 @@
 Revision history for Forks-Super
 
+0.50    2011-04-17
+        Support  dir => $directory  option to start child in arbitrary dir.
+        Introduced tied F::S::Tie::IPCPipeHandle class for testing/debugging
+        use of pipes.
+        Support  cpu_affinty => [@list]  syntax.
+        Calling exit from a child sub is allowed again.
+
 0.49    2011-04-01
         Bundle with Signals::XSIG v0.10 and drop Forks::Super::Sighandler.
         Setting $ENV{IPC_DIR}="undef" to disable file-based IPC now functions

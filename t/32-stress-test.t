@@ -35,7 +35,7 @@ SKIP: {
 my $NN = 149;
 my $nn = $NN;
 SKIP: {
-  $nn = int(0.85 * $Forks::Super::SysInfo::MAX_FORK) || 5;
+  $nn = int(0.5 * $Forks::Super::SysInfo::MAX_FORK) || 5;
   if ($ENV{WRONG_MAKEFILE_OK}) {
     $nn = 10;  # safe low number
   }
@@ -64,7 +64,7 @@ for (my $i=0; $i<$nn; $i++) {
 
   my $pid = fork { sub => sub { sleep 5 } };
   if (!isValidPid($pid)) {
-    croak "fork failed i=$i OS=$^O V=$]";
+    croak "fork failed i=$i/$nn OS=$^O V=$]";
   }
   if (Forks::Super::Config::CONFIG_module("Time::HiRes")) {
     Time::HiRes::sleep(0.001);

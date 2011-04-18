@@ -9,6 +9,10 @@ my $buildClass = 'Sys::CpuLoadX::Custom::Builder';
 my $SuperModule = 'Forks::Super';
 my $TargetModule = 'Sys::CpuLoadX';
 my $TargetModuleMinVersion = '0.01';
+if ($^O =~ /netbsd/i) {
+  # NetBSD fix in 0.03
+  $TargetModuleMinVersion = '0.03';
+}
 
 
 my $version = MM->parse_version('lib/Sys/CpuLoadX.pm');

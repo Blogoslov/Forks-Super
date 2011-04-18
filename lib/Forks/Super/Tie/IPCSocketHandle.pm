@@ -8,7 +8,8 @@
 # usage:
 #    $fh = gensym();
 #    create real socket handle (socketpair, accept, etc.)
-#    tie *$fh, 'TFH_SH', *$the_real_socket_handle, $fh;
+#    tie *$fh, 'Forks::Super::Tie::IPCSocketHandle',
+#          *$the_real_socket_handle, $fh;
 
 
 # as of Forks::Super v0.35 this package is still being
@@ -246,6 +247,9 @@ sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
 }
 
 sub Forks::Super::Tie::IPCSockethandle::Delegator::DESTROY {
+}
+
+sub Forks::Super::Tie::IPCSocketHandle::Delegator::DESTROY {
 }
 
 1;

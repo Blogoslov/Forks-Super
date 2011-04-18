@@ -78,18 +78,14 @@ sub handle_CHLD {
       $j->{status} = $status;
       $j->_mark_complete;
     } else {
-      # There are (at least) two^H^H^H THREE reasons we reach this code branch:
+      # There are (at least) two reasons we reach this code branch:
       #
       # 1. A child process completes so quickly that it is reaped in 
       #    this subroutine *before* the parent process has finished 
       #    initializing its state.
       #    Treat this as a bastard pid. We'll check later if the 
       #    parent process knows about this process.
-      # 2. In Cygwin, the system sometimes fails to clean up the process
-      #    correctly. I notice this mainly with deferred jobs.
-      #    XXX - this comment dates back to at least v0.16.
-      #          Maybe this isn't still an issue.
-      # 3. This is a child process with $CHILD_FORK_OK>0, reaping a process
+      # 2. This is a child process with $CHILD_FORK_OK>0, reaping a process
       #    started with a system fork (system or exec XXX-qx?), not 
       #    a F::S::fork call from within the child process.
       #    XXX - how to distinguish? how to test?

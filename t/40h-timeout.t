@@ -51,7 +51,7 @@ $t = Time::HiRes::time();
 waitpid $pid, 0;
 $t2 = Time::HiRes::time();
 ($t0,$t) = ($t2-$t0,$t2-$t);
-ok($t0 >= 5.9 && $t > 4.95, 
+ok($t0 >= 5.8 && $t > 4.95, 
    "exec-style doesn't respect timeout ${t}s ${t0}s expected ~6s");
 
 ######################################################################

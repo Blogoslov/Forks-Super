@@ -16,7 +16,7 @@ use Forks::Super::Debug qw(:all);
 use Forks::Super::Util qw(IS_WIN32 is_socket);
 use Forks::Super::Tie::IPCFileHandle;
 use Forks::Super::Tie::IPCSocketHandle;
-# use Forks::Super::Tie::IPCPipeHandle;
+use Forks::Super::Tie::IPCPipeHandle;
 use Signals::XSIG;
 use IO::Handle;
 use File::Path;
@@ -45,9 +45,9 @@ our $__MAX_OPEN_FH = do {
 our @SAFEOPENED = ();
 our $USE_TIE_FH = 1;
 our $USE_TIE_SH = 1;
-our $USE_TIE_PH = 0;
+our $USE_TIE_PH = 1;
 
-$USE_TIE_SH = $USE_TIE_FH = 0 if $ENV{NO_TIES};
+$USE_TIE_SH = $USE_TIE_FH = $USE_TIE_PH = 0 if $ENV{NO_TIES};
 
 our $_IPC_DIR;
 {
@@ -93,7 +93,8 @@ our $_IPC_DIR;
 
   sub _gensym () {
     no strict 'refs';
-    my $name = "IO" . $$ . "_" . $seq++;
+    my $name = join '_', @_, "IO$$", $seq++;
+#   my $name = "IO" . $$ . "_" . $seq++;
     my $ref = \*{$pkg . $name};
     delete $$pkg{$name};
     $ref;
@@ -490,15 +491,15 @@ sub _preconfig_fh_pipes {
 
   if ($config->{in}) {
     $config->{f_in} = '__pipe__';
-    ($config->{p_in}, $config->{p_to_in}) = _create_pipe_pair();
+    ($config->{p_in}, $config->{p_to_in}) = _create_pipe_pair($job);
   }
   if ($config->{out}) {
     $config->{f_out} = '__pipe__';
-    ($config->{p_out},$config->{p_to_out}) = _create_pipe_pair();
+    ($config->{p_out},$config->{p_to_out}) = _create_pipe_pair($job);
   }
   if ($config->{err} && !$config->{join}) {
     $config->{f_err} = '__pipe__';
-    ($config->{p_err},$config->{p_to_err}) = _create_pipe_pair();
+    ($config->{p_err},$config->{p_to_err}) = _create_pipe_pair($job);
   }
 
   if ($job->{debug}) {
@@ -584,6 +585,10 @@ sub ___fileno {
 }
 
 sub _create_pipe_pair {
+  my $job = shift;
+  Carp::confess("no job supplied to _create_pipe_pair")
+      unless $job || ref($job);
+
   if (!$Forks::Super::SysInfo::CONFIG{'pipe'}) {
     croak "Forks::Super::Job::_create_pipe_pair(): no pipe\n";
   }
@@ -603,6 +608,7 @@ sub _create_pipe_pair {
   $$p_read->{is_read} = $$p_write->{is_write} = 1;
   $$p_read->{is_write} = $$p_write->{is_read} = 1;
   $$p_read->{opened} = $$p_write->{opened} = Time::HiRes::time();
+  $$p_read->{job} = $$p_write->{job} = $job;
 
   my ($pkg,$file,$line) = caller(2);
   $$p_read->{caller} = $$p_write->{caller} = "$pkg;$file:$line";
@@ -1187,11 +1193,19 @@ sub __config_fh_parent_stdin_sockets {
 sub __config_fh_parent_stdin_pipes {
   my $job = shift;
   my $fh_config = $job->{fh_config};
-
-  $job->{child_stdin}
+  if ($USE_TIE_PH) {
+    my $ph = _gensym();
+    tie *$ph, 'Forks::Super::Tie::IPCPipeHandle', $fh_config->{p_to_in}, $ph;
+    $job->{child_stdin}
+	= $Forks::Super::CHILD_STDIN{$job->{real_pid}}
+	= $Forks::Super::CHILD_STDIN{$job->{pid}}
+	= $ph;
+  } else {
+    $job->{child_stdin}
 	= $Forks::Super::CHILD_STDIN{$job->{real_pid}}
 	= $Forks::Super::CHILD_STDIN{$job->{pid}}
 	= $fh_config->{p_to_in};
+  }
   $fh_config->{f_in} = '__pipe__';
   debug("Setting up pipe to $job->{pid} stdin $fh_config->{p_to_in} ",
 	    CORE::fileno($fh_config->{p_to_in})) if $job->{debug};
@@ -1293,10 +1307,20 @@ sub __config_fh_parent_stdout_pipes {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  $job->{child_stdout}
+  if ($USE_TIE_PH) {
+    my $ph = _gensym();
+    tie *$ph, 'Forks::Super::Tie::IPCPipeHandle', $fh_config->{p_out}, $ph;
+    $job->{child_stdout}
+      = $Forks::Super::CHILD_STDOUT{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDOUT{$job->{pid}}
+      = $ph;
+  } else {
+
+    $job->{child_stdout}
       = $Forks::Super::CHILD_STDOUT{$job->{real_pid}}
       = $Forks::Super::CHILD_STDOUT{$job->{pid}}
       = $fh_config->{p_out};
+  }
   $fh_config->{f_out} = '__pipe__';
   debug("Setting up pipe to $job->{pid} stdout $fh_config->{p_out} ",
 	  CORE::fileno($fh_config->{p_out})) if $job->{debug};
@@ -1399,10 +1423,20 @@ sub __config_fh_parent_stderr_pipes {
   my $job = shift;
   my $fh_config = $job->{fh_config};
 
-  $job->{child_stderr}
+  if ($USE_TIE_PH) {
+    my $ph = _gensym();
+    tie *$ph, 'Forks::Super::Tie::IPCPipeHandle', $fh_config->{p_err}, $ph;
+
+    $job->{child_stderr}
+      = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
+      = $Forks::Super::CHILD_STDERR{$job->{pid}}
+      = $ph;
+  } else {
+    $job->{child_stderr}
       = $Forks::Super::CHILD_STDERR{$job->{real_pid}}
       = $Forks::Super::CHILD_STDERR{$job->{pid}}
       = $fh_config->{p_err};
+  }
   $fh_config->{f_err} = '__pipe__';
   debug("Setting up pipe to $job->{pid} stderr ",
 	  CORE::fileno($fh_config->{p_err})) if $job->{debug};
@@ -1582,7 +1616,12 @@ sub __config_fh_child_stdin_pipes {
   my $fh_config = $job->{fh_config};
   push @{$job->{child_fh_close}}, $fh_config->{p_in};
   close STDIN;
-  if (!(_safeopen($job, *STDIN, '<&', $fh_config->{p_in}))) {
+  if ($USE_TIE_PH && $job->{style} ne 'cmd' && $job->{style} ne 'exec') {
+    my $ph = _gensym();
+    tie *$ph, 'Forks::Super::Tie::IPCPipeHandle', $fh_config->{p_in}, $ph;
+    *STDIN = *$ph;
+    ${*STDIN}->{std_delegate} = $ph;
+  } elsif (!(_safeopen($job, *STDIN, '<&', $fh_config->{p_in}))) {
     warn "Forks::Super::Job::_config_fh_child_stdin(): ",
       "could not attach child STDIN to input pipe: $!\n";
   } else {
@@ -1684,9 +1723,16 @@ sub __config_fh_child_stdout_pipes {
   my $fh_config = $job->{fh_config};
 
   close STDOUT;
-  _safeopen($job, *STDOUT, ">&", $fh_config->{p_to_out})
-      or warn "Forks::Super::Job::_config_fh_child_stdout(): ",
+  if ($USE_TIE_PH) {
+    my $fh = _gensym();
+    tie *$fh, 'Forks::Super::Tie::IPCPipeHandle', $fh_config->{p_to_out}, $fh;
+    *STDOUT = *$fh;
+    ${*STDOUT}->{std_delegate} = $fh;
+  } else {
+    _safeopen($job, *STDOUT, ">&", $fh_config->{p_to_out})
+        or warn "Forks::Super::Job::_config_fh_child_stdout(): ",
 	"could not attach child STDOUT to output pipe: $!\n";
+  }
   debug("Opening ",*STDOUT,"/",CORE::fileno(STDOUT)," in child STDOUT")
       if $job->{debug};
   push @{$job->{child_fh_close}}, $fh_config->{p_to_out}, *STDOUT;
@@ -1784,7 +1830,12 @@ sub __config_fh_child_stderr_pipes {
 
   push @{$job->{child_fh_close}}, $fh_config->{p_to_err};
   close STDERR;
-  if (_safeopen($job, *STDERR, ">&", $fh_config->{p_to_err})) {
+  if ($USE_TIE_PH && $job->{style} ne 'cmd' && $job->{style} ne 'exec') {
+    my $fh = _gensym();
+    tie *$fh, 'Forks::Super::Tie::IPCPipeHandle', $fh_config->{p_to_err}, $fh;
+    *STDERR = *$fh;
+    ${*STDERR}->{std_delegate} = $fh;
+  } elsif (_safeopen($job, *STDERR, ">&", $fh_config->{p_to_err})) {
     debug("Opening ",*STDERR,"/",CORE::fileno(STDERR),
 	    " in child STDERR") if $job->{debug};
     push @{$job->{child_fh_close}}, *STDERR;
@@ -2261,6 +2312,10 @@ sub __get_select_timeout {
 sub _read_pipe {
   my ($sh, $job, $wantarray, %options) = @_;
 
+  if (defined $$sh->{std_delegate}) {
+    $sh = $$sh->{std_delegate};
+  }
+
   if (!defined $sh) {
     if (!defined($options{"warn"}) || $options{"warn"}) {
       carp "Forks::Super::_read_pipe: ",
@@ -2350,7 +2405,8 @@ sub _emulate_readline_scalar {
   while ($nfound) {
     my $buffer = '';
     # XXX - does getc work as well as sysread ..., 1 ?
-    last unless sysread $handle, $buffer, 1;
+    # last unless defined($buffer = getc($handle));
+    last if 0 == sysread $handle, $buffer, 1;
     $input .= $buffer;
     last if length($/) > 0 && substr($input,-length($/)) eq $/;
     ($nfound,$timeleft) = select $rout=$rin, undef, undef, 0.0;
