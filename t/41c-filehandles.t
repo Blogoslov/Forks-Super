@@ -1,11 +1,7 @@
-use Forks::Super ':test';
+use Forks::Super ':test_CA';
 use Test::More tests => 2;
 use strict;
 use warnings;
-
-Forks::Super::Debug::_use_Carp_Always();
-
-##################################################
 
 #
 # a proof-of-concept: pass strings to a child 

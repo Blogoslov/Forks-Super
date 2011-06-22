@@ -1,0 +1,28 @@
+---
+abstract: 'Set CPU affinity for processes'
+author:
+  - "Marty O'Brien <mob@cpan.org>"
+build_requires:
+  Module::Build: 0.25
+  Test::More: 0
+configure_requires:
+  Module::Build: 0.36
+generated_by: 'Module::Build version 0.3613'
+keywords:
+  - affinity
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Sys-CpuAffinity
+provides:
+  Sys::CpuAffinity:
+    file: lib/Sys/CpuAffinity.pm
+    version: 1.01
+recommends:
+  ExtUtils::CBuilder: 0.15
+  Win32::API: 0.51
+resources:
+  bugtracker: http://rt.cpan.org/NoAuth/Bugs.html?Dist=Sys-CpuAffinity
+  license: http://dev.perl.org/licenses/
+version: 1.01

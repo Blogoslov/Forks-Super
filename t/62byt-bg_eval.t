@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 35;
+use Test::More tests => 24;
 use strict;
 use warnings;
 
@@ -20,10 +20,9 @@ $Forks::Super::Config::CONFIG{"Data::Dumper"} = 0;
 
 SKIP: {
   if ($ENV{NO_YAML} || !Forks::Super::Config::CONFIG_module("YAML::Tiny")) {
-    skip "YAML::Tiny not available, skipping bg_eval tests", 33;
+    skip "YAML::Tiny not available, skipping bg_eval tests", 22;
   }
 
   require "./t/62b-bg_eval.tt";
-
 }
 

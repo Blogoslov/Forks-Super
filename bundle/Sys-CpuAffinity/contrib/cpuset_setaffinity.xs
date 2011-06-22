@@ -57,6 +57,7 @@ xs_cpuset_set_affinity(pid,mask)
 	int pid
 	int mask
     CODE:
+	/* Sets the cpu affinity of a process. Available for FreeBSD >= 7.1 */
 	RETVAL = setaffinity_cpuset_setaffinity(pid,mask);
     OUTPUT:
 	RETVAL

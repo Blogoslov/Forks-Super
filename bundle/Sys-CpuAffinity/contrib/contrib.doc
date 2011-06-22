@@ -1,5 +1,6 @@
 
 XS files for Sys::CpuAffinity module.
+-------------------------------------
 
 During build, these *.xs files are copied
 to the ./lib directory structure, where
@@ -12,26 +13,89 @@ The remaining units that successfully compiled
 will be removed and combined into a single
 lib/Sys/CpuAffinity.xs file.
 
+Additional contributions to this directory should
+follow these guidelines:
 
+  * Exported functions should go under the
+    "Sys::CpuAffinity" module and "Sys::CpuAffinity"
+    package unless there is a compelling reason to
+    use something else.
 
+  * The names of all exported functions (listed below
+    the file's "MODULE = Sys::CpuAffinity ..." line)
+    should begin with "xs_". 
 
-bsd-getaffinity_processor_bind.xs:
+    The test script  t/02-available.t  will try to 
+    categorize all the available XS functions that 
+    follow these first two conventions.
 
-	Function to get affinity on BSD systems.
+  * ALL function names should be unique across
+    all files in /contrib -- don't rely on any
+    pair of files in this directory being mutually
+    uncompilable.
+
+  * Files need to end with one or more blank lines,
+    or else the aggregated lib/Sys/CpuAffinity.xs
+    might not compile.
+
+=======================================================
+
+cpusetGetCpuCount.xs
+
+	Function to count the CPUs on on Irix system.
 
 cpuset_getaffinity.xs
+cpuset_setaffinity.xs
 
-	BSD(?) function to get affinity.
+	Functions to manipulate affinity. Should work
+	for FreeBSD >= 7.1. Requires <sched.h>, 
+	<sys/cpuset.h>, and <sys/param.h> headers.
+	
+irix_sysmp.xs
+
+	Use the sysmp() in Irix to bind a process to a
+	SINGLE processor (like the processor_bind()
+	restriction in Solaris). Requires <sys/sysmp.h>
+	and <sys/types.h> headers.
 
 linux-sched_get_affinity.xs
-
-	Linux function to get affinity. Requires the
-	<sched.h> and <linux/unistd.h> headers.
-
 linux-sched_set_affinity.xs
 
-	Linux function to set affinity. Requires the
-	<sched.h> and <linux/unistd.h> headers
+	Get and set process affinity in Linux. Requires
+	the <sched.h> and <linux/unistd.h> headers.
+
+getaffinity_processor_bind.xs
+setaffinity_processor_bind.xs
+
+	Use processor_bind() function in Solaris. Can
+	be used to bind a process to a SINGLE cpu.
+	Requires <sys/processor.h>, <sys/procset.h>,
+	and <sys/types.h> headers.
+
+pthread_affinity_np.xs
+
+	Uses pthread_getaffinity_np and pthread_setaffinity_np
+	methods available in NetBSD >= 5.0. May also work
+	in FreeBSD and/or Linux. These functions only work
+	on the calling process and may only work for the
+	super-user. Requires <pthread.h> and <sched.h>
+	headers, and link with libpthread.a library
+	(-lpthread).
+
+win32_processaffinity.xs
+
+	Get and set affinity for a bona-fide process on
+	MSWin32 and Cygwin. Requires <windows.h> and
+	<winbase.h> headers. I'm a little bit uncomfortable
+	with some of the hard-coded (magic) numbers.
+
+win32_threadaffinity.xs
+
+	Get and set affinity of a Windows pseudo-process
+	-- the result of a fork() call on MSWin32. Within
+	Perl, pseudo-processes are characterized by a
+	negative process ID. Requires the <windows.h>
+	and <winbase.h> headers.
 
 win32_system_info.xs
 
@@ -49,7 +113,6 @@ win32_system_info_alt.xs
 
 
 fortytwo.xs
-hello.xs
 
 	Sample XS files that should compile on
 	any system (or at least any system with

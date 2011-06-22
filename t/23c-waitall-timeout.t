@@ -45,7 +45,7 @@ $count = waitall 8 + ($t5 - $t);
 $t = Time::HiRes::time() - $t5;
 ok($count == 1,                             ### 24 ###
    "waitall reaped $count==1 process in next 3 sec t=$t");
-ok($t >= 7.83 && $t <= 10.8,                ### 25 ### was 8.55 obs 8.56.10.77
+ok($t >= 7.15 && $t <= 10.8,                ### 25 ### was 8.55 obs 8.56.10.77
    "waitall respected timeout ${t}s expected ~8s");
 
 $t = Time::HiRes::time();

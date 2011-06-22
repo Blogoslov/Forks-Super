@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 35;
+use Test::More tests => 24;
 use strict;
 use warnings;
 
@@ -20,7 +20,7 @@ $Forks::Super::Config::CONFIG{"JSON"} = 0;
 SKIP: {
 
   if (!Forks::Super::Config::CONFIG_module("Data::Dumper")) {
-    skip "Data::Dumper not available, skipping bg_eval tests", 33;
+    skip "Data::Dumper not available, skipping bg_eval tests", 22;
   }
 
   require "./t/62b-bg_eval.tt";

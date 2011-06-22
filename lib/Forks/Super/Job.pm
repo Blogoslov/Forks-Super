@@ -23,11 +23,12 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.51';
+our $VERSION = '0.52';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
 our $INSIDE_END_QUEUE = 0;
+our $_RETRY_PAUSE;
 
 my $use_overload = $ENV{FORKS_SUPER_JOB_OVERLOAD};
 if (!defined($use_overload)) {
@@ -212,6 +213,7 @@ sub _mark_complete {
 
   $job->run_callback('collect');
   $job->run_callback('finish');
+  return;
 }
 
 sub _mark_reaped {
@@ -227,7 +229,7 @@ sub _mark_reaped {
 # determine whether a job is eligible to start
 #
 sub can_launch {
-  no strict 'refs';      ## no critic (NoStrict)
+  no strict 'refs';
 
   my $job = shift;
   $job->{last_check} = Time::HiRes::time();
@@ -347,7 +349,7 @@ sub _can_launch {
 
 # Perl system fork() call. Encapsulated here so it can be overridden 
 # and mocked for testing. See t/17-retries.t
-sub _CORE_fork { CORE::fork }
+sub _CORE_fork { return CORE::fork }
 
 #
 # make a system fork call and configure the job object
@@ -383,9 +385,8 @@ sub launch {
   while (!defined($pid) && $retries-- > 0) {
     warn "Forks::Super::launch: ",
       "system fork call returned undef. Retrying ...\n";
-    $Forks::Super::Job::_RETRY_PAUSE ||= 1.0;
-    my $delay = 1.0 + $Forks::Super::Job::_RETRY_PAUSE
-      * (($job->{retries} || 1) - $retries);
+    $_RETRY_PAUSE ||= 1.0;
+    my $delay = 1.0 + $_RETRY_PAUSE * (($job->{retries} || 1) - $retries);
     Forks::Super::Util::pause($delay);
     $pid = _CORE_fork();
   }
@@ -437,16 +438,10 @@ sub _postlaunch_parent {
     #
     # it is possible that this child exited quickly and has already
     # been reaped in the SIGCHLD handler. In that case, the signal
-    # handler should have made an entry in %Forks::Super::BASTARD_DATA
+    # handler should have made an entry in %Forks::Super::Sigchld::BASTARD_DATA
     # for this process.
     #
-    if (defined $Forks::Super::BASTARD_DATA{$pid}) {
-      warn "Forks::Super::Job::launch: ",
-	"Job $pid reaped before parent initialization.\n";
-      $job->_mark_complete;
-      ($job->{end}, $job->{status})
-	= @{delete $Forks::Super::BASTARD_DATA{$pid}};
-    }
+    Forks::Super::Sigchld::handle_bastards($pid);
   }
   $job->{real_pid} = $pid;
   $job->{pid} = $pid unless defined $job->{pid};
@@ -467,42 +462,59 @@ sub _postlaunch_child {
   Forks::Super::init_child() if defined &Forks::Super::init_child;
   $job->_config_child;
 
-  if (($job->{style} eq 'cmd' || $job->{style} eq 'exec')
-      && defined($job->{fh_config}->{stdin})
-      && defined($job->{fh_config}->{sockets})) {
+  local $ENV{_FORK_PPID} = $$;
+  local $ENV{_FORK_PID} = $$;
 
+  if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
+
+      if (defined($job->{fh_config}->{stdin})
+	  && defined($job->{fh_config}->{sockets})) {
+
+	  $job->_postlaunch_child_to_proc;
+
+      } elsif ($job->{style} eq 'cmd') {
+
+	  $job->_postlaunch_child_to_cmd;
+
+      } else {
+
+	  debug("Exec'ing [ @{$job->{exec}} ]") if $job->{debug};
+	  exec( @{$job->{exec}} );
+
+      }
+
+  } elsif ($job->{style} eq 'sub') {
+
+      $job->_postlaunch_child_to_sub;
+
+  }
+  return 0;
+}
+
+sub _postlaunch_child_to_proc {
+    my $job = shift;
     my $proch = Forks::Super::Job::Ipc::_gensym();
     $job->{cmd} ||= $job->{exec};
     my $p1 = open $proch, '|-', @{$job->{cmd}};
     print $proch $job->{fh_config}->{stdin};
     close $proch;
     my $c1 = $?;
-
     debug("Exit code of $$ was $c1 ", $c1>>8) if $job->{debug};
     deinit_child();
     exit $c1 >> 8;
+}
 
-  } elsif ($job->{style} eq 'cmd') {
-
+sub _postlaunch_child_to_cmd {
+    my $job = shift;
     debug("Executing [ @{$job->{cmd}} ]") if $job->{debug};
 
     my $c1;
     if (&IS_WIN32) {
-      local $ENV{_FORK_PPID} = $$;
-      local $ENV{_FORK_PID} = $$;
-
-
       # There are lots of ways to spawn a process in Windows
-      if (1 && Forks::Super::Config::CONFIG('Win32::Process')) {
+      if (Forks::Super::Config::CONFIG('Win32::Process')) {
 	$c1 = Forks::Super::Job::OS::Win32::open_win32_process($job);
-      } elsif (1 && Forks::Super::Config::CONFIG('Win32::Process')) {
-	$c1 = Forks::Super::Job::OS::Win32::open2_win32_process($job);
-      } elsif (1) {
-	$c1 = Forks::Super::Job::OS::Win32::open3_win32_process($job);
-      } elsif (0 && Forks::Super::Config::CONFIG('Win32::Process')) {
-	$c1 = Forks::Super::Job::OS::Win32::create_win32_process($job);
       } else {
-	$c1 = Forks::Super::Job::OS::Win32::system_win32_process($job);
+	$c1 = Forks::Super::Job::OS::Win32::open3_win32_process($job);
       }
     } else {
 
@@ -511,52 +523,47 @@ sub _postlaunch_child {
     debug("Exit code of $$ was $c1 ", $c1>>8) if $job->{debug};
     deinit_child();
     exit $c1 >> 8;
-  } elsif ($job->{style} eq 'exec') {
-    local $ENV{_FORK_PPID} = $$;
-    local $ENV{_FORK_PID} = $$;
-    debug("Exec'ing [ @{$job->{exec}} ]") if $job->{debug};
-    exec( @{$job->{exec}} );
-  } elsif ($job->{style} eq 'sub') {
-    no strict 'refs';          ## no critic (NoStrict)
+}
 
-
+sub _postlaunch_child_to_sub {
+    my $job = shift;
     my $sub = $job->{sub};
     my @args = @{$job->{args} || []};
 
     my $error;
     eval {
+      no strict 'refs';
       $job->{_cleanup_code} = \&deinit_child;
       $sub->(@args);
       delete $job->{_cleanup_code};
+      1;
+    } or do {
+      $error = $@;
     };
-    $error = $@;
  
     if ($job->{debug}) {
       if ($error) {
-	debug("JOB $$ SUBROUTINE CALL HAD AN ERROR: $@");
+	debug("JOB $$ SUBROUTINE CALL HAD AN ERROR: $error");
       }
       debug("Job $$ subroutine call has completed");
     }
     deinit_child();
     if ($error) {
-      die $error;
+	die $error,"\n";
     }
     exit 0;
-  }
-  return 0;
 }
 
 sub _launch_from_child {
   my $job = shift;
   if ($Forks::Super::CHILD_FORK_OK == 0) {
-    carp 'Forks::Super::Job::launch(): fork() not allowed ',
+    carp 'Forks::Super::fork() not allowed\n',
       "in child process $$ while \$Forks::Super::CHILD_FORK_OK ",
 	"is not set!\n";
 
     return;
   } elsif ($Forks::Super::CHILD_FORK_OK == -1) {
-    carp "Forks::Super::Job::launch(): Forks::Super::fork() ",
-      "call not allowed\n",
+    carp "Forks::Super::fork() call not allowed\n",
 	"in child process $$ while \$Forks::Super::CHILD_FORK_OK <= 0.\n",
 	  "Will create child of child with CORE::fork()\n";
 
@@ -599,11 +606,10 @@ sub suspend {
     return;
   }
   if ($j->{state} eq 'SUSPENDED') {
-    carp "Forks::Super::Job::suspend(): called on suspended job ", 
-      $j->{pid}, "\n";
+    carp "Forks::Super::Job: suspend called on suspended job ", $j->{pid};
     return;
   }
-  carp "Forks::Super::Job::suspend(): called on job ", $j->toString(), "\n";
+  carp "Forks::Super::Job: suspend called on job ", $j->toString(), "\n";
   return;
 }
 
@@ -657,6 +663,7 @@ sub _preconfig2 {
   if (!defined $job->{debug}) {
     $job->{debug} = $Forks::Super::Debug::DEBUG;
   }
+  return;
 }
 
 sub _preconfig_style {
@@ -858,12 +865,13 @@ sub _config_child {
 sub _config_debug_child {
   my $job = shift;
   if ($job->{debug} && $job->{undebug}) {
-    if (Forks::Super::_is_test()) {
+    if ($Forks::Super::Config::IS_TEST) {
       debug("Disabling debugging in child $$");
     }
     $Forks::Super::Debug::DEBUG = 0;
     $job->{debug} = 0;
   }
+  return;
 }
 
 sub _config_dir {
@@ -875,6 +883,7 @@ sub _config_dir {
 	"Invalid \"dir\" option: \"$job->{dir}\" $!\n";
     }
   }
+  return;
 }
 
 END {
@@ -912,7 +921,7 @@ sub enable_overload {
   if (!$OVERLOAD_ENABLED) {
     $OVERLOAD_ENABLED = 1;
 
-    eval {
+    if (!eval {
       use overload
 	'""' => sub { $_[0]->{pid} },
 	'+' => sub { $_[0]->{pid} + $_[1] },
@@ -956,21 +965,24 @@ sub enable_overload {
       *{'Forks::Super::Job::(<>'} = sub {
 	return $_[0]->read_stdout();
       };
-    };
-
-    if ($@) {
+      1 }            # end eval { use overload ... }
+	) {
       carp "Error enabling overloading on Forks::Super::Job objects: $@\n";
     } elsif ($Forks::Super::Debug::DEBUG) {
         debug("Enabled overloading on Forks::Super::Job objects");
     }
   }
+  return;
 }
 
 sub disable_overload {
   if ($OVERLOAD_ENABLED) {
     $OVERLOAD_ENABLED = 0;
-    eval { no overload values %overload::ops };
+    eval { no overload values %overload::ops; 1 }
+        or Forks::Super::Debug::carp_once "Forks::Super::Job ",
+    		"disable overload failed: $@";
   }
+  return;
 }
 
 # returns a Forks::Super::Job object with the given identifier
@@ -1174,7 +1186,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.51
+0.52
 
 =head1 SYNOPSIS
 
@@ -1622,7 +1634,7 @@ handle, so using this method is preferred to:
 
     # not as good as:  $job->close_fh('stdin','stderr')
     close $job->{child_stdin};
-    close $job->{child_stderr};
+    close $Forks::Super::CHILD_STDERR{$job};
 
 On most systems, open filehandles are a scarce resource and it
 is a very good practice to close filehandles when the jobs that

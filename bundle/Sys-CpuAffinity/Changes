@@ -1,7 +1,18 @@
 Revision history for Sys-CpuAffinity
 
-0.99	2010-11-18
-        Cygwin fix.
+1.01	2011-04-21
+	XS fixes for FreeBSD.
+	Improved several techniques for counting CPUs.
+	Refactoring of some MSWin32 techniques.
+
+1.00	2011-04-13
+	Fix for setting affinity of MSWin32 child processes.
+	XS support for NetBSD, get/set affinity of calling process.
+	Untested XS support for Irix with sysmp() library function.
+	Abort CPAN tests on systems with a single processor.
+
+0.99	2010-11-29
+	Cygwin fix.
 	Can now get num cpus on OpenBSD (thanks, devio.us!)
 
 0.98	2010-10-17

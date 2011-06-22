@@ -11,8 +11,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(bg_eval bg_qx);
-
-$Forks::Super::LazyEval::USE_ZCALAR = 0;   # enable experimental feature
+our $VERSION = '0.52';
 
 sub _choose_protocol {
   if (CONFIG_module('YAML')) {
@@ -53,26 +52,18 @@ sub bg_eval (&;@) {
 
   my $p = $$;
   my ($result, @result);
-  if (wantarray) {
-    require Forks::Super::Tie::BackgroundArray;
-    tie @result, 'Forks::Super::Tie::BackgroundArray',
+
+  require Forks::Super::Tie::BackgroundScalar;
+  $result = Forks::Super::Tie::BackgroundScalar->new(
       'eval', $code, 
       protocol => $proto,
-      @other_options;
-    return @result;
-  } else {
-    require Forks::Super::Tie::BackgroundScalar;
-    $result = new Forks::Super::Tie::BackgroundScalar
-      'eval', $code, 
-      protocol => $proto,
-      @other_options;
-    if ($$ != $p) {
+      @other_options);
+  if ($$ != $p) {
       # a WTF observed on Windows
       croak "Forks::Super::bg_eval: ",
 	"Inconsistency in process IDs: $p changed to $$!\n";
-    }
-    return $result;
   }
+  return $result;
 }
 
 sub bg_qx {
@@ -94,22 +85,16 @@ sub bg_qx {
 
   my $p = $$;
   my (@result, $result);
-  if (wantarray) {
-    require Forks::Super::Tie::BackgroundArray;
-    tie @result, 'Forks::Super::Tie::BackgroundArray',
-      'qx', $command, @other_options;
-    return @result;
-  } else {
-    require Forks::Super::Tie::BackgroundScalar;
-    $result =  new Forks::Super::Tie::BackgroundScalar
-      'qx', $command, @other_options;
-    if ($$ != $p) {
+
+  require Forks::Super::Tie::BackgroundScalar;
+  $result =  Forks::Super::Tie::BackgroundScalar->new(
+      'qx', $command, @other_options);
+  if ($$ != $p) {
       # a WTF observed on Windows
       croak "Forks::Super::bg_qx: ",
 	"Inconsistency in process IDs: $p changed to $$!\n";
-    }
-    return $result;
   }
+  return $result;
 }
 
 1;

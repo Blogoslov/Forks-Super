@@ -18,7 +18,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(run_callback);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = $Forks::Super::Util::VERSION;
+our $VERSION = '0.52';
 
 sub run_callback {
   my ($job, $callback) = @_;
@@ -46,6 +46,7 @@ sub run_callback {
   } else {
     $callback->($job, $job->{pid});
   }
+  return;
 }
 
 sub _preconfig_callbacks {
@@ -69,6 +70,7 @@ sub _preconfig_callbacks {
       }
     }
   }
+  return;
 }
 
 sub Forks::Super::Job::_config_callback_child {
@@ -78,8 +80,8 @@ sub Forks::Super::Job::_config_callback_child {
     $job->{$callback} = '';
     delete $job->{$callback};
   }
+  return;
 }
-
 
 1;
 

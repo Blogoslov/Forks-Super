@@ -97,3 +97,4 @@ xs_win32_setAffinity_proc(pid,mask)
 	OUTPUT:
 		RETVAL
 
+

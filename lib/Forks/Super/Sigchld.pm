@@ -11,9 +11,10 @@ use POSIX ':sys_wait_h';
 use strict;
 use warnings;
 
-our ($_SIGCHLD, $_SIGCHLD_CNT) = (0,0);
+our ($_SIGCHLD, $_SIGCHLD_CNT, $REAP) = (0,0,0);
 our (@CHLD_HANDLE_HISTORY, @SIGCHLD_CAUGHT) = (0);
 our $SIG_DEBUG = $ENV{SIG_DEBUG};
+my %bastards;
 
 #
 # default SIGCHLD handler to reap completed child
@@ -24,7 +25,7 @@ our $SIG_DEBUG = $ENV{SIG_DEBUG};
 # were not handled correctly.
 #
 sub handle_CHLD {
-  local $!;
+  local $! = $!;
   $SIGCHLD_CAUGHT[0]++;
   my $sig = shift;
   $_SIGCHLD_CNT++;
@@ -64,7 +65,7 @@ sub handle_CHLD {
     $nhandled++;
 
     if (defined $Forks::Super::ALL_JOBS{$pid}) {
-      $Forks::Super::Queue::_REAP = 1;
+      $REAP = 1;
       debug("Forks::Super::handle_CHLD(): ",
 	    "preliminary reap for $pid status=$status") if $DEBUG;
       if ($SIG_DEBUG) {
@@ -73,7 +74,7 @@ sub handle_CHLD {
 	  "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
       }
 
-      $Forks::Super::Queue::_REAP = 1;
+      $REAP = 1;
       my $j = $Forks::Super::ALL_JOBS{$pid};
       $j->{status} = $status;
       $j->_mark_complete;
@@ -88,14 +89,13 @@ sub handle_CHLD {
       # 2. This is a child process with $CHILD_FORK_OK>0, reaping a process
       #    started with a system fork (system or exec XXX-qx?), not 
       #    a F::S::fork call from within the child process.
-      #    XXX - how to distinguish? how to test?
 
       debug("Forks::Super::handle_CHLD(): got CHLD signal ",
 	    "but can't find child to reap; pid=$pid") if $DEBUG;
 
-      Forks::Super::_you_bastard($pid, $status);
+      $bastards{$pid} = [ scalar Time::HiRes::time(), $status ];
     }
-    $Forks::Super::Queue::_REAP = 1;
+    $REAP = 1;
   }
   if ($SIG_DEBUG) {
     my $z = Time::HiRes::time() - $^T;
@@ -104,6 +104,29 @@ sub handle_CHLD {
   $_SIGCHLD--;
   Forks::Super::Queue::check_queue() if $nhandled > 0;
   return;
+}
+
+#
+# bastards arise when a child finishes quickly and has been
+# reaped in the SIGCHLD handler before the parent has finished
+# initializing the job's state. See  Forks::Super::Sigchld::handle_CHLD() .
+#
+sub handle_bastards {
+    my @pids = @_;
+    if (@pids == 0) {
+	@pids = keys %bastards;
+    }
+    foreach my $pid (@pids) {
+	my $job = $Forks::Super::Job::ALL_JOBS{$pid};
+	if (defined $job && defined $bastards{$pid}) {
+	    warn "Forks::Super: ",
+	        "Job $pid reaped before parent initialization.\n";
+	    $job->_mark_complete;
+	    ($job->{end}, $job->{status})
+		= @{delete $bastards{$pid}};
+	}
+    }
+    return;
 }
 
 1;

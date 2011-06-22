@@ -51,41 +51,46 @@ for (my $i=0; $i<4; $i++) {
 	  child_fh => "in,out,socket"
 	};
 }
+
+# there is a SIGPIPE somewhere here that causes intermittent failures 
+# (see www.cpantesters.org/cpan/report/b2d2eb00-6ec0-11e0-ab3a-49fa30e3b300)
+# include some diag() statements to help track it down ...
+
+diag("sending data to child processes ...");
+
 my @data = (@INC,%INC,keys(%!),keys(%ENV),0..99)[0 .. 99];
 my (@pdata, @cdata);
 for (my $i=0; $i<@data; $i++) {
-  #my $fh_i = $Forks::Super::CHILD_STDIN{$pids[$i%4]};
-  #my $zzz = print {$fh_i} "$data[$i]\n";
   my $zzz = $pids[$i % 4]->write_stdin("$data[$i]\n");
   push @pdata, sprintf("%s\\%d\n", $data[$i], unpack("%32C*",$data[$i])%65535);
 }
 
 for my $pid (@pids) {
+    diag("closing child processes $pid ...");
   Forks::Super::write_stdin($pid, "__END__\r\n");
   Forks::Super::write_stdin($pid, "__END__\r\n");
   $pid->close_fh('stdin');
 }
 
+diag("waiting on child processes ...");
 waitall;
+diag("reading child process output ...");
+
 foreach (@pids) {
   push @cdata, Forks::Super::read_stdout($_);
 }
-ok(@pdata > 0 && @pdata == @cdata, "$$\\parent & child processed "
-   .(scalar @pdata)."/".(scalar @cdata)." strings");
+ok(@pdata > 0 && @pdata == @cdata,                         ### 1 ###
+   "$$\\parent & child processed " .(scalar @pdata)
+   ."/".(scalar @cdata)." strings");
 @pdata = sort @pdata;
 @cdata = sort @cdata;
 my $pc_equal = 1;
 for (my $i=0; $i<@pdata; $i++) {
-  no warnings 'uninitialized';
-  if ($pdata[$i] ne $cdata[$i]) {
-    # print "$i: $pdata[$i] /// $cdata[$i] ///\n";
-    $pc_equal = 0;
-  }
+    no warnings 'uninitialized';
+    if ($pdata[$i] ne $cdata[$i]) {
+	$pc_equal = 0;
+    }
 }
 ok($pc_equal, "parent/child agree on output");
 
 #######################################################################
-
-use Carp;$SIG{SEGV} = sub {
-  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
-};

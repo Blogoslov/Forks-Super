@@ -27,7 +27,7 @@ if (!&IS_WIN32 && !&IS_CYGWIN) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = $Forks::Super::Job::VERSION;
+our $VERSION = '0.52';
 
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 our %_WIN32_API_SPECS
@@ -191,7 +191,8 @@ sub set_os_priority {
   if (($priority >= -7 && $priority < -2)
 	|| ($priority > 2 && $priority <= 6)) {
 
-    my $priority_class = Forks::Super::Job::OS::Win32::get_process_priority_class();
+    my $priority_class 
+	= Forks::Super::Job::OS::Win32::get_process_priority_class();
     if (!defined $priority_class) {
       return;
     }
@@ -205,7 +206,8 @@ sub set_os_priority {
   }
 
   local $! = 0;
-  my $result = Forks::Super::Job::OS::Win32::set_thread_priority($thread_id,$priority);
+  my $result 
+      = Forks::Super::Job::OS::Win32::set_thread_priority($thread_id,$priority);
   if ($result) {
     if ($job->{debug}) {
       debug("updated thread priority to $priority for job $$");
@@ -214,6 +216,7 @@ sub set_os_priority {
   } else {
     carp "Forks::Super::Job: set os_priority failed: $! / $^E\n";
   }
+  return;
 }
 
 sub get_process_priority_class { # for the current process
@@ -244,7 +247,7 @@ sub signal_procs {
   my @terminated = ();
   foreach my $pid (sort {$a <=> $b} @pids) {
     if ($pid < 0) {
-      my ($signalled, $termref)	= signal_thread($signal,-$pid);
+      my ($signalled, $termref) = signal_thread($signal,-$pid);
 
       if ($signalled) {
 	$num_signalled++;
@@ -366,7 +369,7 @@ sub get_system_info {
      $SYSTEM_INFO{'AllocationGranularity'},
      $SYSTEM_INFO{'ProcessorLevel'},
      $SYSTEM_INFO{'ProcessorType'})
-      = unpack('VVVVVVVvv', substr($buffer,4));
+       = unpack('VVVVVVVvv', substr($buffer,4));
   }
   return %SYSTEM_INFO;
 }
@@ -410,7 +413,7 @@ sub open_win32_process {
   # XXX - PIPE OPEN FAILS IN TAINT MODE -- WHY?
   ($cmd) = $cmd =~ /(.*)/s;
 
-  my $pid = open my $proch, "-|", "$cmd";
+  my $pid = open my $proch, "-|", "$cmd";    ## no critic (BriefOpen)
   $Forks::Super::Job::WIN32_PROC = 0;
 
   Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
@@ -431,7 +434,7 @@ sub open_win32_process {
 sub open2_win32_process {
   my ($job) = @_;
   my $cmd = join ' ', @{$job->{cmd}};
-  my $pid = open my $proch, "|-", "$cmd";
+  my $pid = open my $proch, "|-", "$cmd";      ## no critic (BriefOpen)
   Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
   $Forks::Super::Job::WIN32_PROC_PID = $pid;
 
@@ -446,6 +449,8 @@ sub open2_win32_process {
   debug("Exit code of $$ was $c1") if $job->{debug};
   return $c1;
 }
+
+=ignore
 
 # XXX - doesn't work, doesn't handoff redirected filehandles properly
 sub create_win32_process {
@@ -468,6 +473,8 @@ sub create_win32_process {
   debug("Exit code of $$ was $c1") if $job->{debug};
   return $c1;
 }
+
+=cut
 
 sub system_win32_process {
   my ($job) = @_;

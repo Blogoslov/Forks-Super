@@ -23,7 +23,7 @@ my (@cmd,$pid,$fh_in,$z,$t,$fh_out,$fh_err,@out,@err,$msg);
 
 $pid = fork { exec => [ @cmd ], timeout => 5, child_fh => "all" };
 
-Forks::Super::Debug::_use_Carp_Always();
+Forks::Super::Debug::use_Carp_Always();
 
 ok(isValidPid($pid), "$$\\fork successful");
 ok(defined $Forks::Super::CHILD_STDIN{$pid}, 

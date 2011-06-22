@@ -26,14 +26,13 @@ our @ISA = qw(IO::Pipe IO::Handle);
 
 our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
 
-*_gensym = \&Forks::Super::Job::Ipc::_gensym;
-
 sub TIEHANDLE {
   my ($class, $real_pipe, $glob) = @_;
   $$glob->{DELEGATE} = $real_pipe;
   eval {
     bless $glob, 'Forks::Super::Tie::IPCPipeHandle::Delegator';
-  };
+  } or carp "Forks::Super::Tie::IPCPipeHandle: ",
+	  "failed to bless tied obj as a Delegator\n";
 
   # any attributes that the real pipe had should be passed
   # on to the glob.
@@ -173,12 +172,10 @@ sub CLOSE {
   return;
 }
 
-sub UNTIE {
-}
-
 sub DESTROY {
   my $self = shift;
   $self = {};
+  return;
 }
 
 #
@@ -187,7 +184,7 @@ sub DESTROY {
 # on the tied object's real underlying socket handle
 #
 sub Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD {
-  return if $Forks::Super::Job::_INSIDE_END_QUEUE;
+  return if $Forks::Super::Job::INSIDE_END_QUEUE;
   my $method = $Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD;
   $method =~ s/.*:://;
   my $delegator = shift;

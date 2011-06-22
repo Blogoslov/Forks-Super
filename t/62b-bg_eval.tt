@@ -2,10 +2,8 @@
 use strict;
 use warnings;
 
-$Forks::Super::LazyEval::USE_ZCALAR = 0;
-
 #
-# tests (33) for exercising bg_eval. This code should
+# tests (24) for exercising bg_eval. This code should
 # not be run by itself, but should be <require>'d by
 # the test scripts (62j-bg_eval.t, 62y-bg_eval.t)
 # that wish to run them.
@@ -53,46 +51,7 @@ SKIP: {
      "scalar bg_eval respected timeout, took ${t}s expected ~2s");
 }
 
-Forks::Super::Debug::_use_Carp_Always();
-
-### list context ###
-#
-# result is a tie'd array so let's exercise the array operations
-#
-
-$t = Time::HiRes::time();
-my @x = bg_eval {
-  sleep 2;
-  opendir(X, "t");
-  my @f = grep { /\.t$/ } readdir(X);
-  closedir X;
-  return @f;
-} {
-  'untaint' => $untaint
-};
-my @tests = @x;
-$t = Time::HiRes::time() - $t;
-ok(@tests > 10, "list bg_eval");
-ok($t >= 1.84, "list bg_eval took ${t}s expected ~2s");
-
-my $n = @x;
-my $u = shift @x;
-ok($u =~ /\.t$/ && @x == $n - 1, "list bg_eval shift");
-$u = pop @x;
-ok(@x == $n - 2 && $u =~ /\.t$/, "list bg_eval pop");
-unshift @x, "asdf";
-ok(@x == $n - 1, "list bg_eval unshift");
-push @x, "qwer", "tyuiop";
-ok(@x == $n + 1, "list bg_eval push");
-splice @x, 3, 3, "pq";
-ok(@x == $n - 1 && $x[3] eq "pq", "list bg_eval splice");
-$x[3] = "rst";
-ok(@x == $n - 1 && $x[3] eq "rst", "list bg_eval store");
-ok($x[5] =~ /.t$/, "list bg_eval fetch");
-delete $x[4];
-ok(!defined $x[4], "list bg_eval delete");
-@x = ();
-ok(@x == 0, "list bg_eval clear");
+Forks::Super::Debug::use_Carp_Always();
 
 ### scalar context, return reference ###
 
@@ -143,9 +102,5 @@ $t1 = Time::HiRes::time();
 ok($t0 > 7.80 && $t < 13.5,  ### 34 ### was 9.6 obs 9.99,10.35,11.37,13.20
    "bg_eval with delay took ${t}s ${t0}s, expected ~8s");
 ok($w == 14 + 1 + 2 + 5, "bg_eval finish callback");
-
-use Carp;$SIG{SEGV} = sub { 
-  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n" 
-};
 
 1;

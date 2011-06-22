@@ -19,21 +19,31 @@ int sched_getaffinity_get_affinity_debug(int pid)
   int i, r, z;
 fprintf(stderr,"getaffinity0\n");
   sched_getaffinity_initialize();
-fprintf(stderr,"getaffinity1\n");
+fprintf(stderr,"getaffinity1 pid=%d size=%d cpuset=0x%d\n",
+               (int) pid, (int) CPU_SETSIZE, (int) sched_getaffinity_set1);
+
+  /*
+   * Intermittent failure point is here.
+   *
+   * CPU affinity system calls were introduced in the Linux kernel 2.5.8,
+   * glibc library interfaces were introduced in glibc 2.3.
+   * The  cpusetsize  argument was removed in glibc 2.3.2 and restored 
+   * in 2.3.4.
+   */
+
   z = sched_getaffinity((pid_t) pid, CPU_SETSIZE, sched_getaffinity_set1);
 fprintf(stderr,"getaffinity2\n");
   if (z) {
-fprintf(stderr,"getaffinity3\n");
+fprintf(stderr,"getaffinity3 z=%d err=%d\n", z, errno);
     return 0;
-fprintf(stderr,"getaffinity4\n");
   }
 fprintf(stderr,"getaffinity5\n");
   for (i = r = 0; i < CPU_SETSIZE && i < 32; i++) {
-fprintf(stderr,"getaffinity6\n");
+fprintf(stderr,"getaffinity6 i=%d r=%d\n", i, r);
    if (CPU_ISSET(i, &sched_getaffinity_set2)) {
 fprintf(stderr,"getaffinity7\n");
       r |= 1 << i;
-fprintf(stderr,"getaffinity8\n");
+fprintf(stderr,"getaffinity8 r=%d\n", r);
     }
 fprintf(stderr,"getaffinity9\n");
   }
@@ -42,7 +52,6 @@ fprintf(stderr,"getaffinitya\n");
 }
 int sched_getaffinity_get_affinity_no_debug(int pid)
 {
-  /* infinite loop when there is only 1 cpu? */
   int i, r, z;
   sched_getaffinity_initialize();
   z = sched_getaffinity((pid_t) pid, CPU_SETSIZE, sched_getaffinity_set1);
@@ -64,7 +73,27 @@ int
 xs_sched_getaffinity_get_affinity(pid)
 int pid
     CODE:
+	/*
+	 * Get process CPU affinity on Linux. 
+	 * This function crashes sometimes, and I'm not sure why.
+	 *
+	 *     http://www.cpantesters.org/cpan/report/5bbdfcbe-6651-11e0-b483-457e42987c1d
+	 */
 	RETVAL = sched_getaffinity_get_affinity_no_debug(pid);
     OUTPUT:
 	RETVAL
+
+
+int
+xs_sched_getaffinity_get_affinity_debug(pid)
+int pid
+    CODE:
+	RETVAL = sched_getaffinity_get_affinity_debug(pid);
+    OUTPUT:
+	RETVAL
+
+
+
+
+
 

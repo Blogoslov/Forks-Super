@@ -1,4 +1,4 @@
-Sys-CpuAffinity v0.99
+Sys-CpuAffinity v1.01
 =====================
 
 The Sys::CpuAffinity module seeks to "do one thing and do it well":
@@ -27,12 +27,16 @@ pretty well. Some techniques applicable to BSD systems
 (particularly FreeBSD) and Solaris have been tested a little 
 bit. The hope is that this module will include more techniques 
 for more systems in future releases. See the NOTE TO 
-DEVELOPERS in the module's perldoc for information about 
+DEVELOPERS in the module's POD for information about 
 how you can help.
 
-MacOS is explicitly not supported, as there does not appear to
-be any public interface for specifying the CPU affinity of
-a process directly.
+MacOS and OpenBSD are explicitly not supported, as there does
+not appear to be any public interface for specifying the CPU 
+affinity of a process directly on these platforms.
+
+NetBSD support is very limited. The getAffinity and setAffinity
+calls will only work on the calling process, and will probably
+only work for the super-user.
 
 
 RECOMMENDED MODULES
@@ -42,7 +46,7 @@ but Sys::CpuAffinity will try to use them if they are
 available.
 
         Win32::API, Win32::Process [MSWin32, cygwin]
-        BSD::Process::Affinity [*bsd]
+        BSD::Process::Affinity     [FreeBSD]
 
 
 INSTALLATION

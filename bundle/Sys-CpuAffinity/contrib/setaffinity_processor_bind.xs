@@ -80,6 +80,7 @@ xs_setaffinity_processor_bind(pid,mask)
         int pid
 	int mask
     CODE:
+	/* Bind a process to a single CPU. For Solaris. */
 	RETVAL = setaffinity_processor_bind(pid,mask);
     OUTPUT:
 	RETVAL
@@ -88,6 +89,7 @@ int
 xs_setaffinity_processor_unbind(pid)
 	int pid
     CODE:
+	/* Allow a process to run on all CPUs. For Solaris. */
 	RETVAL = setaffinity_processor_unbind(pid);
     OUTPUT:
 	RETVAL

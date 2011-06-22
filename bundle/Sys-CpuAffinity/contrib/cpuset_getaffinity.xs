@@ -13,6 +13,7 @@ int
 xs_getaffinity_cpuset_get_affinity(pid)
     int pid
   CODE:
+    /* Get the affinity of a processes. Available for FreeBSD >= 7.1 */
     cpulevel_t level = CPU_LEVEL_WHICH;
     cpuwhich_t which = CPU_WHICH_PID;
     id_t id = (id_t) pid;

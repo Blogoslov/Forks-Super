@@ -1,3 +1,4 @@
+use lib qw(blib/lib blib/arch);
 use Sys::CpuAffinity;
 use Test::More tests => 1;
 use strict qw(vars subs);
@@ -26,16 +27,45 @@ $| = 1;
 # all we need.
 #
 
-my ($pid,$wpid);
+my $pid = $$;
+$Sys::CpuAffinity::IS_TEST = 1;
 
-$wpid = $pid = $$;
-if ($^O eq "cygwin") {
-  $wpid = Sys::CpuAffinity::__pid_to_winpid($pid);
+#########################################################
+#
+# get inventory of all Sys::CpuAffinity techniques 
+# from the Sys::CpuAffinity source code.
+#
+# XXX - could also inspect %Sys::CpuAffinity:: symbol table.
+#
+#########################################################
+
+{
+  my (@SET, @GET, @NCPUS);
+
+  open my $source, '<', $INC{"Sys/CpuAffinity.pm"}
+    or die "failed to load Sys::CpuAffinity source. $!\n";
+  while (<$source>) {
+    next unless /^sub _/;
+    next if /XXX/;         # method still under development
+    if (/^sub _setAffinity_with_(\S+)/) {
+      push @SET, $1;
+    } elsif (/^sub _getAffinity_with_(\S+)/) {
+      push @GET, $1;
+    } elsif (/^sub _getNumCpus_from_(\S+)/) {
+      push @NCPUS, $1;
+    }
+  }
+  close $source;
+
+  sub inventory::getAffinity { sort { lc $a cmp lc $b } @GET }
+  sub inventory::setAffinity { sort { lc $a cmp lc $b } @SET }
+  sub inventory::getNumCpus { sort { lc $a cmp lc $b } @NCPUS }
 }
 
-require "t/inventory.pl";
 
 select STDERR;
+
+print "\n\n";
 
 EXERCISE_COUNT_NCPUS();
 
@@ -53,47 +83,50 @@ if ($n <= 1) {
 
 EXERCISE_GET_AFFINITY();
 EXERCISE_SET_AFFINITY();
+sleep 1;
 ok(1);
 
 
 sub EXERCISE_GET_AFFINITY {
 
-    print "\n\n===============================================\n";
+    print "===============================================\n";
 
     print "Current affinity = \n";
     
     my $success = 0;
     for my $s (inventory::getAffinity()) {
 	my $sub = 'Sys::CpuAffinity::_getAffinity_with_' . $s;
-	printf "    %-25s ==> ", $s;
-	my $z = $s =~ /Win32/ ? eval { $sub->($wpid) } 
-	                      : eval { $sub->($pid) };
+	printf "    %-30s ==> ", $s;
+	my $z = eval { $sub->($pid) };
 	printf "%d\n", $z || 0;
-	$success += $z > 0;
+	$success += ($z||0) > 0;
     }
 
     if ($success == 0) {
       recommend($^O, 'getAffinity');
     }
+    print "\n\n";
 }
 
 sub EXERCISE_COUNT_NCPUS {
 
-    print "\n\n=================================================\n";
+    print "=================================================\n";
 
     print "Num processors =\n";
 
     for my $technique (inventory::getNumCpus()) {
 	my $s = 'Sys::CpuAffinity::_getNumCpus_from_' . $technique;
-	printf "    %-25s ", $technique;
+	printf "    %-30s ", $technique;
 	printf "- %d -\n", eval { $s->() } || 0;
     }
+
+    print "\n\n";
 
 }
 
 sub EXERCISE_SET_AFFINITY {
 
-    print "\n\n==================================================\n";
+    print "==================================================\n";
 
 
     my $np = Sys::CpuAffinity::getNumCpus();
@@ -114,19 +147,20 @@ sub EXERCISE_SET_AFFINITY {
     print "Set affinity =\n";
 
     for my $technique (inventory::setAffinity()) {
-	my $rr = Sys::CpuAffinity::getAffinity($pid);
+	my $rr = Sys::CpuAffinity::getAffinity($pid) || 0;
+	if ($rr == 0) {
+	  printf "   %-30s => %s ==> FAIL\n", $technique,
+	    "no affinity";
+	  next;
+	}
 	my $mask;
 	do {
 	    $mask = shift @mask;
 	} while $mask == $rr;
 
 	my $s = "Sys::CpuAffinity::_setAffinity_with_$technique";
-	if ($technique =~ /Win32/) {
-	    eval { $s->($wpid,$mask) };
-	} else {
-	    eval { $s->($pid,$mask) };
-	}
-	printf "    %-25s => %3u ==> ", $technique, $mask;
+	eval { $s->($pid,$mask) };
+	printf "    %-30s => %3u ==> ", $technique, $mask;
 	my $r = Sys::CpuAffinity::getAffinity($pid);
 	my $result = $r==$rr ? "FAIL" : " ok ";
 	if ($r != $rr) {
@@ -138,6 +172,8 @@ sub EXERCISE_SET_AFFINITY {
     if ($success == 0) {
       recommend($^O, 'setAffinity');
     }
+
+    print "\n\n";
 }
 
 sub recommend {
@@ -149,23 +185,37 @@ sub recommend {
   print "The function 'Sys::CpuAffinity::$function' does\n";
   print "not seem to work on this system.\n\n";
 
-  my @recommendations = ("a C complier");
+  my @recommendations;
   if ($Config{"cc"}) {
-    push @recommendations, "\t(preferrably $Config{cc})";
+    @recommendations = ("install a C compiler (preferrably $Config{cc})");
+  } else {
+    @recommendations = ("install a C compiler");
   }
 
   if ($sys eq 'cygwin') {
-    push @recommendations, "the  Win32  module";
-    push @recommendations, "the  Win32::API  module";
-    push @recommendations, "the  Win32::Process  module";
+    push @recommendations, "install the  Win32  module";
+    push @recommendations, "install the  Win32::API  module";
+    push @recommendations, "install the  Win32::Process  module";
   } elsif ($sys eq 'MSWin32') {
-    push @recommendations, "the  Win32  module";
-    push @recommendations, "the  Win32::API  module";
-    push @recommendations, "the  Win32::Process  module";
-  } elsif ($sys =~ /bsd/i) {
-    if ($sys !~ /openbsd/i) {
-      push @recommendations, "the  BSD::Process::Affinity  module";
+    push @recommendations, "install the  Win32  module";
+    push @recommendations, "install the  Win32::API  module";
+    push @recommendations, "install the  Win32::Process  module";
+  } elsif ($sys =~ /openbsd/i) {
+    @recommendations = ();
+    print "OpenBSD does not provide (as far as I can tell)\n";
+    print "a way to manipulate the CPU affinities of processes.\n";
+    print "\n\n==========================================\n\n\n";
+    return;
+  } elsif ($sys =~ /netbsd/i) {
+
+    if ($> != 0) {
+      push @recommendations, "run as super-user";
+      push @recommendations, 
+	"\t(the available methods for manipulating CPU affinities on NetBSD only work for super-user)";
     }
+
+  } elsif ($sys =~ /freebsd/i) {
+    push @recommendations, "install the  BSD::Process::Affinity  module";
     push @recommendations, "make sure the  cpuset  program is in the PATH";
   } elsif ($sys =~ /solaris/i) {
     push @recommendations, "make sure the  pbind  program is in the PATH";

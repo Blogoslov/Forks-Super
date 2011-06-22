@@ -30,8 +30,6 @@ our @ISA = qw(IO::Socket IO::Handle);
 
 our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
 
-*_gensym = \&Forks::Super::Job::Ipc::_gensym;
-
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
 sub trivial_pause { return $^O eq 'MSWin32' 
@@ -42,7 +40,8 @@ sub TIEHANDLE {
   $$glob->{DELEGATE} = $real_socket;
   eval {
     bless $glob, 'Forks::Super::Tie::IPCSocketHandle::Delegator';
-  };
+  } or carp "Forks::Super::Tie::IPCSocketHandle: ",
+  		"failed to bless tied obj as Delegator\n";
 
   # any attributes that the real socket had should be passed
   # on to the glob.
@@ -209,12 +208,10 @@ sub CLOSE {
   return $self->shutdown($how);
 }
 
-sub UNTIE {
-}
-
 sub DESTROY {
   my $self = shift;
   $self = {};
+  return;
 }
 
 #
@@ -223,7 +220,7 @@ sub DESTROY {
 # on the tied object's real underlying socket handle
 #
 sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
-  return if $Forks::Super::Job::_INSIDE_END_QUEUE;
+  return if $Forks::Super::Job::INSIDE_END_QUEUE;
   my $method = $Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD;
   $method =~ s/.*:://;
   my $delegator = shift;
@@ -232,7 +229,7 @@ sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
 
   ## no critic (StringyEval)
   if (wantarray) {
-    my @r = eval "\$delegate->$method(\@_)";
+      my @r = eval "\$delegate->$method(\@_)" or do {};
     if ($@) {
       Carp::cluck "IPCSocketHandle delegate fail: $method @_; error=$@\n";
     }

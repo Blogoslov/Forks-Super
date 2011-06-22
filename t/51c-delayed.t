@@ -17,7 +17,8 @@ my $elapsed = $job->{start} - $t;
 
 ok(!isValidPid($pid,-1) && $pp == $pid || $pp == $job->{real_pid}, 
    "created task with natural language delay");
-ok($elapsed >= 4 && $elapsed <= 6, "natural language delay was respected");
+ok($elapsed >= 4 && $elapsed <= 6, "natural language delay was respected")
+    or diag("took ${elapsed}s, expected 4-6");
 
 my $future = "in 6 seconds";
 $t = Time::HiRes::time();

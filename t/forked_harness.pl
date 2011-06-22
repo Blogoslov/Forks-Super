@@ -134,7 +134,7 @@ $repeat = 1 if $repeat < 1;
 $xrepeat = 1 if $xrepeat < 1;
 $quiet ||= $really_quiet;
 $Forks::Super::MAX_PROC = $maxproc if $maxproc;
-$Forks::Super::Util::DEFAULT_PAUSE = 0.10;
+$Forks::Super::ON_BUSY = 'block' if $ENV{BLOCK};
 sub color_print;
 
 # these colors are appropriate when your terminal has a dark background.
@@ -393,11 +393,11 @@ sub process_test_output {
       $not_ok++;
     }
   }
-  if ($use_harness && $quiet && $not_ok == 0) {
+#  if ($use_harness && $quiet && $not_ok == 0) {
+  if ($use_harness && $not_ok == 0) {
     # look for one of:
     #     t/nn-xxx.t .. ok
     #     t/nn-xxx.t....ok
-#   my @stdout2 = grep { / ?\.+ ?ok$/ } @stdout;
     my @stdout2 = grep { / ?\.+ ?ok/ } @stdout;
     if (@stdout2 > 0) {
       @stdout = @stdout2;
@@ -408,6 +408,13 @@ sub process_test_output {
       # Could have timed out.
       $not_ok = 0.5;
       $status = 0.5;
+
+      if ($j->{end} && $j->{timeout}
+	  && $j->{end} - $j->{start} >= $j->{timeout} * 0.99) {
+	  $fail{$test_file}{"TIMEOUT"}++;
+      } else {
+	  $fail{$test_file}{"Unknown Error"}++;
+      }
 
       unless ($really_quiet) {
 	color_print 'STDERR', "Not quite right: ", $j->toString(), "\n";
@@ -478,7 +485,6 @@ sub process_test_output {
   } elsif ($status == 35584 && $not_ok == 0) {
     $redo++;
   } elsif ($status != 0 && $not_ok == 0) {
-    # $fail{$test_file}{'unknown'} += $status >> 8;
     $fail{$test_file}{'unknown'} += 1;
   }
   # elsif ($quiet && $use_harness) { should summarize test results }
@@ -567,14 +573,17 @@ sub summarize {
     print "\nTest failures:\n";
     print "================\n";
     foreach my $test_file (sort keys %fail) {
-      foreach my $test_no (sort {$a+0<=>$b+0} keys %{$fail{$test_file}}) {
-	print "\t$test_file#$test_no ";
-	if ($fail{$test_file}{$test_no} == 1) {
-	  print "1 time\n";
-	} else {
-	  print "$fail{$test_file}{$test_no} times\n";
+	no warnings 'numeric';
+	foreach my $test_no (sort {
+	    $a+0<=>$b+0 || $a cmp $b
+	} keys %{$fail{$test_file}}) {
+	    print "\t$test_file#$test_no ";
+	    if ($fail{$test_file}{$test_no} == 1) {
+		print "1 time\n";
+	    } else {
+		print "$fail{$test_file}{$test_no} times\n";
+	    }
 	}
-      }
     }
     print "================\n";
   }

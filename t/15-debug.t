@@ -20,7 +20,7 @@ my $debug_file = "t/out/debug1-$^O-$].$$";
 if (-f $debug_file) {
   unlink $debug_file;
 }
-if (!open($Forks::Super::Debug::DEBUG_fh, ">", $debug_file)) {
+if (!open($Forks::Super::Debug::DEBUG_FH, ">", $debug_file)) {
   die "$debug_file open failed $!";
 }
 
@@ -30,7 +30,7 @@ open($X, "<", $debug_file);
 
 END {
   close $X;
-  close $Forks::Super::Debug::DEBUG_fh;
+  close $Forks::Super::Debug::DEBUG_FH;
   unlink $debug_file;
 }
 

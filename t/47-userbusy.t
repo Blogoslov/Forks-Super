@@ -48,7 +48,9 @@ ok(!isValidPid($pid6), "force failed fork");
 
 my @to_kill = grep { isValidPid($_) 
 		   } ($pid, $pid2, $pid3, $pid4, $pid5, $pid6);
-print "to kill: @to_kill\n";
+if ($^O eq 'MSWin32') {
+   diag("This is pid $$. Sending SIGTERM to: @to_kill");
+}
 Forks::Super::kill('TERM', @to_kill) if @to_kill > 0;
 waitall;
 

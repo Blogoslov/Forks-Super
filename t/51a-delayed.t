@@ -26,12 +26,17 @@ ok($j1->{state} eq "DEFERRED", "deferred job has DEFERRED state");
 ok($j2->{state} eq "DEFERRED", "deferred job has DEFERRED state");
 ok(!defined $j1->{start}, "deferred job has not started");
 waitall;
-ok($j1->{start} + $TOL >= $now + 5,
-   "deferred job started after delay");
+ok($j1->{start} + $TOL >= $now + 5,            ### 6 ###
+   "deferred job started after delay")
+   or diag("start $j1->{start} should be ",
+           "at least 5 seconds later than now $now");
 ok($j2->{start} + $TOL >= $future, 
-   "deferred job started after delay");
+   "deferred job started after delay")
+   or diag("job 2 start $j2->{start} after delay $future");
 ok($j1->{start} - $j1->{created} >= 5 - $TOL,
-   "job start time after creation time");
+   "job start time after creation time")
+   or diag("job start $j1->{start} should be at least ",
+           "5 seconds after create time $j1->{created}");
 my $j2_diff = $j2->{start} - $j2->{created};
 ok($j2_diff + $TOL >= 8.95,                     ### 9 ###
    "j2 took ${j2_diff}s between creation/start, expected 10s diff");

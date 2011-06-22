@@ -29,7 +29,7 @@ SKIP: {
   ok($y == 1, "kill signal to $pid1 sent successfully $y==1");
   sleep 1;
 
-  Forks::Super::Debug::_use_Carp_Always();
+  Forks::Super::Debug::use_Carp_Always();
 
   my $t = Time::HiRes::time();
   my $p = waitpid $pid1, 0, 20;
@@ -51,6 +51,11 @@ SKIP: {
   $pid3 = fork { sub => sub { sleep 5 }, depend_on => $pid1 };
   $j1 = Forks::Super::Job::get($pid1);
   sleep 1;
+
+  # failure point on MSWin32 - terminates the script
+  if ($^O eq 'MSWin32') {
+      diag("Sending SIGINT to $pid1");
+  }
   $y = Forks::Super::kill('INT', $pid1);
   sleep 2;
   Forks::Super::Queue::run_queue();

@@ -32,9 +32,10 @@ waitpid $pid, 0;
 ok($var == 5, "finish callback from unqualified sub name");
 
 $var = 3;
-$pid = fork { sub => sub { sleep 2 }, callback => $var6 };
+$pid = fork { sub => sub { sleep 3 }, callback => $var6 };
 sleep 1;
-ok($var == 3, "finish callback waits");
+ok($var == 3, "finish callback waits")
+   or diag("\$var was $var, expected 3");
 waitpid $pid, 0;
 ok($var == 6, "finish callback from assigned code ref");
 
@@ -83,6 +84,3 @@ ok($w == 38, "fail callback runs");
 waitall;
 ok($w == 38, "no other callbacks after fail");
 
-use Carp;$SIG{SEGV} = sub { 
-  Carp::cluck "Caught SIGSEGV during cleanup of $0 ...\n"
-};

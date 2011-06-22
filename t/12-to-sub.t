@@ -54,7 +54,7 @@ my $pid = fork { sub => 'main::internal_command',
 ok(isValidPid($pid), "fork to \$qualified::subroutineName successful, pid=$pid");
 my $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child STATUS \$? == 0");
+ok($? == 0, "child STATUS \$? $? == 0");                       ### 3 ###
 my $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Wurrled $pid";
@@ -72,7 +72,7 @@ $pid = fork { sub => 'internal_command',
 ok(isValidPid($pid), "fork to \$subroutineName successful, pid=$pid");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child STATUS \$? == 0");
+ok($? == 0, "child STATUS \$? $? == 0");                       ### 7 ###
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Wurrled $pid";
@@ -89,7 +89,7 @@ $pid = fork { sub => \&internal_command,
 ok(isValidPid($pid), "fork to \\\&subroutine successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child STATUS \$? == 0");
+ok($? == 0, "child STATUS \$? $? == 0");
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Wurrled $pid";
@@ -113,7 +113,7 @@ $p = wait;
 
 # failure point on linux under load ...
 
-ok($?>>8 == 14, "child STATUS $? \$? != 0");     ### 14 ###
+ok($?>>8 == 14, "child STATUS \$? $? != 0");     ### 14 ###
 ok($pid == $p, "wait reaped child $pid == $p");  ### 15 ###
 $z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
@@ -144,7 +144,7 @@ $pid = fork { sub => sub { exit 7 } };
 ok(isValidPid($pid), "fork to false sub ok");
 $p = Forks::Super::wait;
 ok($p == $pid, "wait on false sub ok");
-ok($?>>8 == 7, "captured correct non-zero STATUS");
+ok($?>>8 == 7, "captured correct non-zero STATUS $?");
 ok($Forks::Super::ALL_JOBS{$pid}->{status} == 7 << 8,
    "captured exit status from sub with exit statement");
 
@@ -153,7 +153,7 @@ ok($Forks::Super::ALL_JOBS{$pid}->{status} == 7 << 8,
 $pid = fork { sub => sub {} };
 ok(isValidPid($pid), "fork to trivial sub ok");
 $p = wait;
-ok($? == 0, "captured correct zero STATUS from trivial sub");
+ok($? == 0, "captured correct zero STATUS $? from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");
 
 #############################################################################

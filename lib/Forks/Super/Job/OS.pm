@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = $Forks::Super::Util::VERSION;
+our $VERSION = '0.52';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -27,6 +27,7 @@ sub _preconfig_os {
   if (defined $job->{os_priority}) {
     $job->{os_priority_call} = ++$OS_PRIORITY_CALLS;
   }
+  return;
 }
 
 #
@@ -104,6 +105,7 @@ sub set_cpu_affinity {
       "cannot set child process's cpu affinity.\n",
       "Install the Sys::CpuAffinity module to enable this feature.\n";
   }
+  return;
 }
 
 sub validate_cpu_affinity {
@@ -149,7 +151,7 @@ sub get_cpu_load {
       return -1.0;
     }
   } else { # pray for `uptime`.
-    my $uptime = `uptime 2>/dev/null`;
+    my $uptime = qx(uptime 2>/dev/null);        ## no critic (Backtick)
     $uptime =~ s/\s+$//;
     my @uptime = split /[\s,]+/, $uptime;
     if (@uptime > 2) {
@@ -208,7 +210,7 @@ sub _get_number_of_processors_from_psrinfo {
   # it's rumored that  psrinfo -v  on solaris reports number of cpus
   if (CONFIG('/psrinfo')) {
     my $cmd = CONFIG('/psrinfo') . ' -v';
-    my @psrinfo = `$cmd 2>/dev/null`;
+    my @psrinfo = qx($cmd 2>/dev/null);     ## no critic (Backtick)
     my $num_processors = grep { /Status of processor \d+/ } @psrinfo;
     return $num_processors;
   }
@@ -243,7 +245,9 @@ sub _get_number_of_processors_from_dmesg {
 
     my @cpu_num = grep { /^cpu\#?\d+:/i } @dmesg;
     if (@cpu_num > 0) {
-      my %cpu_num = map {/^cpu\#?(\d+):/;$1=>1} @cpu_num;
+      my %cpu_num = map {
+	  /^cpu\#?(\d+):/ ? ($1 => 1) : ();
+      } @cpu_num;
       if (0 < keys %cpu_num) {
 	return scalar keys %cpu_num;
       }
@@ -261,14 +265,15 @@ sub kill_Win32_process_tree {
     # How many ways are there to kill a process in Windows?
     # How many do you need?
 
-    my $c1 = () = grep { /ERROR/ } `TASKKILL /PID $pid /F /T 2>&1`;
+    ## no critic (Backtick)
+    my $c1 = () = grep { /ERROR/ } qx(TASKKILL /PID $pid /F /T 2>&1);
     $c1 = system("TSKILL $pid /A > nul") if $c1;
     if ($c1 && CONFIG('Win32::Process::Kill')) {
       $c1 = !Win32::Process::Kill::Kill($pid);
     }
 
     if ($c1) {
-      my $c2 = () = `TASKLIST /FI \"pid eq $pid\" 2> nul`;
+      my $c2 = () = qx(TASKLIST /FI \"pid eq $pid\" 2> nul);
       if ($c2 == 0) {
 	warn "Forks::Super::Job::OS::kill_Win32_process_tree: ",
 	  "$pid: no such process?\n";

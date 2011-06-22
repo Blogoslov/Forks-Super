@@ -37,7 +37,9 @@ ok($t2 > 2.95, "read blocked stdout ${t2}s, expected ~4s");
 $out = Forks::Super::read_stdout($pid, "block" => 0);
 my $t3 = Time::HiRes::time() - $t0;
 my $t32 = $t3 - $t2;
-ok(!defined($out), "non-blocking read on stdout returned empty");
+ok(!defined($out) || (defined($out) && $out eq ""), 
+   "non-blocking read on empty stdout returns empty")
+  or diag("\$out was \"$out\", expected empty");
 ok($t32 <= 1.0, "non-blocking read took ${t32}s, expected ~${Forks::Super::SOCKET_READ_TIMEOUT}s");
 
 $out = Forks::Super::read_stdout($pid);

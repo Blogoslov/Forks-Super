@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               Forks-Super
-version:            0.51
-abstract:           extensions and convenience methods to manage background processes.
+version:            0.52
+abstract:           extensions and convenience methods to manage background processes
 author:
     - Marty O'Brien <mob\@cpan.org>
 license:            perl
@@ -13,7 +13,6 @@ build_requires:
 requires:
     Test::More:   0
     Time::HiRes:  1.30
-    Win32::API:   0.43
 no_index:
     directory:
         - t
@@ -22,7 +21,7 @@ no_index:
         - Sys::CpuAffinity
         - Signals::XSIG
         - Signals::XSIG::Default
-generated_by:       ExtUtils::MakeMaker version 6.50
+generated_by:       ExtUtils::MakeMaker version 6.55_02
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4

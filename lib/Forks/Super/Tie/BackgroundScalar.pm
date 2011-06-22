@@ -30,7 +30,9 @@ use overload
   '~' => sub { ~$_[0]->_fetch },
   '<=>' => sub { $_[2] ? $_[1]||0 <=> $_[0]->_fetch 
 		       : $_[0]->_fetch <=> $_[1]||0 },
-  'cmp' => sub { $_[2] ? $_[1] cmp $_[0]->_fetch : $_[0]->_fetch cmp $_[1] },
+  'cmp' => sub {
+      $_[2] ? $_[1] cmp $_[0]->_fetch : $_[0]->_fetch cmp $_[1]
+   },
   '-' => sub { $_[2] ? $_[1] - $_[0]->_fetch : $_[0]->_fetch - $_[1] },
   '/' => sub { $_[2] ? $_[1] / $_[0]->_fetch : $_[0]->_fetch / $_[1] },
   '%' => sub { $_[2] ? $_[1] % $_[0]->_fetch : $_[0]->_fetch % $_[1] },
@@ -63,6 +65,67 @@ use overload
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
+# "protocols" for serializing data and the methods used
+# to carry out the serialization
+
+my %serialization_dispatch = (
+
+    YAML => {
+	require => sub { require YAML },
+	encode => sub { return YAML::Dump($_[0]) },
+	decode => sub { return YAML::Load($_[0]) }
+    },
+
+    JSON1 => {
+	require => sub { require JSON },
+	encode => sub {
+	    my $data = shift;
+	    $data = "$data" if ref $data eq '';
+	    return JSON->new->objToJson([$data]);
+	},
+	decode => sub { return JSON->new->jsonToObj($_[0])->[0] }
+    },
+
+    JSON2 => {
+	require => sub { require JSON },
+	encode => sub { 
+	    my $data = shift;
+	    $data = "$data" if ref $data eq '';
+	    return JSON::encode_json([$data]);
+	},
+	decode => sub { return JSON::decode_json($_[0])->[0] }
+    },
+
+    'Data::Dumper' => {
+	require => sub { require Data::Dumper },
+	encode => sub { return Data::Dumper::Dumper($_[0]) },
+	decode => sub {
+	    my ($data,$job,$VAR1) = @_;
+	    if (${^TAINT}) {
+		if ($job->{untaint}) {
+		    ($data) = $data =~ /(.*)/s;
+		} else {
+		    carp "Forks::Super::bg_eval/bg_qx(): ",
+		        "Using Data::Dumper for serialization, which cannot ",
+		        "operate on 'tainted' data. Use bg_eval {...} ",
+		        "{untaint => 1} or bg_qx COMMAND, ",
+		        "{untaint => 1} to retrieve the result.\n";
+		    return;
+		}
+	    }
+	    my $decoded = eval "$data";    ## no critic (StringyEval)
+	    return $decoded;
+	}
+    },
+
+    'YAML::Tiny' => {
+	require => sub { require YAML::Tiny },
+	encode => sub { return YAML::Tiny::Dump($_[0]) },
+	decode => sub { return YAML::Tiny::Load($_[0]) }
+    },
+
+    );
+
 # a scalar reference that is evaluated in a child process.
 # when the value is dereferenced, retrieve the output from
 # the child, waiting for the child to finish if necessary
@@ -73,92 +136,55 @@ sub new {
   if ($style eq 'eval') {
     my $protocol = $other_options{'protocol'};
     $self->{code} = $command_or_code;
-    $self->{job_id} 
-      = Forks::Super::fork { %other_options, child_fh => 'out',
-			     sub => sub {
-			       my $Result = $command_or_code->();
-			       print STDOUT _encode($protocol, $Result);
-			  }, _is_bg => 1, _lazy_proto => $protocol };
+    $self->{job_id} = Forks::Super::fork { 
+	(%other_options,
+	child_fh => 'out',
+	sub => sub {
+	    my $Result = $command_or_code->();
+	    print STDOUT _encode($protocol, $Result);
+	}, 
+	_is_bg => 1, 
+	_lazy_proto => $protocol )
+    };
 
   } elsif ($style eq 'qx') {
     $self->{command} = $command_or_code;
     $self->{stdout} = '';
-    $self->{job_id} = Forks::Super::fork { %other_options, child_fh => 'out',
-			  cmd => $command_or_code,
-			  stdout => \$self->{stdout}, _is_bg => 1 };
+    $self->{job_id} = Forks::Super::fork { 
+	(%other_options, 
+	child_fh => 'out',
+	cmd => $command_or_code,
+	stdout => \$self->{stdout}, 
+	_is_bg => 1)
+    };
   }
   $self->{job} = Forks::Super::Job::get($self->{job_id});
-  Forks::Super::_set_last_job($self->{job}, $self->{job_id});
+  ($Forks::Super::LAST_JOB, $Forks::Super::LAST_JOB_ID)
+      = ($self->{job}, $self->{job_id});
   $self->{value} = undef;
   return bless $self, $class;
 }
 
 sub _encode {
-  my ($protocol, $data) = @_;
-  if ($protocol eq 'YAML') {
-    require YAML;
-    return YAML::Dump($data);
-  } elsif ($protocol eq 'JSON1') {
-    require JSON;
-    if (ref $data eq '') {
-      return new JSON()->objToJson(["$data"]);
+    my ($protocol, $data) = @_;
+    if (defined $serialization_dispatch{$protocol}) {
+	$serialization_dispatch{$protocol}{'require'}->();
+	return $serialization_dispatch{$protocol}{encode}->($data);
     } else {
-      return new JSON()->objToJson([$data]);
+	croak "Forks::Super::Tie::BackgroundScalar: ",
+	    "YAML, JSON, or Data::Dumper required to use bg_eval";
     }
-  } elsif ($protocol eq 'JSON2') {
-    require JSON;
-    if (ref $data eq '') {
-      return JSON::encode_json(["$data"]);
-    } else {
-      return JSON::encode_json([$data]);
-    }
-  } elsif ($protocol eq 'YAML::Tiny') {
-    require YAML::Tiny;
-    return YAML::Tiny::Dump($data);
-  } elsif ($protocol eq 'Data::Dumper') {
-    require Data::Dumper;
-    return Data::Dumper::Dumper($data);
-  } else {
-    croak "Forks::Super::Tie::BackgroundScalar: ",
-      "expected YAML or JSON to be available\n";
-  }
 }
 
 sub _decode {
-  my ($protocol, $data, $job) = @_;
-  if (!defined($data) || $data eq "") {
-    return;
-  } elsif ($protocol eq 'YAML') {
-    require YAML;
-    return YAML::Load($data);
-  } elsif ($protocol eq 'JSON1') {
-    require JSON;
-    return new JSON()->jsonToObj($data)->[0];
-  } elsif ($protocol eq 'JSON2') {
-    require JSON;
-    return JSON::decode_json($data)->[0];
-  } elsif ($protocol eq 'Data::Dumper') {
-    require Data::Dumper;
-    my $VAR1;
-    if (${^TAINT}) {
-      if ($job->{untaint}) {
-	($data) = $data =~ /(.*)/s;
-      } else {
-	carp "Forks::Super::bg_eval/bg_qx(): ",
-	  "Using Data::Dumper for serialization, which cannot ",
-	  "operate on 'tainted' data. Use bg_eval {...} {untaint => 1} ",
-	  "or bg_qx COMMAND, {untaint => 1} to retrieve the result.\n";
-	return;
-      }
+    my ($protocol, $data, $job) = @_;
+    if (defined $serialization_dispatch{$protocol}) {
+	$serialization_dispatch{$protocol}{require}->();
+	return $serialization_dispatch{$protocol}{decode}->($data,$job);
+    } else {
+	croak "Forks::Super::Tie::BackgroundScalar: ",
+	    "YAML, JSON, or Data::Dumper required to use bg_eval";
     }
-    my $decoded = eval "$data";  ## no critic (StringyEval)
-    return $decoded;
-  } elsif ($protocol eq 'YAML::Tiny') {
-    require YAML::Tiny;
-    return YAML::Tiny::Load($data);
-  } else {
-    croak "YAML or JSON required to use bg_eval";
-  }
 }
 
 # unbless the object (so we can access hash elements without going
@@ -214,10 +240,11 @@ sub _fetch {
 
     if ($self->{style} eq 'eval') {
       my $stdout = join'', Forks::Super::read_stdout($self->{job_id});
-      eval {
-	$self->{value} = _decode($self->{job}->{_lazy_proto}, $stdout, $self->{job});
-      };
-      if ($@) {
+      unless (eval {
+	  $self->{value} = _decode($self->{job}->{_lazy_proto}, 
+				   $stdout, $self->{job});
+	  1
+	      }) {
 	$self->{error} ||= $@;
 	$self->{value} = undef;
       }

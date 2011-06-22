@@ -19,6 +19,7 @@ Forks::Super::Config::CONFIG_module("Win32::API");
 Forks::Super::Config::CONFIG_module("Win32::Process");
 Forks::Super::Config::CONFIG_module("Sys::CpuAffinity");
 Forks::Super::Config::CONFIG_module("Sys::CpuLoadX");
+Forks::Super::Config::CONFIG_module("DateTime::Format::Natural");
 Forks::Super::Config::CONFIG_external_program("/uptime");
 
 print STDERR "\%SysInfo::CONFIG includes:";

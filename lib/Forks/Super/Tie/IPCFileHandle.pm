@@ -27,18 +27,13 @@ use IO::Handle;
 use Carp;
 use strict;
 use warnings;
-# use Time::HiRes;
 
 our @ISA = qw(Exporter IO::Handle);
-# use base qw(Exporter);
-
 our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
-
-*_gensym = \&Forks::Super::Job::Ipc::_gensym;
 
 sub TIEHANDLE {
   my ($class, %props) = @_;
-  my $self = bless _gensym(), $class;
+  my $self = bless Forks::Super::Job::Ipc::_gensym(), $class;
   $$self->{$_} = $props{$_} for keys %props;
   $$self->{created} = Time::HiRes::time();
   return $self;
@@ -60,14 +55,14 @@ sub OPEN {
     local $! = 0;
     if (defined $expr) {
       # XXX - we currently don't make calls with the 4+ arg version of open
-      #       so we don't need to support it now
+      #       so we don't need to support it now, but one day we might.
 
       # suppress "Filehandle %s reopened as %s only for input/output",
       # which can occur when we close and reopen the STDxxx filehandles
       no warnings 'io';
       $result = open *$self, $mode, $expr;
     } else {
-      $result = open *$self, $mode;
+      $result = open *$self, $mode;         ## no critic (TwoArgOpen)
     }
     $$self->{opened} = ($$self->{OPENED} = $result) && Time::HiRes::time();
     $$self->{closed} = 1 if !$result;
@@ -138,7 +133,7 @@ sub PRINTF {
 
   }
   seek $self, 0, 2;
-  printf {$self} @_;
+  return printf {$self} @_;
 }
 
 sub TELL {
@@ -184,24 +179,36 @@ sub is_pipe {
   return 0;
 }
 
-sub DESTROY {
+sub UNTIE {
+    # XXX - without this method, we often get
+    #   'untie attempted while ... inner references ...' message.
+    # How to fix this? Devel::FindRef was little help in
+    # diagnosing the problem :-( 
+    my ($self, $existing_inner_references) = @_;
+    if ($existing_inner_references > 0) {
+	# ... 
+    }
 }
-
-
 
 sub Forks::Super::Tie::Delegator::AUTOLOAD {
   my $method = $Forks::Super::Tie::Delegator::AUTOLOAD;
   $method =~ s/.*:://;
   my $tied = tied *{shift @_};
   if ($tied) {
-    return eval "\$tied->$method(\@_)";  ## no critic (StringyEval)
-  } elsif ($method eq 'DESTROY') {
-#    Carp::cluck "Delegation of $method requested for untied object during global destruction ...";
-  } elsif (!$Forks::Super::Job::INSIDE_END_QUEUE) {
-    Carp::confess "Can't delegate method $method from an untied object!";
-  } elsif ($method ne 'DESTROY') {
-    Carp::cluck "Delegation of $method requested for untied object during global destruction ...";
+    return eval "\$tied->$method(\@_)" or do {};  ## no critic (StringyEval)
   }
+
+  if ($method eq 'DESTROY') {
+      return;  # no op
+  }
+
+  if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
+    Carp::confess "Can't delegate method $method from an untied object!";
+  }
+
+  Carp::cluck "Delegation of $method requested for untied object ",
+    	"during global destruction ...";
+  return;
 }
 
 1;

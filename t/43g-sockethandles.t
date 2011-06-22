@@ -82,7 +82,7 @@ $pid = fork {
   }
 };
 my $x = $pid->read_stderr(timeout => 1);
-ok($x, "read avail stderr with timeout");
+ok($x, "read avail stderr with timeout");                        ### 15 ###
 $x = $pid->read_stdout(timeout => 2);
 ok(!$x, "read unavail stdout with timeout");
 $x = $pid->read_stdout(timeout => 5);
@@ -92,4 +92,5 @@ ok(!$x, "read unavail stdout with timeout");
 $x = $pid->read_stdout(block => 1);
 ok($x, "read stdout with block");
 $x = $pid->read_stderr();
-ok(!$x, "read unavail stderr");
+ok(!$x, "read unavail stderr")                                   ### 20 ###
+   or diag("read \"$x\", expected nothing");

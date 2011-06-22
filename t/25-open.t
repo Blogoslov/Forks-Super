@@ -53,7 +53,8 @@ $msg = sprintf "%05x", rand() * 99999;
 $z = print $fh_in "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open3: print to input handle ok = $z");
-sleep 4;
+sleep 5;
+
 
 @out = Forks::Super::read_stdout($pid);
 Forks::Super::close_fh($pid, 'stdout');
@@ -62,12 +63,13 @@ my @err = Forks::Super::read_stderr($pid);
 Forks::Super::close_fh($pid, 'stderr');
 ok(@out == 4, "open3: got right number of output lines")            ### 15 ###
   or diag("open3 output was:\n@out\nExpected 4 lines");
-ok($out[0] eq "Hello $msg\n", "got right output (1)")               ### 16 ###
+ok(@out>0 && $out[0] eq "Hello $msg\n", "got right output (1)")     ### 16 ###
   or diag("First output was \"$out[0]\", expected \"Hello $msg\\n\"");
-ok($out[1] eq "$msg\n", "got right output (2)")                     ### 17 ###
+ok(@out>1 && $out[1] eq "$msg\n", "got right output (2)")           ### 17 ###
   or diag("2nd output was \"$out[1]\", expected \"$msg\\n\"");
-ok(@err == 1, "open3: got right error lines");
-ok($err[0] eq "received message $msg\n", "open3: got right error")  ### 19 ###
+ok(@err == 1, "open3: got right error lines");                      ### 18 ###
+ok(@err>0 && $err[0] eq "received message $msg\n",                  ### 19 ###
+   "open3: got right error")
   or diag("Error was \"$err[0]\",\n",
 	  "Expected \"received message $msg\\n\"");
 Forks::Super::pause();
@@ -90,7 +92,7 @@ SKIP: {
   ($fh_in, $fh_out, $fh_err, $pid, $job) 
     = Forks::Super::open3(@cmd, {timeout => 5});
   
-  Forks::Super::Debug::_use_Carp_Always();
+  Forks::Super::Debug::use_Carp_Always();
 
   ok(defined($fh_in) && defined($fh_out) && defined($fh_err),
      "open3: child fh available");

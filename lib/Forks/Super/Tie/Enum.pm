@@ -35,6 +35,7 @@ sub STORE {
   } else {
     carp "Invalid assignment to enumerated tied scalar\n";
   }
+  return;
 }
 
 sub _has_attr {

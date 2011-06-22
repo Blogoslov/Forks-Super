@@ -1,11 +1,11 @@
 use Forks::Super ':test';
-use Test::More tests => 10;
+use Test::More tests => 9;
 use strict;
 use warnings;
 
 SKIP: {
   if (!Forks::Super::Config::CONFIG_module("DateTime::Format::Natural")) {
-    skip "natural language test requires DateTime::Format::Natural module", 10;
+    skip "natural language test requires DateTime::Format::Natural module", 9;
   }
 
   my $pid = fork { timeout => "in 5 seconds", sub => sub { sleep 10 } };
@@ -15,7 +15,8 @@ SKIP: {
 
   ok(isValidPid($pid) && $pid == $pp, 
      "created task with natural language timeout");
-  ok($elapsed >= 4 && $elapsed <= 6, "natural language timeout was respected");
+  ok($elapsed >= 4.0 && $elapsed <= 7.0,                      ### 2 ###
+     "natural language timeout was respected ${elapsed}s, expected ~5s");
   ok($job->{status} != 0, "natural language timeout had nonzero exit code");
 
   $pid = fork { timeout => "in 10 seconds", 
@@ -63,7 +64,10 @@ SKIP: {
      "job not launched because expiration was expressed "
      ."as a past time in natural language");
   ok($d !~ /foo/, "job with expiration in the past did not get started");
-  ok(1);
+
+  # also expect "Failed to open < ./.fhfork<nnnn>/.fh_003 after 10 tries",
+  # "config_fh_parent(): could not open filehandle to read child STDOUT"
+  # warnings, since the child doesn't ever get started.
 
   waitall;
 

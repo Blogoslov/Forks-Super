@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 35;
+use Test::More tests => 24;
 use strict;
 use warnings;
 
@@ -18,10 +18,10 @@ $Forks::Super::Config::CONFIG{"YAML"} = 0;
 
 SKIP: {
   if ($ENV{NO_JSON}) {
-    skip "NO_JSON specified, skipping bg_eval tests", 33;
+    skip "NO_JSON specified, skipping bg_eval tests", 22;
   }
   if (!Forks::Super::Config::CONFIG_module("JSON")) {
-    skip "JSON module not available, skipping bg_eval tests", 33;
+    skip "JSON module not available, skipping bg_eval tests", 22;
   }
 
   require "./t/62b-bg_eval.tt";

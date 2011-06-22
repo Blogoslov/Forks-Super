@@ -73,12 +73,12 @@ for (my $i=0; $i<$nn; $i++) {
 
 for (my $i=0; $i<$nn; $i++) {
   &check_CHLD_handle_history_for_interleaving;
-  my $p = wait;
+  my $p = wait 10;
   ok(isValidPid($p), "reaped $p");
 }
 
 #print @Forks::Super::CHLD_HANDLE_HISTORY;
-my $p = wait;
+my $p = wait 2;
 ok($p == -1, "Nothing to reap");
 
 

@@ -3,7 +3,6 @@
 #        and waitall methods
 #
 
-
 package Forks::Super::Wait;
 use Forks::Super::Job;
 use Forks::Super::Util qw(is_number isValidPid pause);
@@ -20,7 +19,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = $Forks::Super::Util::VERSION;
+our $VERSION = '0.52';
 
 our ($productive_pause_code, $productive_waitpid_code);
 
@@ -29,9 +28,11 @@ tie our $WAIT_ACTION_ON_SUSPENDED_JOBS,
 
 sub set_productive_pause_code (&) {
   $productive_pause_code = shift;
+  return;
 }
 sub set_productive_waitpid_code (&) {
   $productive_waitpid_code = shift;
+  return;
 }
 
 use constant TIMEOUT => -1.5;
@@ -39,10 +40,10 @@ use constant ONLY_SUSPENDED_JOBS_LEFT => -1.75;
 use constant WREAP_BG_OK => WNOHANG() << 1;
 
 sub wait {
-  my $timeout = shift || 0;
-  $timeout = 1E-6 if $timeout < 0;
-  debug("invoked Forks::Super::wait") if $DEBUG;
-  return Forks::Super::Wait::waitpid(-1,0,$timeout);
+    my $timeout = shift || 0;
+    $timeout = 1E-6 if $timeout < 0;
+    debug("invoked Forks::Super::wait") if $DEBUG;
+    return Forks::Super::Wait::waitpid(-1, 0, $timeout);
 }
 
 sub waitpid {
@@ -68,18 +69,24 @@ sub waitpid {
   # return -1 if there are no eligible procs to wait for
   my $no_hang = ($flags & WNOHANG) != 0;
   my $reap_bg_ok = $flags == WREAP_BG_OK;
+
   if (is_number($target) && $target == -1) {
     return _waitpid_any($no_hang, $reap_bg_ok, $timeout);
-  } elsif (defined $ALL_JOBS{$target}) {
+  }
+  if (defined $ALL_JOBS{$target}) {
     return _waitpid_target($no_hang, $reap_bg_ok, $target, $timeout);
-  } elsif (0 < (my @wantarray = Forks::Super::Job::getByName($target))) {
+  }
+  if (0 < (my @wantarray = Forks::Super::Job::getByName($target))) {
     return _waitpid_name($no_hang, $reap_bg_ok, $target, $timeout);
-  } elsif (!is_number($target)) {
+  }
+  if (!is_number($target)) {
     return -1;
-  } elsif ($target > 0) {
+  }
+  if ($target > 0) {
     # invalid pid
     return -1;
-  } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+  }
+  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if ($target == 0) {
       unless (eval { $target = getpgrp(0) } ) {
 	$target = -$$;
@@ -147,7 +154,7 @@ sub _reap_return {
 sub _reap {
   my ($reap_bg_ok, $optional_pgid) = @_; # to reap procs from specific group
   $productive_waitpid_code->() if $productive_waitpid_code;
-  _handle_bastards();
+  Forks::Super::Sigchld::handle_bastards();
 
   my @j = @ALL_JOBS;
   if (defined $optional_pgid) {
@@ -331,23 +338,6 @@ sub _waitpid_pgrp {
   $? = $ALL_JOBS{$pid}->{status}
     if defined $ALL_JOBS{$pid};
   return $pid;
-}
-
-#
-# bastards arise when a child finishes quickly and has been
-# reaped in the SIGCHLD handler before the parent has finished
-# initializing the job's state. See  Forks::Super::Sigchld::handle_CHLD() .
-#
-sub _handle_bastards {
-  foreach my $pid (keys %Forks::Super::BASTARD_DATA) {
-    my $job = $ALL_JOBS{$pid};
-    if (defined $job) {
-      $job->_mark_complete;
-      ($job->{end}, $job->{status}) =
-	\@{delete $Forks::Super::BASTARD_DATA{$pid}};
-
-    }
-  }
 }
 
 1;

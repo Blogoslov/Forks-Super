@@ -1,10 +1,8 @@
-use Forks::Super qw(:test overload);
+use Forks::Super qw(:test_CA overload);
 use Forks::Super::Util qw(is_socket is_pipe);
 use Test::More tests => 14;
 use strict;
 use warnings;
-
-Forks::Super::Debug::_use_Carp_Always();
 
 $Forks::Super::SOCKET_READ_TIMEOUT = 0.25;
 

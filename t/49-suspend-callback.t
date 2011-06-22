@@ -9,21 +9,15 @@ my $file = "t/out/49.$$.out";
 $Forks::Super::Util::DEFAULT_PAUSE = 0.5;
 
 our ($DEBUG, $DEVNULL);
-
-if ($ENV{DEBUG}) {
-  $DEBUG = *STDERR;
-} else {
-  open($DEVNULL, ">", "$file.debug");
-  $DEBUG = $DEVNULL;
-}
+$DEBUG = $ENV{DEBUG} ? *STDERR : do {open($DEVNULL,'>',"$file.debug");$DEVNULL};
 
 END {
   if ($$ == $Forks::Super::MAIN_PID) {
-    unlink $file, "$file.tmp", "$file.debug";
-    unless ($ENV{DEBUG}) {
-      close $DEVNULL;
-      unlink "$file.debug";
-    }
+      unlink $file, "$file.tmp", "$file.debug", "$file.sem";
+      unless ($ENV{DEBUG}) {
+	  close $DEVNULL;
+	  unlink "$file.debug";
+      }
   }
 }
 
@@ -43,12 +37,15 @@ sub child_suspend_callback_function {
     return 0;
   }
   if ($d < 10) {
-    while (-f "$file.block-suspend") {
-      print $DEBUG "::: suspend - wait for child to be in good state\n";
-      Time::HiRes::sleep 0.25;
-    }
-    print $DEBUG " :  suspend\n";
-    return -1;
+      print $DEBUG " :  suspend\n";
+      open SEM, '>>', "$file.sem";
+      flock SEM, 2;
+      close SEM;
+
+      # there is still a race condition here, as the child process could seize
+      # the semaphore between now and the time the  SIGSTOP  actually gets
+      # sent from the parent to the child.
+      return -1;
   }
   if ($d < 15) {
     print $DEBUG " :  noop\n";
@@ -77,8 +74,8 @@ sub write_value {
   no warnings 'unopened', 'io';
 
   # don't suspend while we're in the middle of changing the ipc file
-  open my $xx, '>>', "$file.block-suspend";
-  close $xx;
+  open SEM, '>>', "$file.sem";
+  flock SEM, 2;
 
   open my $fh, '>', "$file.tmp";
   print $DEBUG "write_value $value\n";
@@ -86,98 +83,109 @@ sub write_value {
   close $fh;
   rename "$file.tmp", $file;
   print $DEBUG "write_value: sync\n";
-  unlink "$file.block-suspend";
+
+  close SEM;
   return;
 }
 
 $Forks::Super::Queue::QUEUE_MONITOR_FREQ = 2;
 
+if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG_module("Win32::API")) {
+   ok(1, "# skip suspend/resume not supported on $^O") for 1..9;
+   exit;
+}
 
-SKIP: {
-  if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG_module("Win32::API")) {
-    skip "suspend/resume not supported on MSWin32", 9;
-  }
-
-  my $t0 = $::T = Time::HiRes::time();
-  my $pid = fork { 
+my $t0 = $::T = Time::HiRes::time();
+my $pid = fork { 
     suspend => 'child_suspend_callback_function',
-      sub => sub {
+    sub => sub {
 	for (my $i = 1; $i <= 8; $i++) {
-	  Time::HiRes::sleep(0.5);
-	  write_value($i);
-	  Time::HiRes::sleep(0.5);
+	    Time::HiRes::sleep(0.5);
+	    write_value($i);
+	    Time::HiRes::sleep(0.5);
 	}
-      },
-	timeout => 45
-      };
-  my $t1 = 0.5 * ($t0 + Time::HiRes::time());
-  my $job = Forks::Super::Job::get($pid);
+    },
+    timeout => 45
+};
+my $t1 = 0.5 * ($t0 + Time::HiRes::time());
+my $job = Forks::Super::Job::get($pid);
 
-  local $SIG{STOP} = sub { croak "SIG$_[0] received in PARENT process" };
-  if (exists $SIG{TSTP}) {
+local $SIG{STOP} = sub { croak "SIG$_[0] received in PARENT process" };
+if (exists $SIG{TSTP}) {
     $SIG{TSTP} = $SIG{STOP};
-  }
+}
 
-  # sub should proceed normally for 5 seconds
-  # then process should be suspended
-  # process should stay suspended for 10 seconds
-  # then process should resume and run for 5-10 seconds
+# sub should proceed normally for 5 seconds
+# then process should be suspended
+# process should stay suspended for 10 seconds
+# then process should resume and run for 5-10 seconds
 
-  Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::time());
-  ok($job->{state} eq 'ACTIVE', "job has started");
-  my $w = read_value();
-  ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
+Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::time());
+ok($job->{state} eq 'ACTIVE', "$$\\job has started")
+      or diag("job state was ", $job->{state}, " expected ACTIVE");
+my $w = read_value();
+ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
 
-  Forks::Super::Util::pause($t1 + 8.0 - Time::HiRes::time());
-  ok($job->{state} eq 'SUSPENDED', "job is suspended");
-  $w = read_value();
-  if (!defined $w) {
+my $pause_time = $t1 + 8.0 - Time::HiRes::time();
+while ($pause_time > 2) {
+    diag("pausing $pause_time ...");
+    Forks::Super::Util::pause(2);
+    $pause_time -= 2;
+}
+if ($pause_time > 0) {
+    Forks::Super::Util::pause($pause_time);
+}
+ok($job->{state} eq 'SUSPENDED', "job is suspended")
+      or diag("job state was ", $job->{state}, " expected SUSPENDED");
+$w = read_value();
+if (!defined $w) {
     warn "read_value() did not return a value. Retrying ...\n";
     sleep 1;
     $w = read_value();
-  }
+}
 
-  ok($w >= 4, "job is incrementing value, expect val:$w >= 4");  ### 4 ###
+ok($w >= 4, "job is incrementing value, expect val:$w >= 4");  ### 4 ###
 
-  Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::time());
-  ok($job->{state} eq 'SUSPENDED', "job is still suspended");
-  my $x = read_value();
-  ok($x == $w, "job has stopped increment value, expect val:$x == $w");
+Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::time());
+ok($job->{state} eq 'SUSPENDED', "job is still suspended")    ### 5 ###
+      or diag("job state was ", $job->{state}, " expected SUSPENDED");
+my $x = read_value();
+ok($x == $w, "job has stopped increment value, expect val:$x == $w");
 
-  Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::time());
-  ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',
-     "job has resumed state=" . $job->{state});
-  $x = read_value();
-  if (!defined $x) {
+Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::time());
+ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',
+     "job has resumed state=" . $job->{state})
+      or diag("job state was ", $job->{state}, " expected COMPLETE or ACTIVE");
+$x = read_value();
+if (!defined $x) {
     warn "read_value() did not return a value. Retrying ...\n";
     sleep 1;
     $x = read_value();
-  }
-  ok($x > $w, "job has resumed incrementing value, expect val:$x > $w");
+}
+ok($x > $w,                                                   ### 8 ###
+     "job has resumed incrementing value, expect val:$x > $w");
 
-  my $p = wait 4.0;
-  if (!isValidPid($p)) {
+my $p = wait 4.0;
+if (!isValidPid($p)) {
     $job->resume;
     $p = wait 2.0;
     if (!isValidPid($p)) {
-      $job->resume;
-      $p = wait 2.0;
-      if (!isValidPid($p)) {
 	$job->resume;
 	$p = wait 2.0;
 	if (!isValidPid($p)) {
-	  $job->resume;
-	  $p = wait 2.0;
-	  if (!isValidPid($p)) {
-	    print STDERR "Killing unresponsive job $job\n";
-	    $job->kill('KILL');
 	    $job->resume;
-	  }
+	    $p = wait 2.0;
+	    if (!isValidPid($p)) {
+		$job->resume;
+		$p = wait 2.0;
+		if (!isValidPid($p)) {
+		    diag("Killing unresponsive job $job");
+		    $job->kill('KILL');
+		    $job->resume;
+		}
+	    }
 	}
-      }
     }
-  }
-
-  ok($p == $pid, "job has completed");
 }
 
+ok($p == $pid, "job has completed");

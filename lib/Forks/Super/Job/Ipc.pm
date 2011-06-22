@@ -30,7 +30,7 @@ $| = 1;
 our @ISA = qw(Exporter);
 
 our @EXPORT = qw(close_fh);
-our $VERSION = $Forks::Super::Util::VERSION;
+our $VERSION = '0.52';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -50,26 +50,28 @@ our $USE_TIE_PH = 1;
 $USE_TIE_SH = $USE_TIE_FH = $USE_TIE_PH = 0 if $ENV{NO_TIES};
 
 our $_IPC_DIR;
+my $cleanse_mode = 0;
+
 {
-  package Forks::Super::Job::Ipc::Tie;
+# package Forks::Super::Job::Ipc::Tie;
 
   # special behavior for $Forks::Super::IPC_DIR ==>
   # when this value is set, we should call set_ipc_dir.
 
-  sub TIESCALAR {
-    return bless {}, __PACKAGE__;
+  sub Forks::Super::Job::Ipc::Tie::TIESCALAR {
+    return bless {}, 'Forks::Super::Job::Ipc::Tie';
   }
-  sub FETCH {
+  sub Forks::Super::Job::Ipc::Tie::FETCH {
     my $self = shift;
     return $_IPC_DIR;
   }
-  sub STORE {
+  sub Forks::Super::Job::Ipc::Tie::STORE {
     my ($self, $value) = @_;
     my $old = $_IPC_DIR;
     Forks::Super::Job::Ipc::set_ipc_dir($value, 1);
     return $old;
   }
-  sub DEFINED {
+  sub Forks::Super::Job::Ipc::Tie::DEFINED {
     my $self = shift;
     return defined $_IPC_DIR;
   }
@@ -94,10 +96,9 @@ our $_IPC_DIR;
   sub _gensym () {
     no strict 'refs';
     my $name = join '_', @_, "IO$$", $seq++;
-#   my $name = "IO" . $$ . "_" . $seq++;
     my $ref = \*{$pkg . $name};
     delete $$pkg{$name};
-    $ref;
+    return $ref;
   }
 }
 
@@ -111,14 +112,15 @@ sub _safeopen ($*$$;$) {
 
   for (my $try = 1; $try <= 10; $try++) {
     if ($try == 10) {
-      carp "Failed to open $mode $expr after 10 tries. Giving up.\n";
+      carp "Forks::Super: ",
+      	"Failed to open $mode $expr after 10 tries. Giving up.\n";
       return 0;
     }
 
     if (defined $open3) {
-      $result = CORE::open ($fh, $open2, $open3);
+      $result = CORE::open ($fh, $open2, $open3); ## no critic (BriefOpen)
     } else {
-      $result = CORE::open ($fh, $open2);
+      $result = CORE::open ($fh, $open2);         ## no critic (BriefOpen)
     }
     $_[1] = $fh;
 
@@ -167,21 +169,24 @@ sub _safeopen ($*$$;$) {
 	|| $! == $Forks::Super::SysInfo::TOO_MANY_FH_ERRNO) {
       carp "$! while opening $open2 $expr. ",
 	"[openfh=$__OPEN_FH/$__MAX_OPEN_FH] Retrying ...\n";
-      Forks::Super::pause(0.1 * $try * $try);
+      # was 0.1 * $try * $try -- this will probably 
+      # give a slight improvement in average performance,
+      # but big improvement in worst case performance
+      Forks::Super::pause(0.002 * $try * $try * $try, $try<3);
     } elsif (defined($robust)
 	     && ($! =~ /no such file or directory/i
 		 || $! == $Forks::Super::SysInfo::FILE_NOT_FOUND_ERRNO)) {
       if ($DEBUG || (ref $robust eq 'Forks::Super::Job' && $robust->{debug})) {
 	debug("$! while opening $open2 $expr in $$. Retrying ...");
       }
-      Forks::Super::Util::pause(0.1 * $try * $try);
+      Forks::Super::Util::pause(0.002 * $try * $try * $try, $try<3);
     } else {
       $expr ||= '""';
       if ($try > 5) {
 	carp_once [$!], "$! while opening $open2 $expr in $$ ",
 	  "[openfh=$__OPEN_FH/$__MAX_OPEN_FH]. Retrying ...\n";
       }
-      Forks::Super::Util::pause(0.1 * $try * $try);
+      Forks::Super::Util::pause(0.002 * $try * $try * $try, $try<3);
     }
   }
   return $result;
@@ -209,6 +214,7 @@ sub _assert_safeopen_fh_is_defined {
     tie *{$_[0]}, 'Forks::Super::Tie::IPCFileHandle', parent => $_[0];
     bless $_[0], 'Forks::Super::Tie::Delegator';
   }
+  return;
 }
 
 sub _preconfig_fh_parse_child_fh {
@@ -397,7 +403,6 @@ sub _preconfig_fh_files {
     debug("Using $config->{f_in} as shared file for child STDIN")
       if $job->{debug} && $config->{f_in};
 
-    # XXX - this code shouldn't be necessary ...
     if ($config->{stdin}) {
       if (_safeopen($job, my $fh, '>', $config->{f_in})) {
 	print $fh $config->{stdin};
@@ -453,30 +458,6 @@ sub _preconfig_fh_sockets {
   }
 
   return;
-  if ($config->{in} || $config->{out} || $config->{err}) {
-    ($config->{csock},$config->{psock}) = _create_socket_pair($job);
-
-    if (not defined $config->{csock}) {
-      # this is probably too late to fail ...
-      delete $config->{sockets};
-      return;
-    } elsif ($job->{debug}) {
-      debug("created socket pair/$config->{csock}:",
-	    CORE::fileno($config->{csock}),
-	    "/$config->{psock}:",CORE::fileno($config->{psock}));
-    }
-    if ($config->{out} && $config->{err} && !$config->{join}) {
-      ($config->{csock2},$config->{psock2}) = _create_socket_pair($job);
-      if (not defined $config->{csock2}) {
-	delete $config->{sockets};
-	return;
-      } elsif ($job->{debug}) {
-	debug("created socket pair/$config->{csock2}:",
-	      CORE::fileno($config->{csock2}),
-	      "/$config->{psock2}:",CORE::fileno($config->{psock2}));
-      }
-    }
-  }
 }
 
 sub _preconfig_fh_pipes {
@@ -505,6 +486,7 @@ sub _preconfig_fh_pipes {
   if ($job->{debug}) {
     debug("created pipe pairs for $job");
   }
+  return;
 }
 
 sub _create_socket_pair {
@@ -685,7 +667,9 @@ sub _identify_shared_fh_dir {
 
 # attempt to set $_IPC_DIR / $Forks::Super::IPC_DIR. Will fail if
 # input is not a good directory name.
-our $_CLEANSE_MODE = 0;
+sub enable_cleanse_mode { return $cleanse_mode = 1; }
+sub is_cleanse_mode { return $cleanse_mode; }
+
 sub set_ipc_dir {
   my ($dir, $carp) = @_;
   return unless _check_for_good_ipc_basedir($dir);
@@ -698,7 +682,7 @@ sub set_ipc_dir {
     return;
   }
 
-  if (!$_CLEANSE_MODE) {
+  if (!$cleanse_mode) {
     unless (mkdir("$dir/$dedicated_dirname", 0777) # taint warning
 	    && -r "$dir/$dedicated_dirname"
 	    && -w "$dir/$dedicated_dirname"
@@ -722,13 +706,12 @@ sub set_ipc_dir {
   debug("dedicated IPC directory: $_IPC_DIR") if $DEBUG;
 
   # create README
-  unless ($Forks::Super::Job::Ipc::NO_README
-	 || $_CLEANSE_MODE) {
+  unless ($Forks::Super::Job::Ipc::NO_README || $cleanse_mode) {
     my $readme = "$_IPC_DIR/README.txt";
-    open my $readme_fh, '>', $readme;
     my $localtime1 = time;
     my $localtime2 = scalar localtime;
-    print $readme_fh <<"____";
+    if (open my $readme_fh, '>', $readme) {
+	print $readme_fh <<"____";
 This directory was created by process $$ at
 $localtime2
 $localtime1 $$
@@ -743,9 +726,13 @@ this directory. You may also consider running the command
 and any other IPC litter.
 
 ____
-    close $readme_fh; # ';
-    push @IPC_FILES, $readme;
-    $IPC_FILES{$readme} = [ purpose => 'README' ];
+        close $readme_fh; # ';
+	push @IPC_FILES, $readme;
+	$IPC_FILES{$readme} = [ purpose => 'README' ];
+    } else {
+	carp "Forks::Super::set_ipc_dir: ",
+	    "Cannot create annotation file $readme: $!\n"; 
+    }
   }
   return 1;
 }
@@ -764,7 +751,7 @@ sub _check_for_good_ipc_basedir {
     return;
   }
   if (! -d $dir) {
-    if ($_CLEANSE_MODE) {
+    if ($cleanse_mode) {
       return;
     }
     if (mkdir($dir,0777)) {
@@ -821,10 +808,11 @@ sub _cleanup {
 sub _trap_signals {
   return if $SIGNALS_TRAPPED++;
 
-  my $cleanup = \&Forks::Super::Job::Ipc::__cleanup__;
+  my $cleanup = \&__cleanup__;
   foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
     $XSIG{$sig}[-1] = $cleanup;
   }
+  return;
 }
 
 sub __cleanup__ {
@@ -869,39 +857,33 @@ sub cleanse {
   chdir $dir
     or croak "Forks::Super::Job::Ipc::cleanse: Can't move to $_IPC_DIR\n";
   opendir(D, ".");
-  my $errors = 0;
   foreach my $ipc_dir (grep { -d $_ && /^\.fhfork/ } readdir (D)) {
 
     # try not to remove a directory for a running process ...
-    if (-f "$ipc_dir/README.txt") {
-      if (open my $fh, '<', "$ipc_dir/README.txt") {
+    if (-f "$ipc_dir/README.txt"
+	&& open my $fh, '<', "$ipc_dir/README.txt") {
 	scalar <$fh>;  # header
 	scalar <$fh>;
+	close $fh;
 	my ($t,$pid) = split /\s+/,<$fh>;
-	if (time - $t < 86400) {
+	if (time - $t < 86400
+	    
+	    # 1. is there a process $pid running?
+	    # 2. is it the same process $pid that created this directory?
 
-	  # 1. is there a process $pid running?
-	  # 2. is it the same process $pid that created this directory?
-
-	  if (CORE::kill 0, $pid) {
+	    && CORE::kill 0, $pid
 	    # This works on Windows (Strawbery 5.10, anyway), even if $pid < 0
 
 	    # it's possible that this is a *newer* process with the
 	    # same pid ...
-	    if (-e "/proc/$pid") {
-	      if ((-M "/proc/$pid") > (-M $ipc_dir)) {
+	    && -e "/proc/$pid" 
+	    && (-M "/proc/$pid") > (-M $ipc_dir)) {
 
-		warn "Process $pid appears to still be running. ",
-		  "Will not erase ipc dir $ipc_dir\n";
-		next;
-	      }
-	    }
-	    # else ... Windows? how to get age of a process?
-	  }
+	    warn "Process $pid appears to still be running. ",
+	    "Will not erase ipc dir $ipc_dir\n";
+	    next;
 	}
-
-	close $fh;
-      }
+	# else ... Windows? how to get age of a process?
     }
 
     my $errors = _cleanse_dir($ipc_dir);
@@ -918,6 +900,7 @@ sub cleanse {
     }
   }
   closedir D;
+  return;
 }
 
 sub _cleanse_dir {
@@ -944,6 +927,7 @@ sub _untrap_signals {
   foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
     $XSIG{$sig}[-1] = undef;
   }
+  return;
 }
 
 sub _END_foreground_cleanup {
@@ -981,7 +965,7 @@ sub _END_foreground_cleanup {
 sub _END_background_cleanup1 {
   # rename process, if supported by the OS, to note that we are cleaning up
   # not everyone will like this "feature"
-  $0 = "cleanup:$0";
+  $0 = "Forks::Super:cleanup:$0";
   sleep 3;
 
   # removing all the files we created during IPC
@@ -1044,6 +1028,7 @@ sub _END_background_cleanup2 {
     my @g = grep { !/^\.nfs/ } readdir($_Z);
     closedir $_Z;
   }
+  return;
 }
 
 # if we have created temporary files for IPC, clean them up.
@@ -1081,7 +1066,7 @@ sub END_cleanup {
 sub END_cleanup_MSWin32 {
   return if $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
   return if $_CLEANUP++;
-  $0 = "cleanup:$0";
+  $0 = "Forks::Super:cleanup:$0";
 
   # Use brute force to close all open handles. Leave STDERR open for warns.
   # XXX - is this ok? what if perl script is communicating with a socket?
@@ -1239,16 +1224,6 @@ sub __config_fh_parent_stdin_file {
   return;
 }
 
-sub __ipc_debug {   # XXX this is hacky
-  my $job = shift;
-  print STDERR "OPEN_FH => $__OPEN_FH / $__MAX_OPEN_FH\n";
-  print STDERR "IPC_COUNT => $IPC_COUNT\n";
-  print STDERR "IPC_FILES => ", scalar @IPC_FILES, "\n";
-  print STDERR "FILENO map:\n";
-  # print STDERR map "\t$_ => " . $FILENO{$_} . "\n", keys %FILENO;
-  Carp::confess "Child failed, wstatus = 139" if $job->{status} == 139;
-}
-
 sub _config_fh_parent_stdout {
   my $job = shift;
   my $fh_config = $job->{fh_config};
@@ -1351,21 +1326,9 @@ sub __config_fh_parent_stdout_file {
     my $_msg = sprintf "%d: %s Failed to open f_out=%s: %s\n",
 	$$, Forks::Super::Util::Ctime(), $fh_config->{f_out}, $!;
 
-    if ($DEBUG || $ENV{IPC_DEBUG}) {
-      Forks::Super::Sigchld::handle_CHLD(-1);
-      Carp::cluck "\n\n\n\nForks::Super::Job::config_fh_parent(): \n    ",
-	    "could not open filehandle to read child STDOUT from ",
-	    $fh_config->{f_out}, "\n     for ",
-	    $job->toString(),
-	    ": $!\n$_msg\n";
-      __ipc_debug($job);
-
-
-    } else {
-      warn "Forks::Super::Job::config_fh_parent(): ",
+    warn "Forks::Super::Job::config_fh_parent(): ",
 	  "could not open filehandle to read child STDOUT (from ",
 	  $fh_config->{f_out}, "): $!\n";
-    }
   }
   return;
 }
@@ -1466,19 +1429,9 @@ sub __config_fh_parent_stderr_file {
   } else {
     my $_msg = sprintf "%d: %s Failed to open f_err=%s: %s\n",
 	  $$, Forks::Super::Util::Ctime(), $fh_config->{f_err}, $!;
-    if ($DEBUG || $ENV{IPC_DEBUG}) {
-      Forks::Super::Sigchld::handle_CHLD(-1);
-      Carp::cluck "Forks::Super::Job::config_fh_parent(): \n    ",
-	    "could not open filehandle to read child STDERR from ",
-	    $fh_config->{f_err}, "\n    for ",
-	    $job->toString(),
-	    ": $!\n";
-      __ipc_debug($job);
-    } else {
-      warn "Forks::Super::Job::config_fh_parent(): ",
+    warn "Forks::Super::Job::config_fh_parent(): ",
 	  "could not open filehandle to read child STDERR (from ",
 	  $fh_config->{f_err}, "): $!\n";
-    }
   }
   return;
 }
@@ -1492,7 +1445,7 @@ sub Forks::Super::Job::_config_fh_parent {
   my $job = shift;
   return if not defined $job->{fh_config};
 
-  _trap_signals();
+  _trap_signals(); # XXX - is this necessary?
   my $fh_config = $job->{fh_config};
 
   # set up stdin first.
@@ -2002,62 +1955,62 @@ sub _config_cmd_fh_child {
 }
 
 sub _insert_input_redir_to_cmdline_crudely {
-  my ($cmd, $input) = @_;
+    my ($cmd, $input) = @_;
 
-  # a crude parser that looks for the first unescaped
-  # pipe char that is not inside single or double quotes,
-  # or inside a () [] {} expression.
+    # a crude parser that looks for the first unescaped
+    # pipe char that is not inside single or double quotes,
+    # or inside a () [] {} expression and inserts "< $input"
+    # before that pipe char, or at the end of the line
 
-  # XXX good enough to pass t/42h but I wonder what edge cases it misses.
+    # XXX good enough to pass t/42e but I wonder what edge cases it misses.
 
-  my @chars = split //, $cmd;
-  my $result = "";
-  my $insert = 0;
-  my @group = ("");
+    my @chars = split //, $cmd;
+    my $result = "";
+    my $insert = 0;
+    my @group = ("");
 
-  while (@chars) {
-    my $char = shift @chars;
-    $result .= $char;
+    while (@chars) {
+	my $char = shift @chars;
+	$result .= $char;
 
-    if ($char eq "\\") {
-      $result .= shift @chars;
-    } elsif ($char eq '"') {
-      if ($group[-1] eq '"') {
-	pop @group;
-      } elsif ($group[-1] ne "'") {
-	push @group, '"';
-      }
-    } elsif ($char eq "'") {
-      if ($group[-1] eq "'") {
-	pop @group;
-      } elsif ($group[-1] ne '"') {
-	push @group, "'";
-      }
-    } elsif ($char eq "(" || $char eq "[" || $char eq "{") {
-      push @group, $char;
-    } elsif ($char eq ")" && $group[-1] eq "(") {
-      pop @group;
-    } elsif ($char eq "]" && $group[-1] eq "[") {
-      pop @group;
-    } elsif ($char eq "}" && $group[-1] eq "{") {
-      pop @group;
-    } elsif ($char eq "|" && @group <= 1) {
-      chop $result;
-      $result .= ' <"' . $input . '" | ';
-      $result .= join'', @chars;
-      @chars = ();
-      $insert = 1;
+	if ($char eq "\\") {
+	    $result .= shift @chars;
+	} elsif ($char eq '"') {
+	    if ($group[-1] eq '"') {
+		pop @group;
+	    } elsif ($group[-1] ne "'") {
+		push @group, '"';
+	    }
+	} elsif ($char eq "'") {
+	    if ($group[-1] eq "'") {
+		pop @group;
+	    } elsif ($group[-1] ne '"') {
+		push @group, "'";
+	    }
+	} elsif ($char eq "(" || $char eq "[" || $char eq "{") {
+	    push @group, $char;
+	} elsif ($char eq ")" && $group[-1] eq "(") {
+	    pop @group;
+	} elsif ($char eq "]" && $group[-1] eq "[") {
+	    pop @group;
+	} elsif ($char eq "}" && $group[-1] eq "{") {
+	    pop @group;
+	} elsif ($char eq "|" && @group <= 1) {
+	    chop $result;
+	    $result .= ' <"' . $input . '" | ';
+	    $result .= join'', @chars;
+	    @chars = ();
+	    $insert = 1;
+	}
     }
-  }
-  if (!$insert) {
-    $result .= ' <"' . $input . '"';
-  }
-  return $result;
+    if (!$insert) {
+	$result .= ' <"' . $input . '"';
+    }
+    return $result;
 }
 
 sub _close {
   my $handle = shift;
-  no warnings;
   return 0 if !defined $handle;
   return 0 if $$handle->{closed};
   if (!defined $$handle->{opened}) {
@@ -2074,7 +2027,16 @@ sub _close {
   $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
   my $z = 0;
   if (tied *$handle) {
-    $z ||= (tied *$handle)->CLOSE;
+      if ((tied *$handle)->CLOSE) {
+	  $z = 1;
+      }
+
+    # XXX - untie here produces 
+    #    'untie attempted while ... inner references exist' warning,
+    # XXX - where are these references?
+    #     I thought it was $j->{child_stdXXX} and $Forks::Super::CHILD_XXX{$p},
+    #     but that wasn't it
+    # XXX - is untie even necessary?
     untie *$handle;
   }
   $z ||= close $handle;
@@ -2091,9 +2053,10 @@ sub _close {
 # then call close on the socket.
 sub _close_socket {
   my ($handle, $is_write) = @_;
-  no warnings;
   return 0 if !defined $handle;
   return 0 if $$handle->{closed};
+
+  $$handle->{shutdown} ||= 0;
   return 0 if $$handle->{shutdown} >= 3;
 
   $is_write++;    #  0 => 1, 1 => 2, 2 => 3
@@ -2108,11 +2071,16 @@ sub _close_socket {
 	  && ref(tied *$handle) eq 'Forks::Super::Tie::IPCSocketHandle') {
 	$sh = (tied *$handle)->{SOCKET};
 	$z = close $sh;
+
+	# XXX - is untie necessary? see comment in _close()
+	# this untie doesn't generate warnings, though ...
 	untie *$handle;
 	$z += close $handle;
       } else {
 	$z = close $handle;
 	if (tied *$handle) {
+	  # XXX - is untie necessary? see comment in _close()
+	  # no warnings from this untie, though ...
 	  untie *$handle;
 	  $z += close $handle;
 	}
@@ -2140,6 +2108,7 @@ sub _close_fh_stdin {
     }
   }
   # delete $Forks::Super::CHILD_STDIN{...} for this job? No.
+  return;
 }
 
 sub _close_fh_stdout {
@@ -2160,6 +2129,7 @@ sub _close_fh_stdout {
     }
   }
   # delete $Forks::Super::CHILD_STDOUT{...} ? No.
+  return;
 }
 
 sub _close_fh_stderr {
@@ -2176,6 +2146,7 @@ sub _close_fh_stderr {
     }
   }
   # delete $Forks::Super::CHILD_STDERR{...}? No.
+  return;
 }
 
 sub close_fh {
@@ -2215,6 +2186,7 @@ sub Forks::Super::Job::write_stdin {
     carp "Forks::Super::Job::write_stdin: ",
       "stdin handle for job $job->{pid} was not configured\n";
   }
+  return;
 }
 
 sub _read_socket {
@@ -2393,7 +2365,7 @@ sub _emulate_readline_array {
   my $rs = defined($/) && length($/) ? $/ : "\x{F0F0}";
   while ($input =~ m{$rs}) {  # XXX - what if $/ is "" or undef ?
     push @return, substr $input, 0, $+[0];
-    substr($input, 0, $+[0]) = "";
+    substr($input, 0, $+[0], "");
   }
   return @return;
 }

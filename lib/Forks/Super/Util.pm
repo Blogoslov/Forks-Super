@@ -14,7 +14,7 @@ use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.51';
+our $VERSION = '0.52';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -84,67 +84,57 @@ sub isValidPid {
 }
 
 sub set_productive_pause_code (&) {
-  $something_productive = shift;
+    return $something_productive = shift;
 }
 
 sub set_other_productive_pause_code (&) {
-  $something_else_productive = shift;
+    return $something_else_productive = shift;
 }
 
 # productive "sleep" function
+# XXX - McCabe score: 28
 sub pause {
-  my $start = Time::HiRes::time();
-  my $delay = shift || $DEFAULT_PAUSE;
-  my $unproductive = shift || 0;
-  my $expire = $start + ($delay || 0.25);
+    my $start = Time::HiRes::time();
+    my $delay = shift || $DEFAULT_PAUSE || 0.25;
+    my $unproductive = shift || 0;
+    my $expire = $start + $delay;
 
-  $_PAUSE++; # prevent too much productive code from nested pause calls
+    $_PAUSE++; # prevent too much productive code from nested pause calls
 
-  if ($Time_HiRes_avail) {
     my $time_left = $expire - Time::HiRes::time();
     while ($time_left > 0) {
-      if ($_PAUSE < 2 && $something_productive && !$unproductive) {
-	$something_productive->();
-	$time_left = $expire - Time::HiRes::time();
-	last if $time_left <= 0;
-      }
-      my $resolution = $time_left > $DEFAULT_PAUSE
+	if ($_PAUSE < 2 && $something_productive && !$unproductive) {
+	    $something_productive->();
+	    $time_left = $expire - Time::HiRes::time();
+	    last if $time_left <= 0;
+	}
+	my $resolution = $time_left > $DEFAULT_PAUSE
 			? $DEFAULT_PAUSE
 			: $time_left * 0.5 + 0.01;
-      Time::HiRes::sleep($resolution || 0.25);
-      $time_left = $expire - Time::HiRes::time();
+	if ($Time_HiRes_avail) {
+	    Time::HiRes::sleep($resolution || 0.25);
+	} elsif ($time_left >= 5)  {
+	    CORE::sleep 5;
+	} elsif ($time_left >= 1) {
+	    CORE::sleep $time_left;
+	} elsif ($time_left > 0) {
+	    select undef,undef,undef,$time_left;
+	}
+	$time_left = $expire - Time::HiRes::time();
     }
-  } else {
-    my $stall = $delay * 0.1;
-    $stall = 0.1 if $stall < 0.1;
-    $stall = $delay if $stall > $delay;
-    $stall = $DEFAULT_PAUSE if $stall > $DEFAULT_PAUSE;
 
-    while ($delay > 0) {
-      if ($_PAUSE < 2 && $something_productive && !$unproductive) {
+    if ($_PAUSE > 1 || $unproductive) {
+    } elsif ($something_else_productive) {
+	$something_else_productive->();
+    } elsif ($something_productive) {
 	$something_productive->();
-	$delay = Time::HiRes::time() - $expire;
-	last if $delay <= 0;
-      }
-
-      if ($stall >= 1) {
-	CORE::sleep $stall;
-      } else {
-	# emulate sleep with 4-arg select
-	select undef, undef, undef, $stall < $delay ? $stall : $delay;
-      }
-      $delay -= $stall;
     }
-  }
+    $_PAUSE = 0;
+    return Time::HiRes::time() - $start;
+}
 
-  if ($_PAUSE > 1 || $unproductive) {
-  } elsif ($something_else_productive) {
-    $something_else_productive->();
-  } elsif ($something_productive) {
-    $something_productive->();
-  }
-  $_PAUSE = 0;
-  return Time::HiRes::time() - $start;
+sub _pause_no_Time_HiRes {
+    return;
 }
 
 #
@@ -201,6 +191,7 @@ sub _load_signal_data {
   @SIG_NAME = split / /, $Config{sig_name};
   my $i = 0;
   %SIG_NO = map { $_ => $i++ } @SIG_NAME;
+  return;
 }
 
 sub _has_POSIX_signal_framework {

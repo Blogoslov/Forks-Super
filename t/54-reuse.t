@@ -36,5 +36,5 @@ my $t2 = Time::HiRes::time - $t;
 
 ok($pid1 != $pid2, "reused job had different pid");
 ok($job1->{status}==0 && $job2->{status}!=0, "reused job had NZEC");
-ok($t2 >= 2 && $t2 < 5, "reused job timed out");
-
+ok($t2 >= 2 && $t2 < 6, "reused job timed out")                     ### 10 ###
+   or diag("took ${t2}s, expected 2-5s");

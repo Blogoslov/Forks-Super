@@ -5,6 +5,78 @@ use Module::Build::ConfigData;
 use Carp;
 
 
+
+
+if ($ENV{AUTOMATED_TESTING}) {
+
+  # in general, it should be OK to install this distribution on 
+  # a single-processor system. However many of the tests are
+  # either skipped or dumbed down for single-processor systems,
+  # and the resulting PASS reports from the CPAN testers are
+  # not so valuable.
+
+  # Some systems may require the XS code to be built before the
+  # number of processors can be detected (Irix is like that),
+  # so this gate won't always work.
+
+  use Config;
+  my $status = system($Config{perlpath}, "-Ilib", "-MSys::CpuAffinity",
+		      "-e", "exit Sys::CpuAffinity::getNumCpus()");
+
+  if ($status >> 8 == 1) {
+
+    print STDERR <<"___";
+Single processor system with automated smoke testing detected.
+Aborting build because many tests in this distribution are skipped
+or dumbed down for single-processor systems, and the resulting
+PASS reports from the CPAN testers are not as helpful.
+
+Set \$ENV{AUTOMATED_TESTING} to a false value if you really wish to build
+and install this module as opposed to just testing it.
+
+___
+  ;
+    exit 0;
+  }
+}
+
+
+# some platform specific notes ...
+
+print "\n";
+if ($^O =~ /solaris/i) {
+  print <<"";
+$^O users: the  pbind(1m)  utility and  processor_bind(2)  library
+function on this platform only allow a process to be bound to a single
+CPU. Calls to  &Sys::CpuAffinity::setAffinity  that specify more than
+one processor might only bind the process to a single processor.
+
+; 
+}
+if ($^O =~ /irix/i) {
+  print <<"";
+$^O users: this platform generally only allows a process to be bound
+to a single CPU. Calls to  &Sys::CpuAffinity::setAffinity  that specify
+more than one processor might only bind the process to a single
+processor. Also note that the XS functions in this distribution for
+$^O may be, ahem, under-tested.
+
+;
+}
+
+if ($^O =~ /netbsd/i) {
+  print <<"";
+$^O users: the  Sys::CpuAffinity::getAffinity  and  setAffinity  methods
+on this platform generally
+    * can only get/set the CPU affinity of the calling process
+    * can only be used by the super-user
+
+;
+}
+print "\n";
+unlink "lib/Sys/CpuAffinity.xs";
+
+
 #############################################################################
 
 my $builderclass = Module::Build->subclass(
@@ -66,6 +138,7 @@ about this just yet.
 	 } elsif (/^MODULE/) {
 	   $MODULE = $_;
 	   push @POSTMOD, <$xs_fh>;
+           push @POSTMOD, "\n\n";
 	 } else {
 	   push @PREMOD, $_;
 	 }
@@ -103,30 +176,41 @@ __CUSTOM_BUILD_CODE__,
 #############################################################################
 
 mkdir 'lib/xs' unless -d 'lib/xs';
-open(FOO, '>>', 'lib/xs/foo') && close FOO unless -f 'lib/xs/foo';
+unless (-f 'lib/xs/foo') {
+  my $fooh;
+  open($fooh, '>>', 'lib/xs/foo') && close $fooh;
+}
 my $bugtracker_url 
   = 'http://rt.cpan.org/NoAuth/Bugs.html?Dist=Sys-CpuAffinity';
-
 
 my $extra_compiler_flags = '';
 my $extra_linker_flags = '';
 if ($^O =~ /irix/) {
-  $extra_linker_flags = '-lcpuset';
+  # $extra_linker_flags = '-lcpuset';
+}
+if ($^O =~ /netbsd/i) {
+  $extra_linker_flags = '-lpthread';
+}
+
+my $recommends = { 'ExtUtils::CBuilder' => 0.15 };
+if ($^O =~ /freebsd/i) {
+   $recommends->{'BSD::Process::Affinity'} = 0.02;
+}
+if ($^O eq 'MSWin32' || $^O =~ /cygwin/i) {
+   $recommends->{'Win32::API'} = 0.51;
 }
 
 my $builder = $builderclass->new(
 	module_name         => 'Sys::CpuAffinity',
 	license             => 'perl',
 	dist_author         => q[Marty O'Brien <mob@cpan.org>],
-        dist_version        => '0.99',
-#	dist_version_from   => 'lib/Sys/CpuAffinity.pm',
+        dist_version        => '1.01',
+	#dist_version_from   => 'lib/Sys/CpuAffinity.pm',
 	build_requires      => {
 		'Module::Build'      => 0.25,
 		'Test::More'         => 0,
 	},
-	recommends          => {
-		'ExtUtils::CBuilder' => 0.15,
-	},
+	recommends          => $recommends,
 	meta_merge => {
 	    resources       => { bugtracker  => $bugtracker_url },
 	    keywords        => [ qw/affinity/ ],
@@ -139,8 +223,8 @@ my $builder = $builderclass->new(
                                  'contrib/ok/*.xs', 'contrib/fail/*.xs',
                                  'lib*.def', 'ipc.*',
                                  'blib', 'pod2htm*',
-                                 'Makefile', 'Build',
-                                 'perl*.stackdump',
+                                 'Makefile', 'Build', 'Build.bat',
+                                 'perl*.stackdump', 'libcompilet*',
 				 ],
 	create_makefile_pl  => 'passthrough',
 	extra_compiler_flags => $extra_compiler_flags,

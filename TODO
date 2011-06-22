@@ -27,6 +27,7 @@ Possible TODOs:
 	to tighten up performance? What can be done to reduce overhead
 	when there are many short tasks?
 	___ disable $FSJ::Ipc::USE_TIE_?H
+	_X_ tightened some delays in file-based IPC
 
     ___ Test needed, Win32+cmd, See Job.pm:344 (416?) 
         (FSJO::Win32::openX_win32_process?)
@@ -38,6 +39,7 @@ Possible TODOs:
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
 	_X_ timeout => max number of seconds to wait for input
+	___ I/O layers? :gz? :crlf?
 
     ___ The IPC module creates a temporary directory that will
         be deleted when the program ends. Is there another module that
@@ -45,6 +47,8 @@ Possible TODOs:
 	_O_ File::Temp? Does this work on MSWin32?
 	:-( File::Temp not robust enough when child procs outlive the parent.
 	    Probably has NFS issues, too.
+    ___ No complaints yet, but is there a smarter way to
+        set the IPC directory?
 
     ___ Runtime IPC cleanup routine for long running programs. For long
 	completed jobs: close the open filehandles that have slipped
@@ -65,6 +69,7 @@ Possible TODOs:
             ___ block while system is busy
             ___ suspend/resume
         ___ bg_eval, bg_qx examples
+	    _X_ factorial.pl for bg_eval
         ___ can_launch examples
         ___ how to: use sleep with Forks::Super
         ___ how to: use alarm with Forks::Super
@@ -106,32 +111,14 @@ Possible TODOs:
 	    $MAX_FORK/$MAX_OPEN_FH/$SOCKET_CAPACITY/$PIPE_CAPACITY,
 	    even $SLEEP_ALARM_COMPAT is not a cost you want to pay every
 	    time the module is loaded.
-	___ Can we detect all the versions of Perl that will use a module
+	_o_ Can we detect all the versions of Perl that will use a module
 	    installed a specific location? And run SysInfo.pm.PL for all
 	    of them? I doubt it.
 
-    ___ Fails t/20 t/21 on OpenBSD run as make test, but succeed as
-	standalone? What's up with that?
-	Intermittent failures.
-
-    _x_ Resume use of IPCFileHandle, IPCSocketHandle. The goal is to be
-        allowed to say
-	        < {$job->{child_stdout}} >
-        instead of having to say
-                $job->read_stdout()
-        to get the blocking and timeout behavior. Then we would change
-	all the creepy   ? _read_socket(*STDIN) : <STDIN>)  constructions
-	in t/43* and t/44* to    <STDIN> , and the user would not have
-	to know whether he was using F::S and whether F::S was using 
-	sockets.
-
-	_X_ Until we bring pipes into the fold, too, some of the
-	    read input constructions are getting creepier (see 44a, 44b)
-	    _X_ Meh. This isn't really true. Without tied sockethandles,
-
-	_X_ Outstanding issues:
-	    Strawberry 43d, 44d sometimes time out
-	    Performance? Is NO_TIES=1 version of some tests faster?
+    _o_ Fails t/20 t/21 on OpenBSD run as make test, but succeed as
+	standalone? What's up with that? process groups?
+	Intermittent failures -- probably max background process
+	restrictions on my OpenBSD host.
 
     _X_ Forks::Super::Job can overload "<>" (iteration) operator,
 	invoking $job->read_stdout(). Beware of overload bug, though:
@@ -157,10 +144,52 @@ Possible TODOs:
 	FSJ::Ipc::write_stdin, FST::IPCSocketHandle::trivial_pause).
 	Is there a better solution?
 
-    ___ Upgrade bundles Sys::CpuAffinity to 1.00.
+    ___ Upgrade bundles Sys::CpuAffinity to 1.01.
 
     _X_ dir => directory  option to run the child process from
 	a particular directory.
 	Child dies if not able to change to the specificed directory.
 
+    ___ umask => 0123 option?
+
     _X_ allow cpu_affinity => [ @list ] style
+
+    ___ 0.51 test failures. I don't think any of these are
+        reliably reproducible
+	_x_ timeout takes 10000s in FreeBSD
+	    suppress return from SIGALRM handler
+	_x_ 25#15-17 on loaded Linux 5.14.0
+	    wait longer for child feedback
+	_o_ 40i#2 problem on Linux (x3)
+	    was elapsed time too high (>7s) or too low (<4s)? Can't tell.
+	_x_ 42g#17-18 on loaded Linux 5.14.0
+	    wait longer to receive STDOUT
+	___ 43d exit 13 on Linux (SIGPIPE)
+	_o_ 44a#7-12 on MSWin32
+	___ 24 exit 2 on MSWin32 (SIGINT),
+	    47 exit 15 on MSWin32 (SIGTERM),
+	    48 exit 23 on MSWin32 (SIGSTOP)
+	___ 49#4 on Linux
+	___ 49#5,8 on MSWin32
+	_o_ 54#10 on Linux
+	___ break 49 up?
+
+    ___ Does anything bad happen when you set $SIG{CHLD} = 'IGNORE' ?
+
+    ___ Prior to v0.52, bg_eval and bg_qx could be called in list context
+        but they wouldn't return control to foreground process. Can this
+	be fixed?
+
+    ___ is _trap_signals call in FSJ::Ipc::_config_fh_parent necessary?
+
+    _X_ FSJ::Ipc::_close, _close_socket: no warnings pragmas are too strong.
+        _o_ untie attempted while 2 inner refs exist ... 2065 [untie]
+	_X_ use of uninit value in numeric ge (>=)  2084 [uninitialized]
+        _X_ use of uninit value in bitwise and (&)  2087 [uninitialized]
+
+    ___ $F::S::CHILD_FORK_OK>0 -- not tested ...
+
+    ___ Implement, test respect block/timeout in IPCPipeHandle
+
+    ___ Track down, solve 'untie attempted while ... inner references'
+        mystery with FST::IPCFileHandle

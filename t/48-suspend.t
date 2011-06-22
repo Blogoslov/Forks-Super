@@ -18,6 +18,9 @@ my $pid = fork {
 my $j = Forks::Super::Job::get($pid);
 ok(isValidPid($pid) && $j->{state} eq "ACTIVE", "$$\\created $pid");
 sleep 3;
+if ($^O eq 'MSWin32') {
+   diag("Calling suspend method for $j. This is pid $$.");
+}
 $j->suspend;
 ok($j->{state} eq "SUSPENDED", "job was suspended");
 sleep 5;

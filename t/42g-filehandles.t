@@ -1,10 +1,8 @@
-use Forks::Super qw(:test overload);
+use Forks::Super qw(:test_CA overload);
 use Forks::Super::Util qw(is_socket is_pipe);
-use Test::More tests => 20;
+use Test::More tests => 21;
 use strict;
 use warnings;
-
-Forks::Super::Debug::_use_Carp_Always();
 
 $Forks::Super::SOCKET_READ_TIMEOUT = 0.25;
 
@@ -55,7 +53,7 @@ $out = Forks::Super::read_stdout($pid, "block" => 1);
 my $t4 = Time::HiRes::time() - $t0;
 my $t43 = $t4 - $t3;
 ok($out =~ /^baz/, "successful blocking read on stdout");
-ok($t43 > 3.25, "read blocked stdout ${t43}s, expected ~5s");
+ok($t43 > 3.25, "read blocked stdout ${t43}s, expected ~5s"); ### 10 ###
 
 #### no more input on STDOUT or STDERR
 
@@ -71,7 +69,8 @@ ok($t54 <= 5.0,                                       ### 12 ###
 $out = Forks::Super::read_stdout($pid, "block" => 0);
 my $t6 = Time::HiRes::time() - $t0;
 my $t65 = $t6 - $t5;
-ok(!defined($out), "non-blocking read on empty stdout returns empty");
+ok(!defined($out), "non-blocking read on empty stdout returns empty")
+   or diag("read \"$out\" from stdout, expected undef");
 ok($t65 <= 1.3, 
    "non-blocking read on empty stdout fast ${t65}s, expected <1.0s");
 
@@ -90,14 +89,17 @@ $pid = fork {
   }
 };
 my $x = $pid->read_stderr(timeout => 1);
-ok($x, "read avail stderr with timeout");
+ok($x, "read avail stderr with timeout");           ### 15 ###
 $x = $pid->read_stdout(timeout => 2);
 ok(!$x, "read unavail stdout with timeout");        ### 16 ###
-$x = $pid->read_stdout(timeout => 5);
-ok($x, "read avail stdout with timeout");
+my $t = Time::HiRes::time();
+$x = $pid->read_stdout(timeout => 8);
+ok($x, "read avail stdout with timeout");           ### 17 ###
+$t = Time::HiRes::time() - $t;
+ok($t <= 7.0, "read took ${t}s, expected ~2-3s");   ### 18 ###
 $x = $pid->read_stdout(timeout => 1);
-ok(!$x, "read unavail stdout with timeout");
+ok(!$x, "read unavail stdout with timeout");        ### 19 ###
 $x = $pid->read_stdout(block => 1);
-ok($x, "read stdout with block");                   ### 19 ###
+ok($x, "read stdout with block");                   ### 20 ###
 $x = $pid->read_stderr();
-ok(!$x, "read unavail stderr");
+ok(!$x, "read unavail stderr");                     ### 21 ###

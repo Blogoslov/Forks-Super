@@ -85,7 +85,7 @@ ok(defined($Forks::Super::CHILD_STDERR{$pid})
    "found stderr fh");
 SKIP: {
   if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
-    skip "using sockets instead of pipes on Win32", 1;
+    skip "-- using sockets, not pipes on Win32", 1;
   }
   ok(is_pipe($Forks::Super::CHILD_STDIN{$pid}) &&
      is_pipe($Forks::Super::CHILD_STDOUT{$pid}) &&
@@ -107,11 +107,12 @@ while (time < $t+8) {
 }
 Forks::Super::close_fh($pid);
 
-ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [\n @out ]");
+ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [\n @out ]")   ### 7 ###
+   or diag("job is ", $pid->{state});
 
-@err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
+@err = grep { !/alarm.. not available/ } @err; # exclude warning to child STDERR
 ok(@err == 1,                            ### 8 ###
-   scalar @err . " == 1 line from STDERR\n" . join $/,@err);
+   scalar @err . " == 1 line from STDERR\n" . join ($/,@err));
 
 ok($out[0] eq "0:$msg\n", "got Expected first line from child output");
 ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
@@ -119,4 +120,4 @@ ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
 ok($err[-1] eq "$msg\n",                 ### 12 ###
    "got Expected line from child error @err");
 
-my $r = waitall 10;
+my $r = waitall 15;

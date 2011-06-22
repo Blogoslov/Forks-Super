@@ -15,7 +15,7 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = $Forks::Super::Util::VERSION;
+our $VERSION = '0.52';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -74,7 +74,7 @@ sub Forks::Super::Job::_config_timeout_child {
   if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
     croak "Forks::Super: alarm() not available on this system. ",
       "timeout,expiration options not allowed.\n";
-    return;
+    # return;
   }
 
   # Un*x systems - try to establish a new process group for
@@ -114,7 +114,7 @@ sub Forks::Super::Job::_config_timeout_child {
   }
 
   if ($timeout < 1) {
-    if (Forks::Super::_is_test()) {
+    if ($Forks::Super::Config::IS_TEST) {
       die "Forks::Super: quick timeout\n";
     }
     croak "Forks::Super::Job::_config_timeout_child(): quick timeout";
@@ -123,10 +123,14 @@ sub Forks::Super::Job::_config_timeout_child {
   $XSIG{ALRM}[1] = \&_child_timeout;
 
   $EXPIRATION = Time::HiRes::time() + $timeout - 1.0;
+
+  $Forks::Super::Job::Timeout::USE_ITIMER = 0;
   alarm $timeout;
+
   debug("Forks::Super::Job::_config_timeout_child(): ",
 	"alarm set for ${timeout}s in child process $$")
     if $job->{debug};
+
   return;
 }
 
@@ -139,7 +143,9 @@ sub _child_timeout {
   # child to exit.
 
   return if $Forks::Super::SysInfo::CONFIG{'setitimer'}
-    && Time::HiRes::time() < $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL;
+    && $Forks::Super::Job::Timeout::USE_ITIMER
+    && Time::HiRes::time() 
+        < $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL;
 
   warn "Forks::Super: child process timeout\n";
   $TIMEDOUT = 1;
@@ -149,7 +155,29 @@ sub _child_timeout {
   # There are several ways to do this.
 
   if (Forks::Super::Config::CONFIG('Proc::ProcessTable')) {
-    my $ps = new Proc::ProcessTable();
+      my @to_kill = _child_timeout_read_procs_to_kill_from_Proc_ProcessTable();
+      if (@to_kill > 0) {
+	  Forks::Super::kill($TIMEOUT_SIG, @to_kill);
+      }
+  } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+    if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
+      local $SIG{$TIMEOUT_SIG} = 'IGNORE';
+      $DISABLE_INT = 1;
+      my $SIG = $Forks::Super::Config::SIGNO{$TIMEOUT_SIG} || 15;
+      CORE::kill -$SIG, getpgrp(0);
+      $DISABLE_INT = 0;
+    }
+  } elsif (&IS_WIN32) {
+      _child_timeout_Win32();
+  }
+  if (&IS_WIN32 && $DEBUG) {
+    debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
+  }
+  exit 255;
+}
+
+sub _child_timeout_read_procs_to_kill_from_Proc_ProcessTable {
+    my $ps = Proc::ProcessTable->new();
     my (%ppid, @to_kill) = ();
     foreach my $p (@{$ps->table}) {
       $ppid{$p->pid} = $p->ppid;
@@ -164,19 +192,10 @@ sub _child_timeout {
 	$pid = $ppid{$pid};
       }
     }
-    if (@to_kill > 0) {
-      Forks::Super::kill($TIMEOUT_SIG, @to_kill);
-    }
+    return @to_kill;
+}
 
-  } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
-      local $SIG{$TIMEOUT_SIG} = 'IGNORE';
-      $DISABLE_INT = 1;
-      my $SIG = $Forks::Super::Config::signo{$TIMEOUT_SIG} || 15;
-      CORE::kill -$SIG, getpgrp(0);
-      $DISABLE_INT = 0;
-    }
-  } elsif (&IS_WIN32) {
+sub _child_timeout_Win32 {
     my $proc = Forks::Super::Job::get_win32_proc();
     my $pid = Forks::Super::Job::get_win32_proc_pid();
     if (defined $proc) {
@@ -214,11 +233,7 @@ sub _child_timeout {
       Forks::Super::kill($TIMEOUT_SIG, $$);
       $DISABLE_INT = 0;
     }
-  }
-  if (&IS_WIN32 && $DEBUG) {
-    debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
-  }
-  exit 255;
+    return;
 }
 
 sub _cleanup_child {
@@ -258,7 +273,7 @@ sub _cleanup_child {
       }
     }
   }
-  1; # done
+  return 1; # done
 }
 
 sub warm_up {
@@ -267,7 +282,7 @@ sub warm_up {
   # so that fast fail (see t/40-timeout.t, tests #8,17)
   # aren't slowed down when they encounter the croak call.
 
-  eval { croak "preload.\n" };
+  eval { croak "preload.\n" } or do {};
   return $@;
 }
 

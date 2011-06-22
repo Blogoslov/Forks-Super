@@ -10,8 +10,10 @@ MODULE = Sys::CpuAffinity        PACKAGE = Sys::CpuAffinity
 int
 xs_cpusetGetCPUCount()
     CODE:
+	/* Count the number of CPUs on an Irix system. */
         int ncpus = cpusetGetCPUCount();
 	RETVAL = ncpus;
     OUTPUT:
 	RETVAL
+
 

@@ -19,8 +19,10 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(CONFIG CONFIG_module);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %signo);
-our $VERSION = $Forks::Super::Debug::VERSION;
+our $VERSION = '0.52';
+
+our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %SIGNO);
+
 
 sub init {
 
@@ -35,7 +37,7 @@ sub init {
   use Config;
   my $i = 0;
   if (defined $Config::Config{'sig_name'}) {
-    %signo = map { $_ => $i++ } split / /, $Config::Config{'sig_name'};
+    %SIGNO = map { $_ => $i++ } split / /, $Config::Config{'sig_name'};
   }
 
   if (defined $ENV{FORKS_SUPER_CONFIG}) {
@@ -51,22 +53,26 @@ sub init {
       }
     }
   }
+  return;
 }
 
 sub init_child {
   untie $CONFIG{'filehandles'};
   untie %CONFIG;
 # unconfig('filehandles');
+  return;
 }
 
 sub unconfig {
   my $module = shift;
   $CONFIG{$module} = 0;
+  return 0;
 }
 
 sub config {
   my $module = shift;
   $CONFIG{$module} = 1;
+  return 1;
 }
 
 sub configif {
@@ -77,7 +83,7 @@ sub configif {
 
 sub deconfig {
   my $module = shift;
-  delete $CONFIG{$module};
+  return delete $CONFIG{$module};
 }
 
 #
@@ -117,14 +123,19 @@ sub CONFIG_module {
 
   if (@settings) {
     $zz = eval " $module->import(\@settings) ";  ## no critic (StringyEval)
-    if ($@) {
+    if ($@ && $warn) {
       carp "Forks::Super::CONFIG: ",
 	"Module $module was loaded but could not import with settings [",
-	join (',', @settings), "]\n" if $warn;
+	join (',', @settings), "]\n";
     }
   }
   if ($IS_TEST_CONFIG) {
-    print STDERR "CONFIG\{$module\} enabled\n";
+    my $v = eval "\$$module" . '::VERSION' or do {}; ## no critic (StringyEval)
+    if (defined $v) {
+      print STDERR "[$module enabled (v$v)]\n";
+    } else {
+      print STDERR "[$module enabled]\n";
+    }
   }
   return 1;
 }
@@ -144,13 +155,15 @@ sub CONFIG_external_program {
 
   my $xprogram = $external_program;
   $xprogram =~ s:^/::;
-  my $which = `which $xprogram 2>/dev/null`;   # won't work on all systems
-  $which =~ s/\s+$//;
-  if ($which && -x $which) {
-    if ($IS_TEST_CONFIG) {
-      print STDERR "CONFIG\{$external_program\} enabled\n";
-    }
-    return $CONFIG{$external_program} = $CONFIG{$which} = $which;
+  if (-w "/dev/null") {
+      my $which = qx(which $xprogram 2>/dev/null); ## no critic (Backtick)
+      $which =~ s/\s+$//;
+      if ($which && -x $which) {
+	  if ($IS_TEST_CONFIG) {
+	      print STDERR "CONFIG\{$external_program\} enabled\n";
+	  }
+	  return $CONFIG{$external_program} = $CONFIG{$which} = $which;
+      }
   }
 
   # poor man's which
