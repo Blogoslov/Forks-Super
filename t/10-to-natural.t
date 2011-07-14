@@ -26,7 +26,10 @@ ok(defined $job, "got Forks::Super::Job object $job");
 ok($job->{style} eq "natural", "natural style");
 ok($job->{state} eq "ACTIVE", "active state");
 my $waitpid = waitpid($pid,WNOHANG);
-ok(-1 == $waitpid, "non-blocking wait succeeds");
+
+# XXX: wait WNOHANG on active process should return 0 or -1 ???
+ok(-1 == $waitpid || 0 == $waitpid, "non-blocking wait succeeds");
+
 ok(! defined $job->{status}, "no job status");
 Forks::Super::pause(4);
 ok($job->{state} eq "COMPLETE", "job state " . $job->{state} . "==COMPLETE");

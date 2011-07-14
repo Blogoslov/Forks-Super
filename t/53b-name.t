@@ -7,7 +7,7 @@ use warnings;
 # Job::get, Job::getByName, and waitpid
 
 my ($pid,$pid1,$pid2,$pid3,$j1,$j2,$j3,$p,$q,$t,@j,$p1,$p2,$p3);
-our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
+our $TOL = 1E-4 + ($Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0);
 
 # named dependency
 # first job doesn't really have any dependencies, should start right away

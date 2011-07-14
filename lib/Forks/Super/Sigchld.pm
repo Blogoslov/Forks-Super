@@ -25,7 +25,7 @@ my %bastards;
 # were not handled correctly.
 #
 sub handle_CHLD {
-  local $! = $!;
+  local $!;
   $SIGCHLD_CAUGHT[0]++;
   my $sig = shift;
   $_SIGCHLD_CNT++;
@@ -46,7 +46,7 @@ sub handle_CHLD {
     push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
   }
   if ($sig ne "-1" && $DEBUG) {
-    debug("Forks::Super::handle_CHLD(): $sig received");
+    debug("handle_CHLD(): $sig received");
   }
 
   my $nhandled = 0;
@@ -66,7 +66,7 @@ sub handle_CHLD {
 
     if (defined $Forks::Super::ALL_JOBS{$pid}) {
       $REAP = 1;
-      debug("Forks::Super::handle_CHLD(): ",
+      debug("handle_CHLD(): ",
 	    "preliminary reap for $pid status=$status") if $DEBUG;
       if ($SIG_DEBUG) {
 	my $z = Time::HiRes::time() - $^T;
@@ -76,8 +76,10 @@ sub handle_CHLD {
 
       $REAP = 1;
       my $j = $Forks::Super::ALL_JOBS{$pid};
-      $j->{status} = $status;
-      $j->_mark_complete;
+      if (!$j->{daemon}) {
+	  $j->{status} = $status;
+	  $j->_mark_complete;
+      }
     } else {
       # There are (at least) two reasons we reach this code branch:
       #
@@ -87,10 +89,10 @@ sub handle_CHLD {
       #    Treat this as a bastard pid. We'll check later if the 
       #    parent process knows about this process.
       # 2. This is a child process with $CHILD_FORK_OK>0, reaping a process
-      #    started with a system fork (system or exec XXX-qx?), not 
+      #    started with a system fork (system or exec or maybe even qx?), not 
       #    a F::S::fork call from within the child process.
 
-      debug("Forks::Super::handle_CHLD(): got CHLD signal ",
+      debug("handle_CHLD(): got CHLD signal ",
 	    "but can't find child to reap; pid=$pid") if $DEBUG;
 
       $bastards{$pid} = [ scalar Time::HiRes::time(), $status ];
@@ -121,9 +123,13 @@ sub handle_bastards {
 	if (defined $job && defined $bastards{$pid}) {
 	    warn "Forks::Super: ",
 	        "Job $pid reaped before parent initialization.\n";
-	    $job->_mark_complete;
-	    ($job->{end}, $job->{status})
-		= @{delete $bastards{$pid}};
+	    if ($job->{daemon}) {
+		delete $bastards{$pid};
+	    } else {
+		$job->_mark_complete;
+		($job->{end}, $job->{status})
+		    = @{delete $bastards{$pid}};
+	    }
 	}
     }
     return;

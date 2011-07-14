@@ -28,7 +28,7 @@ ok(@j == 2,"getByName dup");
 @j = Forks::Super::Job::getByName("bogus");
 ok(@j == 0, "getByName bogus");
 $p = waitpid "sleeperX", WNOHANG;
-ok($p == -1, "nonblock waitpid by name");
+ok($p == -1 || $p == 0, "nonblock waitpid by name");           ### 7 ###
 $p = waitpid "sleeperX", 0;
 ok($p == $pid1 || $p == $pid2, "waitpid by dup name");
 $q = waitpid "sleeperX", 0;

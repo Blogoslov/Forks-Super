@@ -85,6 +85,6 @@ ok($output eq $orig_output, "output not updated until child is complete.");
 waitpid $pid, 0;
 my @output = split /\n/, $output;
 ok($output[0] eq "bike 2" && $output[2] eq "car 4" && $output[3] eq "gun 6",
-"read input from ARRAY ref");
+   "read input from ARRAY ref");
 waitall;
 

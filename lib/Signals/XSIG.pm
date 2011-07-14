@@ -1,4 +1,7 @@
 package Signals::XSIG;
+
+## no critic (RequireLocalizedPunctuationVars, ProhibitAutomaticExport)
+
 use Signals::XSIG::Default;
 use Carp;
 use Config;
@@ -10,9 +13,12 @@ use strict;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(%XSIG);
-our @EXPORT_OK = qw(untied);
+our @EXPORT_OK = qw(untied %DEFAULT_BEHAVIOR);
 
-our $VERSION = '0.10';
+our %DEFAULT_BEHAVIOR;
+*DEFAULT_BEHAVIOR = \%Signals::XSIG::Default::DEFAULT_BEHAVIOR;
+
+our $VERSION = '0.12';
 our (%XSIG, %_XSIG, %SIGTABLE, $_REFRESH, $_DISABLE_WARNINGS);
 our $_INITIALIZED = 0;
 our $SIGTIE = bless {}, 'Signals::XSIG::TieSIG';
@@ -49,8 +55,7 @@ sub _init {
   $_REFRESH = 1;
   foreach my $sig (@name, '__WARN__', '__DIE__') {
     next if $sig eq 'ZERO';
-    eval { (tied @{$_XSIG{$sig}})->_refresh_SIG };
-    if ($@) {
+    unless (eval { (tied @{$_XSIG{$sig}})->_refresh_SIG; 1 }) {
       Carp::confess "Error initializing \@{\$XSIG{$sig}}!: $@\n";
     }
   }
@@ -66,17 +71,25 @@ sub _init {
   }
   $SIGTABLE{'__WARN__'} = '__WARN__';
   $SIGTABLE{'__DIE__'} = '__DIE__';
-  $_INITIALIZED++;
+  return ++$_INITIALIZED;
 }
 
-sub __shadow__warn__handler { &__shadow_signal_handler('__WARN__',@_) }
-sub __shadow__die__handler  { &__shadow_signal_handler('__DIE__',@_) }
+sub __shadow__warn__handler {          ## no critic (Unpacking)
+  return &__shadow_signal_handler('__WARN__',@_) 
+}
+sub __shadow__die__handler  {          ## no critic (Unpacking)
+  return &__shadow_signal_handler('__DIE__',@_) 
+}
 
 our $_GLOBAL_DESTRUCTION = 0;
-END { $_GLOBAL_DESTRUCTION = 1; }
+END {
+  $_GLOBAL_DESTRUCTION = 1; 
+}
 
 sub __shadow_signal_handler {
   my ($signal, @args) = @_;
+
+  # %XSIG might be partially or completely untied during global destruction
   return if $_GLOBAL_DESTRUCTION;
   my $seen_default = 0;
 
@@ -104,9 +117,10 @@ sub __shadow_signal_handler {
 	}
       }
       next if $seen_default++;
-      Signals::XSIG::Default::perform_default_behavior(@_);
+      Signals::XSIG::Default::perform_default_behavior($signal, @args);
     } else {
-      no strict 'refs';
+      next if !defined &$subhandler;
+      no strict 'refs';                    ## no critic (NoStrict)
       if ($signal =~ /__\w+__/) {
 	$subhandler->(@args);
       } else {
@@ -114,6 +128,7 @@ sub __shadow_signal_handler {
       }
     }
   }
+  return;
 }
 
 # convert a signal name to its canonical name. If not disabled,
@@ -126,24 +141,25 @@ sub _resolve_signal {
   $DISABLE_WARNINGS ||= $_DISABLE_WARNINGS;
   $sig = $SIGTABLE{uc $sig};
   if (defined $sig) {
-    $_[0] = $sig;
+    $_[0] = $sig;  ## no critic (Unpacking)
     return 1;
   }
   return 1 if !$_INITIALIZED;
 
   # signal could not be resolved -- issue warning and return false
   unless ($DISABLE_WARNINGS) {
-    if ($_[0] =~ /\d/ && $_[0] !~ /\D/) {
-      carp "Invalid signal number $_[0].\n";
+    if (defined($sig) && $sig =~ /\d/ && $sig !~ /\D/) {
+      carp "Invalid signal number $sig.\n";
     } elsif (warnings::enabled('signal')) {
-      Carp::cluck "Invalid signal name $_[0].\n";
+      Carp::cluck "Invalid signal name $sig.\n";
     }
   }
   return;
 }
 
 # execute a block of code while %SIG is temporarily untied.
-sub untied (&) {
+
+sub untied (&) {                    ## no critic (SubroutinePrototypes)
   my $BLOCK = shift;
 
   untie %SIG;
@@ -152,6 +168,8 @@ sub untied (&) {
 
   return wantarray ? @r : $r[0];
 }
+
+
 
 # in %SIG and %XSIG assignments, string values are qualified to the
 # 'main' package, unqualified *glob values are qualified to the
@@ -207,7 +225,7 @@ sub Signals::XSIG::TieSIG::STORE {
   } else {
     my $old;
     untied {
-      no warnings 'signal';
+      no warnings 'signal';          ## no critic (NoWarnings)
       $old = $SIG{$key};
       $SIG{$key} = $value;
     };
@@ -231,6 +249,7 @@ sub Signals::XSIG::TieSIG::DELETE {
 sub Signals::XSIG::TieSIG::CLEAR {
   my ($self) = @_;
   $_XSIG{$_}[0] = undef for keys %XSIG;
+  return;
 }
 
 sub Signals::XSIG::TieSIG::EXISTS {
@@ -241,7 +260,7 @@ sub Signals::XSIG::TieSIG::EXISTS {
 sub Signals::XSIG::TieSIG::FIRSTKEY {
   my ($self) = @_;
   my $a = keys %_XSIG;
-  each %_XSIG;
+  return each %_XSIG;
 }
 
 sub Signals::XSIG::TieSIG::NEXTKEY {
@@ -315,7 +334,16 @@ sub Signals::XSIG::TieArray::_refresh_SIG {
   my $handler_to_install;
   if (@index_list == 0) {
     $handler_to_install = undef;
-  } elsif (@index_list == 1) {
+  }
+
+  # XXX - if there is a single handler, and that handler is 'DEFAULT',
+  #       do we want to install the shadow signal handler anyway?
+  #       The caller may have overridden the DEFAULT behavior of the signal,
+  #       so yeah, I think we do.
+
+  elsif (@index_list == 1 && 
+	 ($seen_default == 0 || ref($DEFAULT_BEHAVIOR{$sig}) eq '')) {
+#!$seen_default) {
     $handler_to_install = $handlers[$index_list[0]];
   } else {
     if ($sig eq '__WARN__') {
@@ -327,9 +355,10 @@ sub Signals::XSIG::TieArray::_refresh_SIG {
     }
   }
   untied {
-    no warnings qw(uninitialized signal);
+    no warnings qw(uninitialized signal); ## no critic (NoWarnings)
     $SIG{$sig} = $handler_to_install;
   };
+  return;
 }
 
 sub Signals::XSIG::TieArray::handlers {
@@ -375,6 +404,7 @@ sub Signals::XSIG::TieArray::UNSHIFT {
   unshift @{$self->{handlers}}, @list;
   $self->{start} -= @list;
   $self->_refresh_SIG;
+  return $self->FETCHSIZE;
 }
 
 sub Signals::XSIG::TieArray::POP {
@@ -468,9 +498,10 @@ sub Signals::XSIG::TieScalar::STORE {
   }
 
   croak "Thought this code was unreachable.\n";
+
   # otherwise, treat  $XSIG{key}=VAL  like $SIG{key}=VAL or $XSIG{key}[0]=val
-  $self->{val}[0] = $value;
-  return $old;
+  #$self->{val}[0] = $value;
+  #return $old;
 }
 
 ##################################################################
@@ -526,6 +557,7 @@ sub Signals::XSIG::TieXSIG::CLEAR {
     my ($xsig, $alias) = @$pair;
     $_XSIG{$alias} = $_XSIG{$xsig};
   }
+  return;
 }
 
 sub Signals::XSIG::TieXSIG::EXISTS {
@@ -536,7 +568,7 @@ sub Signals::XSIG::TieXSIG::EXISTS {
 sub Signals::XSIG::TieXSIG::FIRSTKEY {
   my ($self) = @_;
   my $a = keys %_XSIG;
-  each %_XSIG;
+  return each %_XSIG;
 }
 
 sub Signals::XSIG::TieXSIG::NEXTKEY {
@@ -554,7 +586,7 @@ Signals::XSIG - install multiple signal handlers through %XSIG
 
 =head1 VERSION
 
-Version 0.10
+Version 0.12
 
 =head1 SYNOPSIS
 
@@ -582,7 +614,8 @@ Version 0.10
 =head1 DESCRIPTION
 
 Perl provides the magic global hash variable C<%SIG> to make it
-easy to trap and handle signals (see L<perlvar/"%SIG"> and L<perlipc>).
+easy to trap and handle signals (see L<perlvar/"%SIG"> and 
+L<perlipc|perlipc>).
 The hash-of-lists variable C<%XSIG> provided by this module
 has a similar interface for setting an arbitrary number of
 handlers on any signal.
@@ -763,6 +796,55 @@ the main handler or any later handlers.
 
 =back
 
+=head1 OVERRIDING DEFAULT SIGNAL BEHAVIOR
+
+C<Signals::XSIG> provides two ways that the 'DEFAULT' signal behavior
+(that is, the behavior of a trapped signal when one or more of 
+its signal handlers is set to C<'DEFAULT'>,
+B<not> the behavior when a signal does not have a signal handler set)
+can be overridden for a specific signal.
+
+=over 4
+
+=item * define a C<< Signals::XSIG::Default::default_<SIG> >> function
+
+    sub Signals::XSIG::Default::default_QUIT {
+        print "Hello world.\n";
+    }
+    $SIG{QUIT} = 'DEFAULT';
+    kill 'QUIT', $$;
+
+=item * set a handler in C< %Signals::XSIG::DEFAULT_BEHAVIOR >
+
+    $Signals::XSIG::DEFAULT_BEHAVIOR{USR1} = sub { print "dy!" }
+    $XSIG{'USR1'} = [ sub {print "How"}, 'DEFAULT',  sub{print$/} ];
+    kill 'USR1', $$;     #  "Howdy!\n"
+
+=back
+
+Note again that the overridden 'DEFAULT' behavior will only be used for
+signals where a handler has been explicitly set to C<'DEFAULT'>, and
+not for signals that do not have any signal handler installed. So
+
+    $SIG{USR1} = 'DEFAULT'; kill 'USR1', $$;
+
+will use the overridden default behavior, but
+
+    $XSIG{USR1} = []; kill 'USR1', $$;
+
+will not.
+
+Also note that in any chain of signal handler calls, the 'DEFAULT'
+signal handler will be called at most once. So for example this code
+
+    my $x = 0;
+    $Signals::XSIG::DEFAULT_BEHAVIOR{USR2} = sub { $x++ };
+    $XSIG{USR2} = [ 'DEFAULT', sub {$x=11}, 'DEFAULT', 'DEFAULT' ];
+    kill 'USR2', $$;
+    print $x;
+
+will output 11, not 13. This is DWIM.
+
 =head1 EXPORT
 
 The C<%XSIG> extended signal handler hash is exported into
@@ -813,7 +895,8 @@ Marty O'Brien, C<< <mob at cpan.org> >>
 =item Avoid C<local %SIG>
 
 This module converts C<%SIG> into a tied hash. As documented in 
-L<perltie|/"BUGS">, C<local>izing a tied hash will cause the old data
+L<the perltie "BUGS" section|perltie/"BUGS">,
+C<local>izing a tied hash will cause the old data
 not to be restored when the local version of the hash goes out of scope.
 Avoid doing this:
 
@@ -823,9 +906,9 @@ Avoid doing this:
     }
 
 or using modules and functions which localize C<%SIG> 
-(fortunately, there are
-L<not that many|http://www.google.com/codesearch?hl=en&lr=&q=%22local+%25SIG%22+lang:perl&sbtn=Search> 
-examples of code that use this construction).
+(fortunately, there are not that many examples of code that
+use this construction 
+[L<http://www.google.com/codesearch?hl=en&lr=&q=%22local+%25SIG%22+lang:perl&sbtn=Search>]).
 
 Should you identify a code block that localizes C<%SIG> and you can't/don't
 want to avoid using it, the workaround is to save and restore C<%SIG> at
@@ -836,6 +919,11 @@ the end of the local scope:
     my %temp = %SIG;
     function_call_or_block_that_localizes_SIG();
     %SIG = %temp;
+
+In addition, the behavior of the tied C<%SIG> while it is C<local>'ized
+is different in different versions of Perl, and all of the features
+of C<Signals::XSIG> might or might not work while a local copy
+of C<%SIG> is in use.
 
 Note that it is perfectly fine to C<local>ize an I<element> of C<%SIG>:
 

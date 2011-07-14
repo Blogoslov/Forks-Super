@@ -42,8 +42,9 @@ $pid = fork { cmd => $cmd };
 ok(isValidPid($pid), "fork to \$command successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
-ok($? == 0, "child STATUS \$? == 0");
-$z = do { my $fh; open($fh, "<", $output); my $zz = join '', <$fh>; close $fh; $zz };
+ok($? == 0, "child STATUS \$? == 0") or diag("status was $?, expected 0");
+$z = do { open my $fh, "<", $output; join '', <$fh> };
+#     	  my $zz = join '', <$fh>; close $fh; $zz };
 $z =~ s/\s+$//;
 $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z,
@@ -61,7 +62,7 @@ $p = wait;
 my $v = Time::HiRes::time();
 ($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait reaped correct pid");
-ok($u >= 4.9 && $t <= 9.05,             ### 11 ### was 6.5 obs 8.02,9.33,8.98
+ok($u >= 4.9 && $t <= 9.35,             ### 11 ### was 6.5 obs 8.02,9.33,8.98
    "background command ran for ${t}s ${u}s, expected 5-6s");
 
 ##################################################################

@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -46,13 +46,17 @@ sub Forks::Super::Job::_config_os_child {
     $job->{name} = $$;
   }
 
+  if (defined $job->{umask}) {
+      umask $job->{umask};
+  }
+
   $ENV{_FORK_PPID} = $$ if &IS_WIN32;
   if (defined $job->{os_priority}) {
-    set_os_priority($job);
+      set_os_priority($job);
   }
 
   if (defined $job->{cpu_affinity}) {
-    validate_cpu_affinity($job) && set_cpu_affinity($job);
+      validate_cpu_affinity($job) && set_cpu_affinity($job);
   }
   return;
 }

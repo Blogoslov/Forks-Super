@@ -109,13 +109,13 @@ Forks::Super::close_fh($pid);
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [\n @out ]");
 
 @err = grep { !/alarm\(\) not available/ } @err;  # exclude warning to child STDERR
-ok(@err == 1,                            ### 8 ###
-   scalar @err . " == 1 line from STDERR\n" . join $/,@err);
+ok(@err == 1,                                                   ### 8 ###
+   scalar @err . " == 1 line from STDERR\n----\n" . join $/,@err,"---");
 
 ok($out[0] eq "0:$msg\n", "got Expected first line from child output");
 ok($out[1] eq "1:$msg\n", "got Expected second line from child output");
 ok($out[2] eq "2:$msg\n", "got Expected third line from child output");
-ok($err[-1] eq "$msg\n",                 ### 12 ###
+ok($err[0] eq "$msg\n" || $err[-1] eq "$msg\n",                 ### 12 ###
    "got Expected line from child error @err");
 
 my $r = waitall 10;

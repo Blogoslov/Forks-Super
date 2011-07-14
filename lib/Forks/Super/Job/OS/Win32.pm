@@ -19,7 +19,7 @@ use strict;
 use warnings;
 
 if (!&IS_WIN32 && !&IS_CYGWIN) {
-  Carp::confess "Loaded Win32-only module into \$^O=$^O!\n";
+    Carp::confess "Loaded Win32-only module into \$^O=$^O!\n";
 }
 
 # Starting point for details about the Windows Process and
@@ -27,351 +27,787 @@ if (!&IS_WIN32 && !&IS_CYGWIN) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.52';
-
+our $VERSION = '0.53';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
-our %_WIN32_API_SPECS
-  = ('GetActiveProcessorCount' => [ 'kernel32',
-		'DWORD GetActiveProcessorCount(WORD g)' ],
-     'GetCurrentProcess' => [ 'kernel32',
-		'HANDLE GetCurrentProcess()' ],
-     'GetCurrentProcessId' => [ 'kernel32',
-		'DWORD GetCurrentProcessId()' ],
-     'GetCurrentThread' => [ 'kernel32',
-		'HANDLE GetCurrentThread()' ],
-     'GetCurrentThreadId' => [ 'kernel32', 
-		'int GetCurrentThreadId()' ],
-     'GetLastError' => [ 'kernel32', 'DWORD GetLastError()' ],
-     'GetPriorityClass' => [ 'kernel32',
-	        'DWORD GetPriorityClass(HANDLE h)' ],
-     'GetProcessAffinityMask' => [ 'kernel32',
-		'BOOL GetProcessAffinityMask(HANDLE h,PDWORD a,PDWORD b)' ],
-     'GetThreadPriority' => [ 'kernel32',
-		'int GetThreadPriority(HANDLE h)' ],
-     'OpenProcess' => [ 'kernel32', 
-		'HANDLE OpenProcess(DWORD a,BOOL b,DWORD c)' ],
-     'OpenThread' => [ 'kernel32', 
-		'HANDLE OpenThread(DWORD a,BOOL b,DWORD c)' ],
-     'ResumeThread' => [ 'kernel32', 'DWORD ResumeThread(HANDLE h)' ],
-     'SetProcessAffinityMask' => [ 'kernel32',
-		'BOOL SetProcessAffinityMask(HANDLE h,DWORD m)' ],
-     'SetThreadAffinityMask' => [ 'kernel32',
-		'DWORD SetThreadAffinityMask(HANDLE h,DWORD d)' ],
-     'SetThreadPriority' => [ 'kernel32',
-		'BOOL SetThreadPriority(HANDLE h,int n)' ],
-     'SuspendThread' => [ 'kernel32', 'DWORD SuspendThread(HANDLE h)' ],
-     'TerminateThread' => [ 'kernel32',
-	        'BOOL TerminateThread(HANDLE h,DWORD x)' ],
-    );
 
-# *Forks::Super::Job::OS::get_number_of_processors = *get_number_of_processors;
+##################################################################
 
-######################################################################
+# Accessing the Windows API functions
+# ===================================
+#
+# The  Win32::API  module makes it easy to use functions in a
+# DLL if you know the function prototype. 
+#
+# %_WIN32_API_SPECS lists the Windows API functions that we may
+# want to call in this distribution and their function prototypes
+# in the Kernel32.dll library.
 
+# a struct we need to enumerate all the threads of a process
+eval {
+
+    require Win32::API;
+
+    Win32::API::Struct->typedef(
+	THREADENTRY32 => qw{
+	DWORD dwSize;
+	DWORD cntUsage;
+	DWORD thread_id;
+	DWORD owner_process_id;
+	LONG tpBasePri;
+	LONG tpDeltaPri;
+	DWORD dwFlags;
+    });
+};
+
+our %_WIN32_API_SPECS = (
+    GetActiveProcessorCount => 'DWORD GetActiveProcessorCount(WORD g)',
+    GetCurrentProcess => 'HANDLE GetCurrentProcess()',
+    GetCurrentProcessId => 'DWORD GetCurrentProcessId()',
+    GetCurrentThread => 'HANDLE GetCurrentThread()',
+    GetCurrentThreadId => 'int GetCurrentThreadId()',
+    GetExitCodeProcess => 'BOOL GetExitCodeProcess(HANDLE h,LPDWORD x)',
+    GetExitCodeThread => 'BOOL GetExitCodeThread(HANDLE h,LPDWORD x)',
+    GetLastError => 'DWORD GetLastError()',
+    GetPriorityClass => 'DWORD GetPriorityClass(HANDLE h)',
+    GetProcessAffinityMask => 
+        'BOOL GetProcessAffinityMask(HANDLE h,PDWORD a,PDWORD b)',
+    GetThreadPriority => 'int GetThreadPriority(HANDLE h)',
+    OpenProcess => 'HANDLE OpenProcess(DWORD a,BOOL b,DWORD c)',
+    OpenThread => 'HANDLE OpenThread(DWORD a,BOOL b,DWORD c)',
+    ResumeThread => 'DWORD ResumeThread(HANDLE h)',
+    SetPriorityClass => 'BOOL SetPriorityClass(HANDLE h,DWORD c)',
+    SetProcessAffinityMask => 'BOOL SetProcessAffinityMask(HANDLE h,DWORD m)',
+    SetThreadAffinityMask => 'DWORD SetThreadAffinityMask(HANDLE h,DWORD d)',
+    SetThreadPriority => 'BOOL SetThreadPriority(HANDLE h,int n)',
+    SuspendThread => 'DWORD SuspendThread(HANDLE h)',
+    TerminateProcess => 'BOOL TerminateProcess(HANDLE h,UINT x)',
+    TerminateThread => 'BOOL TerminateThread(HANDLE h,DWORD x)',
+
+    CreateSnapshot => 'HANDLE CreateToolhelp32Snapshot(DWORD a,DWORD b)',
+    Thread32First => 'BOOL Thread32First(HANDLE h,LPTHREADENTRY32 b)',
+    Thread32Next => 'BOOL Thread32Next(HANDLE h,LPTHREADENTRY32 b)',
+);
+
+# make a system call to a kernel32.dll function
 sub win32api {
-  my $function = shift;
-  if (!defined $_THREAD_API->{$function}) {
-    if (CONFIG('Win32::API')) {
-      my $spec = $_WIN32_API_SPECS{$function};
-      if (!defined $spec) {
-	croak "Forks::Super::Job::OS::Win32: ",
-	  "requested unrecognized Win32 API function $function!\n";
-      }
+    my $function = shift;
+    if (!defined $_THREAD_API->{$function}) {
+	return unless CONFIG('Win32::API');
+	my $spec = $_WIN32_API_SPECS{$function};
+	if (!defined $spec) {
+	    croak "Forks::Super::Job::OS::Win32: ",
+	        "requested unrecognized Win32 API function $function!\n";
+	}
 
-      local $! = undef;
-      $_THREAD_API->{$function} = Win32::API->new(@$spec);
-      if ($!) {
-	$_THREAD_API->{'_error'} = "$! / $^E";
-      }
-    } else {
-      return;
+	local $! = undef;
+	$_THREAD_API->{$function} = Win32::API->new('Kernel32', $spec);
+	if ($!) {
+	    $_THREAD_API->{'_error'} = "$! / $^E";
+	}
     }
-  }
-  return $_THREAD_API->{$function}->Call(@_);
+    return $_THREAD_API->{$function}->Call(@_);
 }
 
+sub _load_win32api {
+    my $function = shift;
+    return unless CONFIG('Win32::API');
+    my $spec = $_WIN32_API_SPECS{$function};
+    if (!defined $spec) {
+	croak "Forks::Super::Job::OS::Win32: ",
+	    "requested unrecognized Win32 API function $function!\n";
+    }
+
+    local $! = undef;
+    $_THREAD_API->{$function} = Win32::API->new('Kernel32', $spec);
+    if ($!) {
+	$_THREAD_API->{'_error'} = "$! / $^E";
+    }
+    return $_THREAD_API->{$function};
+}
+
+##################################################################
+
 sub get_thread_handle {
-  my $thread_id = shift;
-  my $set_info = shift || '';
+    my $thread_id = shift;
+    my $set_info = shift || '';
 
-  if (!defined $thread_id) {
-    $thread_id = win32api('GetCurrentThreadId');
-  }
-  $thread_id = abs($thread_id);
+    if (!defined $thread_id) {
+	$thread_id = win32api('GetCurrentThreadId');
+    }
+    $thread_id = abs($thread_id);
 
-  # Thread access rights:
-  # from http://msdn.microsoft.com/en-us/library/ms686769(VS.85).aspx
-  #
-  # 0x0020: THREAD_QUERY_INFORMATION
-  # 0x0400: THREAD_QUERY_LIMITED_INFORMATION
-  # 0x0040: THREAD_SET_INFORMATION
-  # 0x0200: THREAD_SET_LIMITED_INFORMATION
+    # Thread access rights:
+    # from http://msdn.microsoft.com/en-us/library/ms686769(VS.85).aspx
+    #
+    # did these values change since 2010?
+    # === current as of 2011m07 ===
+    # 0x0040: THREAD_QUERY_INFORMATION
+    # 0x0800: THREAD_QUERY_LIMITED_INFORMATION (v>=2003)
+    # 0x0020: THREAD_SET_INFORMATION
+    # 0x0400: THREAD_SET_LIMITED_INFORMATION (v>=2003)
+    # === was in 2010m08? ===
+    # 0x0020: THREAD_QUERY_INFORMATION
+    # 0x0400: THREAD_QUERY_LIMITED_INFORMATION
+    # 0x0040: THREAD_SET_INFORMATION
+    # 0x0200: THREAD_SET_LIMITED_INFORMATION
 
-  if ($set_info =~ /term/i) { # need terminate privilege
-    # 0x0001: THREAD_TERMINATE
+    if ($set_info =~ /term/i) { # need terminate privilege
+	# 0x0001: THREAD_TERMINATE
+	return 0
+	    || win32api('OpenThread', 0x0001, 0, $thread_id);
+    }
+    if ($set_info =~ /susp/i) { # need suspend-resume privilege
+	# 0x0002: THREAD_SUSPEND_RESUME
+	return 0
+	    || win32api('OpenThread', 0x0002, 0, $thread_id);
+    }
+
     return 0
-      || win32api('OpenThread', 0x0001, 0, $thread_id);
-  }
-  if ($set_info =~ /susp/i) { # need suspend-resume privilege
-    # 0x0002: THREAD_SUSPEND_RESUME
-    return 0
-      || win32api('OpenThread', 0x0002, 0, $thread_id);
-  }
-
-  return 0
-    || win32api('OpenThread', 0x0060, 1, $thread_id)
-    || win32api('OpenThread', 0x0600, 1, $thread_id)
-    || win32api('OpenThread', $set_info ? 0x0040 : 0x0020, 1, $thread_id)
-    || win32api('OpenThread', $set_info ? 0x0200 : 0x0400, 1, $thread_id);
+	|| win32api('OpenThread', 0x0060, 1, $thread_id)
+	|| win32api('OpenThread', 0x0C00, 1, $thread_id)
+	|| win32api('OpenThread', $set_info ? 0x0040 : 0x0020, 1, $thread_id)
+	|| win32api('OpenThread', $set_info ? 0x0200 : 0x0400, 1, $thread_id);
 }
 
 sub get_process_handle {
-  my $process_id = shift;
-  my $set_info = shift || 0;
+    my $process_id = shift;
+    my $set_info = shift || 0;
 
-  if (!defined $process_id) {
-    # on Cygwin,  GetCurrentProcessId() != $$
-    $process_id = win32api('GetCurrentProcessId');
-  }
-
-  # Process access rights:
-  # from http://msdn.microsoft.com/en-us/library/ms684880(VS.85).aspx
-  # If there is a reason the these values are inconsistent with the
-  # THREAD_xxx_INFORMATION values, nobody knows what it is.
-  #
-  # 0x0400: PROCESS_QUERY_INFORMATION
-  # 0x1000: PROCESS_QUERY_LIMITED_INFORMATION
-  # 0x0200: PROCESS_SET_INFORMATION
-  return win32api('OpenProcess', 0x0600, 0, $process_id)
-    || win32api('OpenProcess', 0x1200, 0, $process_id)
-    || win32api('OpenProcess', $set_info ? 0x0200 : 0x0400, 0, $process_id)
-    || ($set_info == 0 && win32api('OpenProcess', 0x1000, 0, $process_id));
-}
-
-sub get_thread_priority {
-  my $thread_id = shift;
-  if (!defined $thread_id) {
-    $thread_id = win32api('GetCurrentThreadId');
-  }
-  my $handle = get_thread_handle($thread_id);
-  local $! = undef;
-  my $p = win32api('GetThreadPriority', $handle);
-  if ($!) {
-    carp "Problem retrieving priority for Windows thread $thread_id: ",
-      "$! / $^E\n";
-  }
-  return $p;
-}
-
-sub set_thread_priority {
-  my ($thread_id, $priority) = @_;
-  if (!defined $thread_id) {
-    $thread_id = win32api('GetCurrentThreadId');
-  }
-  my $handle = get_thread_handle($thread_id);
-  return 0 unless $handle;
-  return win32api('SetThreadPriority', $handle, $priority);
-}
-
-sub set_os_priority {
-  my ($job, $priority) = @_;
-  my $thread_id = get_current_thread_id();
-  my $handle = get_thread_handle($thread_id);
-  if (!$handle) {
-    carp_once "Forks::Super::Job::OS::set_os_priority: ",
-      "no Win32 handle available for thread\n";
-    return;
-  }
-  if ($priority > -15 && $priority < -7) {
-    $priority = -7;
-  }
-  if ($priority > 6 && $priority < 15) {
-    $priority = 6;
-  }
-  if (($priority >= -7 && $priority < -2)
-	|| ($priority > 2 && $priority <= 6)) {
-
-    my $priority_class 
-	= Forks::Super::Job::OS::Win32::get_process_priority_class();
-    if (!defined $priority_class) {
-      return;
+    if (!defined $process_id) {
+	# on Cygwin,  GetCurrentProcessId() != $$
+	$process_id = win32api('GetCurrentProcessId');
     }
-    if ($priority_class != 0x0100) { # 0x0100: REALTIME_PRIORITY_CLASS
-      if ($priority < -2) {
-	$priority = -2;
-      } elsif ($priority > 2) {
-	$priority = 2;
-      }
-    }
-  }
 
-  local $! = 0;
-  my $result 
-      = Forks::Super::Job::OS::Win32::set_thread_priority($thread_id,$priority);
-  if ($result) {
-    if ($job->{debug}) {
-      debug("updated thread priority to $priority for job $$");
-    }
-    return $result + $priority / 100;
-  } else {
-    carp "Forks::Super::Job: set os_priority failed: $! / $^E\n";
-  }
-  return;
-}
-
-sub get_process_priority_class { # for the current process
-  my $phandle = get_process_handle(undef, 0);
-  return if !$phandle;
-  local $! = 0;
-  my $result = win32api('GetPriorityClass', $phandle);
-  if ($!) {
-    carp_once "Forks::Super::Job::OS: ",
-      "Error retrieving current process priority class $! / $^E\n";
-  }
-  return $result;
+    # Process access rights:
+    # from http://msdn.microsoft.com/en-us/library/ms684880(VS.85).aspx
+    # If there is a reason the these values are inconsistent with the
+    # THREAD_xxx_INFORMATION values, nobody knows what it is.
+    #
+    # 0x0400: PROCESS_QUERY_INFORMATION
+    # 0x1000: PROCESS_QUERY_LIMITED_INFORMATION
+    # 0x0200: PROCESS_SET_INFORMATION
+    return win32api('OpenProcess', 0x0600, 0, $process_id)
+	|| win32api('OpenProcess', 0x1200, 0, $process_id)
+	|| win32api('OpenProcess', $set_info ? 0x0200 : 0x0400, 0, $process_id)
+	|| ($set_info == 0 && win32api('OpenProcess', 0x1000, 0, $process_id));
 }
 
 sub get_current_thread_id {
-  local $! = 0;
-  my $result = win32api('GetCurrentThreadId');
-  return $result;
+    # XXX - if $$ < 0, then this result should always be the same as -$$, right?
+    local $! = 0;
+    my $result = win32api('GetCurrentThreadId');
+    return $result;
 }
 
 #############################################################################
 
+# DWIM Unix-style emulation of signals to Windows processes and threads
+# =====================================================================
+#
+# "Signals" (note scare quotes) are quite idiosyncratic in Windows.
+# Perl's  kill  function and  %SIG  signal handler magic work very
+# differently on processes ($$>0) and threads ($$<0). Sending a
+# signal to a thread can sometimes terminate the whole process, so
+# we have to be careful what we do.
+#
+# Here's a summary of best case emulation:
+# ----------------------------------------
+#
+# ZERO        always(*) ok to use CORE::kill
+#             cannot be handled
+#             (* - actually kill 'ZERO', ... fails because it signals a
+#             zombie process)
+#
+# KILL        always ok to use CORE::kill
+#             terminates thread or process
+#             cannot be handled
+#
+# INT,QUIT,BREAK to a process
+#             always ok to use CORE::kill
+#             default behavior is to terminate process
+#             but %SIG handlers are respected
+#
+# STOP,CONT   never ok to use CORE::kill
+#             CORE::kill would terminate the process
+#             even CORE::kill to a thread would terminate the whole process
+#             use Windows API to suspend/resume the process or thread
+#
+# CHLD,CLD    not ok to use CORE::kill
+#             CORE::kill would terminate the process, even if called on a thread
+#             IGNORE this signal, or send SIGZERO
+#
+# *kill to a process   
+#             mostly ok to use CORE::kill
+#             cannot be handled
+#             terminates the process
+#
+# INT,QUIT,BREAK to a thread
+# *kill to a thread
+#             CORE::kill will respect a %SIG handler
+#             CORE::kill ok *IF* any signal handler is defined in the thread
+#             without a %SIG handler, the whole process will be terminated
+#             *IF* not sure signal handler is installed,
+#                 terminate the thread with the API
+#
+# Non-Windows signals:
+#             cannot be handled,
+#             cannot be used directly with CORE::kill
+#             translate them into "similar" Windows signals
+#             FREEZE,TSTP,TTIN,TTOU ==> treat like SIGSTOP
+#                 use API to suspend
+#             THAW ==> treat like SIGCONT
+#                 use API to resume
+#             JVM1,JVM2,LWP,URG,WINCH      ==> ignore or treat like SIGZERO
+#                 send SIGZERO with CORE::kill ok
+#             
+#
+#
+#
+# * Windows "kill" signals are ABRT ALRM FPE HUP ILL NUMxx PIPE SEGV TERM
+
+
+
+
+
 # DWIM Unix-style signal to Windows processes and threads
 sub signal_procs {
-  my ($signal, $kill_proc_group, @pids) = @_;
+    my ($signal, $kill_proc_group, @pids) = @_;
 
-  my $num_signalled = 0;
-  my @terminated = ();
-  foreach my $pid (sort {$a <=> $b} @pids) {
-    if ($pid < 0) {
-      my ($signalled, $termref) = signal_thread($signal,-$pid);
-
-      if ($signalled) {
-	$num_signalled++;
-	push @terminated, @$termref;
-      } else {
-	if (!CONFIG('Win32::API')) {
-	  carp_once "Using potentially unsafe kill() command ",
-	    "on MSWin32 psuedo-process.\n",
-	    "Install Win32::API module for a safer alternative.\n";
-	}
-	local $! = 0;
-	$num_signalled += CORE::kill($kill_proc_group 
-				     ? -$signal : $signal, $pid);
-	carp "MSWin32 kill error $! $^E\n" if $!;
-      }
-    } else {
-      $num_signalled += CORE::kill($kill_proc_group 
-				   ? -$signal : $signal, $pid);
+    # signals that should have no effect on Windows processes and threads
+    if ($signal eq 'CHLD' || $signal eq 'CLD' || $signal eq 'JVM1'
+	    || $signal eq 'JVM2' || $signal eq 'LWP' || $signal eq 'URG'
+	    || $signal eq 'WINCH') {
+	$signal = 'ZERO';
     }
-  }
-  return ($num_signalled, \@terminated);
+
+    # my $num_signalled = 0;
+    my @signalled = ();
+    my @terminated = ();
+    my $tasklist = '';
+    foreach my $pid (sort {$a <=> $b} @pids) {
+
+	if ($DEBUG) {
+	    debug("sending SIG$signal to $pid ...");
+	}
+
+	if ($pid < 0) {
+	    my ($signalled, $termref) = signal_thread($signal,-$pid);
+
+	    if ($signalled) {
+		push @signalled, $pid;
+		#$num_signalled++;
+		push @terminated, @$termref;
+	    } else {
+		if (!CONFIG('Win32::API')) {
+		    carp_once "Using potentially unsafe kill() command ",
+		        "on MSWin32 psuedo-process.\n",
+		        "Install Win32::API module for a safer alternative.\n";
+		}
+		local $! = 0;
+		# KILL is safe to send with CORE::kill
+#		$num_signalled += CORE::kill($kill_proc_group 
+#					     ? -$signal : $signal, $pid);
+		if (CORE::kill($kill_proc_group ? -$signal : $signal,$pid)) {
+		    push @signalled, $pid;
+		}
+		carp "MSWin32 kill error $! $^E\n" if $!;
+	    }
+	} elsif ($signal eq 'ZERO' || $signal eq '0') {
+	    # CORE::kill 'ZERO' is safe for processes and threads
+	    # **BUT** kill 'ZERO' will return 1 for a zombie process
+	    # (or rather, a process launched with "system 1,..." that
+	    # is not sufficiently detached from the process that 
+	    # launched it), which is usually not what we want.
+
+	    # Getting a handle to a process and checking that the result
+	    # of  GetExitCodeProcess  != 259 (STILL_ACTIVE) is just a
+	    # little bit slower but it is exactly what we usually want.
+	    if (0) {
+#		$num_signalled += CORE::kill 0, $pid;
+		if (CORE::kill 0,$pid) {
+		    push @signalled,$pid;
+		}
+	    } elsif (1) {
+		my $handle = get_process_handle($pid, 0);
+		if ($handle != 0) {
+		    my $xcode = pack("I",0);
+		    my $z = win32api('GetExitCodeProcess',$handle,$xcode);
+#		    $num_signalled += $z && unpack("I",$xcode) == 259;
+		    if ($z && unpack("I",$xcode)==259) {
+			push @signalled, $pid;
+		    }
+		}
+	    } else {
+		if (!$tasklist) {
+		    # XXXXXX - is this portable across MSWin32 platforms?
+		    my @z = qx(TASKLIST /FO LIST);
+		    @z = grep { s/^PID:\s+// } @z;
+		    chomp(@z);
+		    local $" = ' ';
+		    $tasklist = " @z ";
+		}
+		if ($tasklist =~ / $pid /) {
+#		    $num_signalled++;
+		    push @signalled, $pid;
+		}
+	    }
+	} elsif ($signal eq 'CONT' || $signal eq 'THAW') {
+
+#	    $num_signalled += resume_process($pid);
+	    if (resume_process($pid)) {
+		push @signalled, $pid;
+	    }
+
+	} elsif ($signal eq 'STOP' || $signal eq 'TSTP'
+		 || $signal eq 'FREEZE' || $signal eq 'TTIN' 
+		 || $signal eq 'TTOU') {
+
+#	    $num_signalled += suspend_process($pid);
+	    if (suspend_process($pid)) {
+		push @signalled, $pid;
+	    }
+
+	} elsif ($signal eq 'INT' || $signal eq 'QUIT' || $signal eq 'BREAK') {
+
+	    # sending SIGINT, SIGQUIT, or SIGBREAK to a process are
+	    # emulated differently on Windows than most other signals.
+	    # By default they will terminate a process, but they can
+	    # be handled by a %SIG entry more or less like in Unix.
+
+	    if (CORE::kill $signal, $pid) {
+#		$num_signalled++;
+		push @signalled, $pid;
+		Forks::Super::Sigchld::handle_CHLD(-1);
+		if (!signal_procs('ZERO',$pid)) {
+		    push @terminated, $pid;
+		}
+		#if ($pid->is_complete) {
+		#    push @terminated, $pid;
+		#}
+	    }
+
+	} elsif (Forks::Super::Util::is_kill_signal($signal)) {
+
+	    my $signo =  Forks::Super::Util::signal_number($signal);
+	    if (terminate_process($pid, $signo)) {
+#		$num_signalled++;
+		push @signalled, $pid;
+		push @terminated, $pid;
+	    }
+
+	} else {
+	    carp_once "Forks::Super::Win32::signal_process: "
+		. "signal $signal not recognized, treating as SIGKILL";
+#	    $num_signalled += CORE::kill(($kill_proc_group 
+#					 ? -9 : 'KILL'), $pid);
+	    if (CORE::kill($kill_proc_group ? -9 : 'KILL', $pid)) {
+		push @signalled, $pid;
+		push @terminated, $pid;
+	    }
+	}
+    }
+#    return ($num_signalled, \@terminated);
+    return (\@signalled, \@terminated);
 }
 
 # DWIM Unix-style signal to a Win32 thread
 sub signal_thread {
-  my ($signal, $thread_id) = @_;
-  local $! = 0;
-  my $signalled = 0;
-  my @terminated = ();
+    my ($signal, $thread_id) = @_;
+    local $! = 0;
+    my $signalled = 0;
+    my @terminated = ();
 
-  if (Forks::Super::Util::is_kill_signal($signal)) {
-    if (terminate_thread($thread_id)) {
-      $signalled = 1;
-      push @terminated, -$thread_id;
+    if ($signal eq 'CHLD' || $signal eq 'CLD' || $signal eq 'JVM1'
+	    || $signal eq 'JVM2' || $signal eq 'LWP' || $signal eq 'URG'
+	    || $signal eq 'WINCH') {
+	$signal = 'ZERO';
     }
-  } elsif ($signal eq 'STOP' || $signal eq 'TSTP') {
-    if (suspend_thread($thread_id)) {
-      $signalled = 1;
-    }
-  } elsif ($signal eq 'CONT') {
-    if (resume_thread($thread_id)) {
-      $signalled = 1;
-    }
-  } else {
-    carp_once [$signal], "Forks::Super::kill(): ",
+
+    if (Forks::Super::Util::is_kill_signal($signal)) {
+	if (terminate_thread($thread_id)) {
+	    $signalled = 1;
+	    push @terminated, -$thread_id;
+	}
+    } elsif ($signal eq 'STOP' || $signal eq 'TSTP' || $signal eq 'FREEZE'
+	     || $signal eq 'TTIN' || $signal eq 'TTOU') {
+	if (suspend_thread($thread_id)) {
+	    $signalled = 1;
+	}
+    } elsif ($signal eq 'CONT' || $signal eq 'THAW') {
+	if (resume_thread($thread_id)) {
+	    $signalled = 1;
+	}
+    } elsif ($signal eq 'ZERO' || $signal eq '0') {
+	if (sigzero_thread($thread_id)) {
+	    $signalled = 1;
+	}
+    } else {
+	# XXX - should we ignore an unrecognized signal or terminate the
+	#       thread on an unrecognized signal? for now let's ignore
+
+	# Usually don't want to use CORE::kill to signal a thread
+	# because if the signal isn't handled (with a %SIG handler),
+	# then the entire process will be killed.
+
+	carp_once [$signal], "Forks::Super::kill(): ",
 	      "Called on MSWin32 with SIG$signal\n",
 	      "Ignored because this module can't find a suitable way to\n",
 	      "express that signal on MSWin32.\n";
-  }
-  return ($signalled, \@terminated);
+    }
+    return ($signalled, \@terminated);
+}
+
+sub terminate_process {
+    my ($pid,$exitCode) = @_;
+    # 0x0001: PROCESS_TERMINATE
+    my $procHandle = win32api('OpenProcess', 0x0001, 0, $pid);
+    if ($procHandle) {
+	my $z = win32api('TerminateProcess',$procHandle,$exitCode || 0);
+	if ($z==0) {
+	    carp "Forks::Super::Win32: terminate_process: $^E\n";
+	}
+	return !!$z;
+    }
+    return 0;
+}
+
+sub _enumerate_threads_for_process {
+    my $process_id = shift;
+
+    # 0x00000004: TH32CS_SNAPTHREAD
+    my $snapshot = win32api('CreateSnapshot', 0x0000000C, $process_id);
+    if (!$snapshot) {
+	carp $^E;
+	return;
+    }
+    my $thread_entry = Win32::API::Struct->new('THREADENTRY32');
+    $thread_entry->{dwSize} = 28;
+    $thread_entry->{$_} = 0 for qw(cntUsage thread_id owner_process_id 
+				   tpBasePri tpDeltaPri dwFlags);
+    my $z = win32api('Thread32First', $snapshot, $thread_entry);
+    if (!$z) {
+	carp $^E;
+	return;
+    }
+
+    my @threads_for_process = ();
+    while ($z) {
+	if ($thread_entry->{owner_process_id} == $process_id) {
+	    push @threads_for_process, $thread_entry->{thread_id};
+	}
+	$z = win32api('Thread32Next', $snapshot, $thread_entry);
+    }
+    return @threads_for_process;
+}
+
+sub suspend_process {
+    my $pid = shift;
+    if ($pid == $$) {
+	# suspend the current thread ...
+	croak "implement me: suspend the current thread";
+    }
+    # there is no SuspendProcess function in the API, so instead we have to
+    # enumerate all the threads in the process
+    # and call suspend thread on each one.
+
+    my @thread_ids = _enumerate_threads_for_process($pid);
+    foreach my $thread_id (@thread_ids) {
+	debug("suspending thread $thread_id in process $pid...") if $DEBUG;
+	suspend_thread($thread_id);
+    }
+    return 1;
+}
+
+sub resume_process {
+    my $pid = shift;
+    # now do the opposite of suspend_process: enumerate all
+    # the threads of a process and call ResumeThread on them
+    my @thread_ids = _enumerate_threads_for_process($pid);
+    foreach my $thread_id (@thread_ids) {
+	debug("resuming thread $thread_id in process $pid ...") if $DEBUG;
+	resume_thread($thread_id);
+    }
+    return 1;
 }
 
 sub terminate_thread {
-  my ($thread_id) = @_;
-  my $handle = get_thread_handle($thread_id, 'terminate');
-  return 0 unless $handle;
-  local $! = 0;
-  my $result = win32api('TerminateThread', $handle, 0);
-  if ($!) {
-    carp "Forks::Super::Job::OS::Win32::terminate_thread(): $! / $^E";
-  }
-  return $result;
+    my ($thread_id) = @_;
+    my $handle = get_thread_handle($thread_id, 'terminate');
+    return 0 unless $handle;
+    local $! = 0;
+    my $result = win32api('TerminateThread', $handle, 0);
+    if ($!) {
+	carp "Forks::Super::Job::OS::Win32::terminate_thread(): $! / $^E";
+    }
+    return $result;
 }
 
 sub suspend_thread {
-  my ($thread_id) = @_;
-  my $handle = get_thread_handle($thread_id, 'suspend');
-  return 0 unless $handle;
+    my ($thread_id) = @_;
+    my $handle = get_thread_handle($thread_id, 'suspend');
+    return 0 unless $handle;
 
-  local $! = 0;
-  my $result = win32api('SuspendThread', $handle);
-  if ($!) {
-    carp "Forks::Super::Job::OS::Win32::suspend_thread(): $! / $^E";
-  }
-  return $result > -1;
+    local $! = 0;
+    my $result = win32api('SuspendThread', $handle);
+    if ($!) {
+	carp "Forks::Super::Job::OS::Win32::suspend_thread(): $! / $^E";
+    }
+    return $result > -1;
 }
 
 sub resume_thread {
-  my ($thread_id) = @_;
-  my $handle = get_thread_handle($thread_id, 'suspend');
-  return 0 unless $handle;
+    my ($thread_id) = @_;
+    my $handle = get_thread_handle($thread_id, 'suspend');
+    return 0 unless $handle;
 
-  local $! = 0;
-  # Win32 threads maintain a "suspend count". If you call
-  # SuspendThread on a thread five times, you have to call
-  # ResumeThread five times to reactivate it.
-  my $result;
-  do {
-    $result = win32api('ResumeThread', $handle);
-  } while ($result > 1);
-  if ($!) {
-    carp "Forks::Super::Job::OS::Win32::resume_thread(): $! / $^E";
-  }
-  return $result > -1;
+    local $! = 0;
+    # Win32 threads maintain a "suspend count". If you call
+    # SuspendThread on a thread five times, you have to call
+    # ResumeThread five times to reactivate it.
+    my $result;
+    do {
+	$result = win32api('ResumeThread', $handle);
+    } while ($result > 1);
+    if ($!) {
+	carp "Forks::Super::Job::OS::Win32::resume_thread(): $! / $^E";
+    }
+    return $result > -1;
+}
+
+sub sigzero_thread {
+    my ($thread_id) = @_;
+    my $handle = get_thread_handle($thread_id);
+    return 0 unless $handle;
+
+    my $xcode = pack("I", 0);
+    my $result = win32api('GetExitCodeThread',$handle,$xcode);
+    $xcode = unpack("I", $xcode);
+    return $result != 0 && $xcode == 259;
 }
 
 ######################################################################
 
-sub get_system_info {
-  # XXX - will this work on all versions of Windows? Somehow I doubt it
-  if (0 == scalar keys %SYSTEM_INFO && CONFIG('Win32::API')) {
-    if (!defined $_THREAD_API->{'GetSystemInfo'}) {
-      my $is_wow64 = 0;
-      my $lpsystem_info_avail = Win32::API::Type::is_known('LPSYSTEM_INFO');
-      my $proto = sprintf 'BOOL %s(%s i)',
-	$is_wow64 ? 'GetNativeSystemInfo' : 'GetSystemInfo',
-	$lpsystem_info_avail ? 'LPSYSTEM_INFO' : 'PCHAR';
-      $_THREAD_API->{'GetSystemInfo'} = Win32::API->new('kernel32', $proto);
-    }
-    my $buffer = chr(0) x 36;
-    $_THREAD_API->{'GetSystemInfo'}->Call($buffer);
+# Process and thread priority
+# http://msdn.microsoft.com/en-us/library/ms685100(v=VS.85).aspx
+#
+# Windows recognizes 6 different "process priorities" and 7 different
+# "thread priorities". The relative priority of any program thread is
+# the sum of its process priority and its thread priority.
+#
+# Process priorities        Base, possible priorities
+# ------------------     -------------------------------------------
+#         IDLE                4    1,2,3, 4 ,5,6,15
+#     BELOW_NORMAL            6    1,4,5, 6 ,7,8,15
+#        NORMAL               8    1,6,7, 8 ,9,10,15
+#     ABOVE_NORMAL           10    1,8,9, 10 ,11,12,15
+#         HIGH               13    1,11,12, 13 ,14,15,15
+#       REALTIME             24    16,22,23, 24 ,25,26,31
+#
+# When a new job begins with the $job->{os_priority} set, 
+# we will try to set the process and thread priorities for the
+# new job to align with the caller's desired priority.
+#
+# With a natural fork or fork to sub, we can only manipulate the
+# thread priority. We can do this from  Forks::Super::Job::_config_os_child.
+#
+# With a cmd or exec fork we can manipulate both the process and
+# thread priorities. We should set this immediately after the
+# command has been launched.
+#
+# If possible, set only the thread priority.
 
-    ($SYSTEM_INFO{'PageSize'},
-     $SYSTEM_INFO{'MinimumApplicationAddress'},
-     $SYSTEM_INFO{'MaximumApplicationAddress'},
-     $SYSTEM_INFO{'ActiveProcessorMask'},
-     $SYSTEM_INFO{'NumberOfProcessors'},
-     $SYSTEM_INFO{'ProcessorType'},
-     $SYSTEM_INFO{'AllocationGranularity'},
-     $SYSTEM_INFO{'ProcessorLevel'},
-     $SYSTEM_INFO{'ProcessorType'})
-       = unpack('VVVVVVVvv', substr($buffer,4));
-  }
-  return %SYSTEM_INFO;
+sub get_thread_priority {
+    my $thread_id = shift;
+    if (!defined $thread_id) {
+	$thread_id = win32api('GetCurrentThreadId');
+    }
+    my $handle = get_thread_handle($thread_id);
+    local $! = undef;
+    my $p = win32api('GetThreadPriority', $handle);
+    if ($!) {
+	carp "Problem retrieving priority for Windows thread $thread_id: ",
+	"$! / $^E\n";
+    }
+    return $p;
+}
+
+sub get_priority {
+    my ($pid) = @_;
+    if (!defined $pid) {
+	$pid = $$;
+    }
+    my $process_priority = 0;
+    my $thread_priority = 0;
+    if ($pid < 0) {
+	$thread_priority = get_thread_priority(-$pid);
+	$process_priority = get_process_base_priority(undef);
+    } else {
+	$process_priority = get_process_base_priority($pid);
+	my @t = _enumerate_threads_for_process($pid);
+	if (@t > 0) {
+	    $thread_priority = get_thread_priority($t[0]);
+	}
+    }
+    if ($thread_priority == -15) {
+	return $process_priority == 24 ? 16 : 1;
+    } elsif ($thread_priority == +15) {
+	return $process_priority == 24 ? 31 : 15;
+    }
+    return $process_priority + $thread_priority;
+}
+
+sub set_thread_priority {
+    # thread priority is one of: -15,-2..2,15
+    # if the process priority class is REALTIME_PRIORITY_CLASS (0x100),
+    # then acceptable values are -15,-7..6, 15
+
+    my ($thread_id, $priority) = @_;
+    if (!defined $thread_id) {
+	$thread_id = win32api('GetCurrentThreadId');
+    }
+    my $handle = get_thread_handle($thread_id);
+    return 0 unless $handle;
+    return win32api('SetThreadPriority', $handle, $priority);
+}
+
+sub set_os_priority_process {
+    # in this method we have the option of setting both
+    # process and thread priority
+    my ($process_id, $priority) = @_;
+    my $handle = get_process_handle($process_id, 1);
+    if (!$handle) {
+	carp_once "Forks::Super::Win32::set_os_priority_process: ",
+	    "no handle for PID $process_id";
+	return;
+    }
+    if ($priority < 1) {
+	carp "Forks::Super::Win32: ",
+	    "changing os priority setting from $priority to 1 ",
+	    "(valid range is 1-31)";
+	$priority = 1;
+    }
+    if ($priority > 31) {
+	carp "Forks::Super::Win32: ",
+	    "changing os priority setting from $priority to 31 ",
+	    "(valid range is 1-31)";
+	$priority = 31;
+    }
+
+    # Windows process priority classes:
+    #     http://msdn.microsoft.com/en-us/library/ms686219(v=VS.85).aspx
+    our ($IDLE,$BELOW,$NORMAL,$ABOVE,$HIGH,$REAL)
+	= (0x40,0x4000,0x20,0x8000,0x80,0x200);
+
+    # best way to map each desired prio from 1 to 31 to a priority class/
+    # thread priority pair
+    my $priorities =
+	(undef,
+	 [$NORMAL,-15],[$IDLE,-2],
+	 [$IDLE,-1],[$IDLE,0],
+	 [$BELOW,-1],[$BELOW,0],
+	 [$NORMAL,-1],[$NORMAL,0],[$NORMAL,1],
+	 [$ABOVE,0], [$ABOVE,1],
+	 [$HIGH,-1], [$HIGH,0], [$HIGH,1], [$HIGH,2],[$REAL,-15],
+	 [$REAL,-7],[$REAL,-6],[$REAL,-5],[$REAL,-4],
+	 [$REAL,-3],[$REAL,-2],[$REAL,-1],[$REAL,0],
+	 [$REAL,1],[$REAL,2],[$REAL,3],[$REAL,4],
+	 [$REAL,5],[$REAL,6],[$REAL,15],)[$priority] || [$NORMAL,0];
+    
+    local $! = 0;
+    my $result = win32api('SetPriorityClass', $handle, $priorities->[0]);
+    if ($result) {
+	my @threads = _enumerate_threads_for_process($process_id);
+	foreach my $thr (@threads) {
+	    $result *= set_thread_priority($thr, $priorities->[1]);
+	}
+    }
+    if ($result) {
+	return $result + $priority / 100;
+    } else {
+	carp "Forks::Super::Job: set process priority failed: $! / $^E\n";
+    }
+    return;
+}
+
+sub set_os_priority {
+    my ($job, $desired_priority) = @_;
+    if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
+	# set os priority later ...
+	return;
+    }
+    my $thread_id = get_current_thread_id();
+    my $handle = get_thread_handle($thread_id);
+    if (!$handle) {
+	carp_once "Forks::Super::Job::OS::set_os_priority: ",
+	    "no Win32 handle available for thread\n";
+	return;
+    }
+
+    # we don't want to muck with the process priority from here ...
+    # we will just set the thread priority
+    my $base_priority = get_process_base_priority();
+    $desired_priority = 1 if $desired_priority < 1;
+    $desired_priority = 31 if $desired_priority > 31;
+    my @fifteens = (15) x 31;
+    my $thread_priority = 
+	([],[],[],[],
+	 [0,-15,-2,-1,0,1,2,2,2,2,@fifteens], [],
+	 [0,-15,-15,-2,-2,-1,0,1,2,2,2,@fifteens], [],
+	 [0,-15,-15,-15,-2,-2,-2,-1,0,1,2,2,2,@fifteens], [],
+	 [0,-15,-15,-15,-15,-2,-2,-2,-2,-1,0,1,2,2,@fifteens], [], [],
+	 [0,-15,-15,-15,-15,-15,-2,-2,-2,-2,-2,-2,-1,0,1,2,2,@fifteens],
+	 [],[],[],[],[],[],[],[],[],[],
+	 [0,(-15)x16,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,15]
+	)[$base_priority]->[$desired_priority];
+
+    local $! = 0;
+    my $result =
+	Forks::Super::Job::OS::Win32::set_thread_priority(
+	    $thread_id,$thread_priority);
+    if ($result) {
+	if ($job->{debug}) {
+	    debug("updated thread priority to $thread_priority for job $$");
+	}
+	return $result + $thread_priority / 100;
+    } else {
+	carp "Forks::Super::Job: set os_priority failed: $! / $^E\n";
+    }
+    return;
+}
+
+sub get_process_priority_class { # for the current process
+    my $pid = shift;
+    my $phandle = get_process_handle($pid, 0);
+    return if !$phandle;
+    local $! = 0;
+    my $result = win32api('GetPriorityClass', $phandle);
+    if ($!) {
+	carp_once "Forks::Super::Job::OS: ",
+	    "Error retrieving current process priority class $! / $^E\n";
+    }
+    return $result;
+}
+
+sub get_process_base_priority {
+    my $pid = shift;
+    my $class = get_process_priority_class($pid);
+    if ($class == 0x0100) { # realtime
+	return 24;
+    } elsif ($class == 0x20) { # normal
+	return 8;
+    } elsif ($class == 0x40) { # idle
+	return 4;
+    } elsif ($class == 0x80) { # high
+	return 13;
+    } elsif ($class == 0x4000) { # below normal
+	return 6;
+    } elsif ($class == 0x8000) { # above normal
+	return 10;
+    } else {
+	carp "Forks::Super::Win32::get_process_base_priority: ",
+		"unknown priority class $class";
+	return 8;
+    }
 }
 
 ###############################################################
@@ -402,105 +838,35 @@ sub get_system_info {
 # can't set OS priority, CPU affinity, suspend/resume,
 # etc.
 #
+# 6.  system 1, @cmd
+#
+# Problem solved.
+#
 # And don't get me started on all the ways to kill a
 # Win32 process.
 
-sub open_win32_process {
-  my ($job) = @_;
-  my $cmd = join ' ', @{$job->{cmd}};
-
-
-  # XXX - PIPE OPEN FAILS IN TAINT MODE -- WHY?
-  ($cmd) = $cmd =~ /(.*)/s;
-
-  my $pid = open my $proch, "-|", "$cmd";    ## no critic (BriefOpen)
-  $Forks::Super::Job::WIN32_PROC = 0;
-
-  Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
-  $Forks::Super::Job::WIN32_PROC_PID = $pid;
-
-  # if desired, this is the place to set OS priority,
-  # process CPU affinity, other OS features.
-  if (defined $job->{cpu_affinity}) {
-    $Forks::Super::Job::WIN32_PROC->SetProcessAffinityMask(
-		$job->{cpu_affinity});
-  }
-  CORE::waitpid $pid, 0;
-  my $c1 = $?;
-  debug("Exit code of $$ was $c1") if $job->{debug};
-  return $c1;
-}
-
-sub open2_win32_process {
-  my ($job) = @_;
-  my $cmd = join ' ', @{$job->{cmd}};
-  my $pid = open my $proch, "|-", "$cmd";      ## no critic (BriefOpen)
-  Win32::Process::Open($Forks::Super::Job::WIN32_PROC, $pid, 0);
-  $Forks::Super::Job::WIN32_PROC_PID = $pid;
-
-  # if desired, this is the place to set OS priority,
-  # process CPU affinity, other OS features.
-  if (defined $job->{cpu_affinity}) {
-    $Forks::Super::Job::WIN32_PROC->SetProcessAffinityMask(
-		$job->{cpu_affinity});
-  }
-  CORE::waitpid $pid, 0;
-  my $c1 = $?;
-  debug("Exit code of $$ was $c1") if $job->{debug};
-  return $c1;
-}
-
-=ignore
-
-# XXX - doesn't work, doesn't handoff redirected filehandles properly
-sub create_win32_process {
-  my ($job) = @_;
-  my $cmd = join ' ', @{$job->{cmd}};
-  my ($appname) = split /\s+/, $cmd; # XXX - not idiot proof
-  $Forks::Super::Job::WIN32_PROC = '';
-  Win32::Process::Create($Forks::Super::Job::WIN32_PROC,
-			 $appname,
-			 $cmd,
-			 1,0,'.');
-  $Forks::Super::Job::WIN32_PROC_PID
-    = $Forks::Super::Job::WIN32_PROC->GetProcessID();
-  if (defined $job->{cpu_affinity}) {
-    $Forks::Super::Job::WIN32_PROC->SetProcessAffinityMask(
-		$job->{cpu_affinity});
-  }
-  CORE::waitpid $Forks::Super::Job::WIN32_PROC_PID, 0;
-  my $c1 = $?;
-  debug("Exit code of $$ was $c1") if $job->{debug};
-  return $c1;
-}
-
-=cut
-
-sub system_win32_process {
-  my ($job) = @_;
-  $Forks::Super::Job::WIN32_PROC = '__system__';
-  $ENV{'__FORKS_SUPER_PARENT_THREAD'} = $$;
-  # no way to update cpu affinity, priority with this method
-  my $c1 = system( @{$job->{cmd}} );
-  $Forks::Super::Job::WIN32_PROC = undef;
-  return $c1;
-}
-
-sub open3_win32_process {
-  my ($job) = @_;
-  my $cmd = join ' ', @{$job->{cmd}};
-  my $pid = open my $proch, '|-', $cmd;
-  $Forks::Super::Job::WIN32_PROC_PID = $pid;
-  $Forks::Super::Job::WIN32_PROC = '__open3__';
-
-  if (defined($job->{cpu_affinity}) && CONFIG('Sys::CpuAffinity')) {
-    Sys::CpuAffinity::setAffinity($pid, $job->{cpu_affinity});
-  }
-
-  close $proch;
-  my $c1 = $?;
-  $Forks::Super::Job::WIN32_PROC = undef;
-  return $c1;
+sub system1_win32_process {
+    my ($job, @cmd) = @_;
+    $Forks::Super::Job::WIN32_PROC = '__system1__';
+    $ENV{'__FORKS_SUPER_PARENT_THREAD'} = $$;
+    $Forks::Super::Job::WIN32_PROC_PID = system 1, @cmd;
+    # XXX - handle failure ?
+    if ($? == 255 << 8) {
+	# system 1, ...  failed. XXX - what should we do?
+    }
+    $job->set_signal_pid($Forks::Super::Job::WIN32_PROC_PID);
+    if (defined($job->{cpu_affinity}) && CONFIG('Sys::CpuAffinity')) {
+	Sys::CpuAffinity::setAffinity(
+	    $Forks::Super::Job::WIN32_PROC_PID, $job->{cpu_affinity});
+    }
+    if (defined($job->{os_priority})) {
+	set_os_priority_process(
+	    $Forks::Super::Job::WIN32_PROC_PID, $job->{os_priority})
+    }
+    my $z = CORE::waitpid $Forks::Super::Job::WIN32_PROC_PID, 0;
+    my $c1 = $?;
+    $Forks::Super::Job::WIN32_PROC = undef;
+    return $c1;
 }
 
 1;

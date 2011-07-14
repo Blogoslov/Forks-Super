@@ -12,24 +12,19 @@ use warnings;
 #
 
 our $_LOCK = 0;  # use same synchronization technique as F::S::Sighandler
+our %COMPLETE = ();
 
 sub child_signal_hijacker {
-# $SIGNAL::TIME = Time::HiRes::time() if $_[0] =~ /^C/;
   $_LOCK++;
   if ($_LOCK>1) {
     $_LOCK--;
     return;
   }
 
-  my %complete;
-  for my $cj (grep { $_->is_complete } @Forks::Super::ALL_JOBS) {
-    $complete{$cj}++;
-  }
   Forks::Super::Sigchld::handle_CHLD(@_);
 
   for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
-    unless (delete $complete{$cj}) {
-      #print "NEW COMPLETE JOB: ", $cj->toString(), "\n";
+    unless ($COMPLETE{$cj}++) {
       $LAST::COMPLETE = $cj;
       $LAST::COMPLETE{$cj}++;
       $SIGNAL::TIME = Time::HiRes::time();
@@ -41,29 +36,21 @@ sub child_signal_hijacker {
 
 ##################################################################
 
-my $old_sig_chld = delete $SIG{CHLD};
-$SIG{CHLD} = \&child_signal_hijacker;
 *Forks::Super::handle_CHLD = *child_signal_hijacker;
 $SIGNAL::TIME = Time::HiRes::time();
+
+# SIGCHLD will only interrupt sleep (tests 3 and 4) if a handler is defined
+$SIG{CHLD} = \&bogus;
 
 my $pid = fork();
 if (defined($pid) && $pid == 0) {
   sleep 2;
   exit 0;
 }
+
 ok(defined($pid) && isValidPid($pid), "$$\\valid pid $pid");
 my $j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
-
-# sometimes one SIGCHLD isn't enough to force a system call interruption.
-# let's set up a couple more processes to send SIGCHLD
-#for my $n (3,4,5,6) {
-#  my $pidn = fork();
-#  if (defined($pidn) && $pidn == 0) {
-#    sleep $n;
-#    exit 0;
-#  }
-#}
 
 # Perl's sleep can _sometimes_ be interrupted by SIGCHLD.
 # This never happens on Windows, which doesn't have a 
@@ -79,11 +66,6 @@ SKIP: {
   local $! = 0;
   sleep 10;   # sleep should be interrupted by SIGCHLD
   $t = Time::HiRes::time() - $t;
-
-  #if ($t > 9) {
-  #  Forks::Super::pause();
-  #  skip "No interruption to sleep on $^O.", 1;
-  #}
   ok($t <= 5.05, "Perl sleep interrupted by CHLD signal ${t}s");
   ok($! =~ /Interrupted/, "\$! indicates interrupted system call $!");
   Forks::Super::pause();

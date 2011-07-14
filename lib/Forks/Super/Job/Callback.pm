@@ -18,7 +18,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(run_callback);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 sub run_callback {
   my ($job, $callback) = @_;
@@ -27,7 +27,7 @@ sub run_callback {
     return;
   }
   if ($job->{debug}) {
-    debug("Forks::Super: Job ",$job->{pid}," running $callback callback");
+    debug("run_callback: Job ",$job->{pid}," running $callback callback");
   }
   my $ref = ref $job->{$key};
   if ($ref ne 'CODE' && ref ne '') {
@@ -61,12 +61,16 @@ sub _preconfig_callbacks {
   if (ref $job->{callback} eq "" || ref $job->{callback} eq 'CODE') {
     $job->{callback} = { finish => $job->{callback} };
   }
+  if (defined $job->{callback}{finish} && $job->{daemon}) {
+      carp "Forks::Super::_preconfig_callbacks: ",
+          "'finish' callback is not going to be called with a daemon process";
+  }
   foreach my $callback_type (qw(finish start queue fail)) {
     if (defined $job->{callback}{$callback_type}) {
       $job->{"_callback_" . $callback_type}
 	= qualify_sub_name($job->{callback}{$callback_type});
       if ($job->{debug}) {
-	debug("Forks::Super::Job: registered callback type $callback_type");
+	debug("_preconfig_callbacks: registered callback type $callback_type");
       }
     }
   }
@@ -84,4 +88,3 @@ sub Forks::Super::Job::_config_callback_child {
 }
 
 1;
-

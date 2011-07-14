@@ -20,6 +20,7 @@ use Forks::Super::Tie::IPCPipeHandle;
 use Signals::XSIG;
 use IO::Handle;
 use File::Path;
+use Cwd;
 use Carp;
 use Exporter;
 use strict;
@@ -30,7 +31,7 @@ $| = 1;
 our @ISA = qw(Exporter);
 
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -211,8 +212,8 @@ sub _assert_safeopen_fh_is_defined {
   return if defined $_[0];
   $_[0] = _gensym();
   if ($USE_TIE_FH) {
-    tie *{$_[0]}, 'Forks::Super::Tie::IPCFileHandle', parent => $_[0];
-    bless $_[0], 'Forks::Super::Tie::Delegator';
+      tie *{$_[0]}, 'Forks::Super::Tie::IPCFileHandle', parent => $_[0];
+      bless $_[0], 'Forks::Super::Tie::Delegator';
   }
   return;
 }
@@ -254,20 +255,34 @@ sub _preconfig_fh_parse_child_fh {
 
     if (($job->{style} ne 'cmd' && $job->{style} ne 'exec') || !&IS_WIN32) {
 
-      # sockets,pipes not supported for cmd/exec style forks on MSWin32
-      # we could support cmd-style with IPC::Open3-like framework ...
-      if ($fh_spec =~ /sock/i) {
-	$config->{sockets} = 1;
-      } elsif ($fh_spec =~ /pipe/i) {
-	$config->{pipes} = 1;
-      }
+	# sockets,pipes not supported for cmd/exec style forks on MSWin32
+	# we could support cmd-style with IPC::Open3-like framework?
+
+	# sockets,pipes not supported for daemon processes, because that
+	# would require leaving a common file descriptor open in both
+	# processes.
+	if ($job->{daemon}) {
+	    if ($fh_spec =~ /sock/i || $fh_spec =~ /pipe/i) {
+		if (Forks::Super::Config::CONFIG('filehandles')) {
+		    carp "Forks::Super::Job::_preconfig_fh: ",
+		        "Socket/pipe based IPC not allowed for daemon process.";
+		} else {
+		    croak "Forks::Super::Job::_preconfig_fh: ",
+		        "Socket/pipe based IPC not allowed for daemon process.";
+		}
+	    }
+	} elsif ($fh_spec =~ /sock/i) {
+	    $config->{sockets} = 1;
+	} elsif ($fh_spec =~ /pipe/i) {
+	    $config->{pipes} = 1;
+	}
     } elsif (!Forks::Super::Config::CONFIG('filehandles')) {
 
-      carp "Forks::Super::Job::_preconfig_fh: ",
-	"Requested cmd/exec-style fork on MSWin32 with\n",
-	"socket based IPC. This is not going to end well.\n";
+	carp "Forks::Super::Job::_preconfig_fh: ",
+	      "Requested cmd/exec-style fork on MSWin32 with\n",
+	      "socket based IPC. This is not going to end well.\n";
 
-      $config->{sockets} = 1;
+	$config->{sockets} = 1;
     }
   }
   if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK} && $config->{pipes}) {
@@ -315,6 +330,20 @@ sub _preconfig_fh_parse_stdxxx {
   return;
 }
 
+sub Forks::Super::Job::_preconfig_share {
+    my $job = shift;
+    if (defined $job->{share}) {
+	if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
+	    carp "Forks::Super::_preconfig_share: share  option icompatible with cmd or exec option";
+	    return;
+	}
+	$job->{share_ipc} = Forks::Super::Job::Ipc::_choose_fh_filename(
+		'.share', purpose => 'share ipc');
+	$job->{_callback_share} = \&Forks::Super::Job::Ipc::retrieve_share;
+    }
+    return;
+}
+
 sub Forks::Super::Job::_preconfig_fh {
   my $job = shift;
 
@@ -344,55 +373,91 @@ sub Forks::Super::Job::_preconfig_fh {
 
 # read output from children into scalar reference variables in the parent
 sub collect_output {
-  my ($job,$pid) = @_;
-  my $fh_config = $job->{fh_config};
-  if (!defined $fh_config) {
+    my ($job,$pid) = @_;
+
+    my $fh_config = $job->{fh_config};
+    if (!defined $fh_config) {
+	return;
+    }
+    my $stdout = $fh_config->{stdout};
+    if (defined $stdout) {
+	if ($fh_config->{f_out}
+	    && $fh_config->{f_out} ne '__socket__'
+	    && $fh_config->{f_out} ne '__pipe__') {
+	    local $/ = undef;
+	    if (_safeopen($job, my $fh, '<', $fh_config->{f_out})) {
+		($$stdout) = <$fh>;
+		_close($fh);
+	    } else {
+		carp "Forks::Super::Job::Ipc::collect_output(): ",
+		"Failed to retrieve stdout from child $pid: $!\n";
+	    }
+	} else {
+	    $$stdout = join'', Forks::Super::read_stdout($pid);
+	}
+	if ($job->{debug}) {
+	    debug("Job $pid loaded ", length($$stdout),
+		  " bytes from stdout into $stdout");
+	}
+    }
+    my $stderr = $fh_config->{stderr};
+    if (defined $stderr) {
+	if ($fh_config->{f_err}
+	    && $fh_config->{f_err} ne '__socket__'
+	    && $fh_config->{f_err} ne '__pipe__') {
+	    local $/ = undef;
+	    if (_safeopen($job, my $fh, '<', $fh_config->{f_err})) {
+		$$stderr = '' . <$fh>;
+		_close($fh);
+	    } else {
+		carp "Forks::Super::Job::Ipc::collect_output(): ",
+		    "Failed to retrieve stderr from child $pid: $!\n";
+	    }
+	} else {
+	    $$stderr = join('', Forks::Super::read_stderr($pid));
+	}
+	if ($job->{debug}) {
+	    debug("Job $pid loaded ", length($$stderr),
+		  " bytes from stderr into $stderr");
+	}
+    }
+    $job->close_fh('all');
     return;
-  }
-  my $stdout = $fh_config->{stdout};
-  if (defined $stdout) {
-    if ($fh_config->{f_out}
-	&& $fh_config->{f_out} ne '__socket__'
-        && $fh_config->{f_out} ne '__pipe__') {
-      local $/ = undef;
-      if (_safeopen($job, my $fh, '<', $fh_config->{f_out})) {
-	($$stdout) = <$fh>;
-	_close($fh);
-      } else {
-	carp "Forks::Super::Job::Ipc::collect_output(): ",
-	  "Failed to retrieve stdout from child $pid: $!\n";
-      }
-    } else {
-      $$stdout = join'', Forks::Super::read_stdout($pid);
+}
+
+sub retrieve_share {
+    my ($job, $pid) = @_;
+    if (!defined $job->{share_ipc}) {
+	# carp ...
+	return;
     }
-    if ($job->{debug}) {
-      debug("Job $pid loaded ", length($$stdout),
-	    " bytes from stdout into $stdout");
+    my $VAR1 = '';
+    open my $fh, '<', $job->{share_ipc};
+    my $expr = join '', <$fh>;
+    close $fh;
+    if ($job->{untaint}) {
+	($expr) = $expr =~ /(.*)/s;
     }
-  }
-  my $stderr = $fh_config->{stderr};
-  if (defined $stderr) {
-    if ($fh_config->{f_err}
-	&& $fh_config->{f_err} ne '__socket__'
-        && $fh_config->{f_err} ne '__pipe__') {
-      local $/ = undef;
-      if (_safeopen($job, my $fh, '<', $fh_config->{f_err})) {
-	$$stderr = '' . <$fh>;
-	_close($fh);
-      } else {
-	carp "Forks::Super::Job::Ipc::collect_output(): ",
-	  "Failed to retrieve stderr from child $pid: $!\n";
-      }
-    } else {
-      $$stderr = join('', Forks::Super::read_stderr($pid));
+    eval $expr;
+    my @VAR1 = @$VAR1;
+
+    foreach my $ref (@{$job->{share}}) {
+	use Scalar::Util;
+	my $reftype = Scalar::Util::reftype($ref);
+	my $val = shift @VAR1;
+	if ($reftype eq 'SCALAR') {
+	    $$ref = $$val;
+	} elsif ($reftype eq 'ARRAY') {
+	    push @$ref, @$val;
+	} elsif ($reftype eq 'HASH') {
+	    foreach my $key (keys %$val) {
+		$ref->{$key} = $val->{$key};
+	    }
+	} else {
+	    carp "share element is not a reference!";
+	}
     }
-    if ($job->{debug}) {
-      debug("Job $pid loaded ", length($$stderr),
-	    " bytes from stderr into $stderr");
-    }
-  }
-  $job->close_fh('all');
-  return;
+    return;
 }
 
 sub _preconfig_fh_files {
@@ -672,9 +737,19 @@ sub is_cleanse_mode { return $cleanse_mode; }
 
 sub set_ipc_dir {
   my ($dir, $carp) = @_;
+
+  if (defined($dir) && $dir eq 'undef') {
+      # disable file IPC
+      $Forks::Super::Config::CONFIG{'filehandles'} = 0;
+      $_IPC_DIR = undef;
+  }
+  return if !Forks::Super::Config::CONFIG('filehandles');
+
+  $dir = Forks::Super::Util::abs_path($dir);
   return unless _check_for_good_ipc_basedir($dir);
 
   my $dedicated_dirname = _choose_dedicated_dirname($dir);
+
   if (!defined $dedicated_dirname) {
     carp "Forks::Super::set_ipc_dir: ",
         "Failed to created new dedicated IPC directory under \"$dir\"\n"
@@ -774,17 +849,17 @@ sub _check_for_good_ipc_basedir {
 }
 
 sub _choose_dedicated_dirname {
-  my $dir = shift;
-  my $dedicated_dirname = ".fhfork$$";
-  my $n = 0;
-  while (-e "$dir/$dedicated_dirname") {
-    $dedicated_dirname = ".fhfork$$-$n";
-    $n++;
-    if ($n > 10000) {
-      return;
+    my $dir = shift || ".";
+    my $dedicated_dirname = ".fhfork$$";
+    my $n = 0;
+    while (-e "$dir/$dedicated_dirname") {
+	$dedicated_dirname = ".fhfork$$-$n";
+	$n++;
+	if ($n > 10000) {
+	    return;
+	}
     }
-  }
-  return $dedicated_dirname;
+    return $dedicated_dirname;
 }
 
 sub _cleanup {
@@ -818,7 +893,7 @@ sub _trap_signals {
 sub __cleanup__ {
   my $SIG = shift;
   if ($DEBUG) {
-    debug("trapping: $SIG");
+    debug("trapping: SIG$SIG");
   }
   _untrap_signals();
   if ($DEBUG) {
@@ -842,85 +917,109 @@ sub __cleanup__ {
 #
 sub cleanse {
 
-  $_CLEANUP = 1;
-  my $dir = shift;
-  if (!defined $dir) {
-    _identify_shared_fh_dir();
-    $dir = $_IPC_DIR;
-  }
-  $dir =~ s![\\/]\.fhfork[^\\/]*$!!;
-  if (! -e $dir) {
-    print "No Forks::Super ipc files found under directory \"$dir\"\n";
-    return;
-  }
-  print "Cleansing ipc directories under $dir\n";
-  chdir $dir
-    or croak "Forks::Super::Job::Ipc::cleanse: Can't move to $_IPC_DIR\n";
-  opendir(D, ".");
-  foreach my $ipc_dir (grep { -d $_ && /^\.fhfork/ } readdir (D)) {
+    $_CLEANUP = 1;
+    my $dir = shift;
+    if (!defined $dir) {
+	_identify_shared_fh_dir();
+	$dir = $_IPC_DIR;
+    }
+    $dir =~ s![\\/]\.fhfork[^\\/]*$!!;
+    if (! -e $dir) {
+	print "No Forks::Super ipc files found under directory \"$dir\"\n";
+	return;
+    }
+    print "Cleansing ipc directories under $dir\n";
+    chdir $dir
+	or croak "Forks::Super::Job::Ipc::cleanse: Can't move to $_IPC_DIR\n";
+    opendir(D, ".");
 
-    # try not to remove a directory for a running process ...
-    if (-f "$ipc_dir/README.txt"
-	&& open my $fh, '<', "$ipc_dir/README.txt") {
-	scalar <$fh>;  # header
-	scalar <$fh>;
-	close $fh;
-	my ($t,$pid) = split /\s+/,<$fh>;
-	if (time - $t < 86400
-	    
-	    # 1. is there a process $pid running?
-	    # 2. is it the same process $pid that created this directory?
+    $DB::single=1;
+    
+    foreach my $ipc_dir (grep { -d $_ && /^\.fhfork/ } readdir (D)) {
 
-	    && CORE::kill 0, $pid
-	    # This works on Windows (Strawbery 5.10, anyway), even if $pid < 0
-
-	    # it's possible that this is a *newer* process with the
-	    # same pid ...
-	    && -e "/proc/$pid" 
-	    && (-M "/proc/$pid") > (-M $ipc_dir)) {
-
-	    warn "Process $pid appears to still be running. ",
-	    "Will not erase ipc dir $ipc_dir\n";
-	    next;
+	if ($DEBUG) {
+	    print STDERR "cleanse $ipc_dir ?\n";
 	}
-	# else ... Windows? how to get age of a process?
-    }
 
-    my $errors = _cleanse_dir($ipc_dir);
-    if ($errors > 0) {
-      no Carp;
+	# try not to remove a directory for a running process ...
+	if (-f "$ipc_dir/README.txt"
+	    && open my $fh, '<', "$ipc_dir/README.txt") {
+	    scalar <$fh>;   # header
+	    scalar <$fh>;   # localtime 2
+	    my ($t,$pid) = split /\s+/,<$fh>;
+	    close $fh;
 
-      # on MSWin32, errors often mean that an existing process
-      # is hanging on to these files?
-      if ($^O eq 'MSWin32') {
-	warn "Encountered $errors errors cleaning up $ipc_dir:\n    $^E\n";
-      } else {
-	warn "Encounted $errors errors cleaning up $ipc_dir\n";
-      }
+	    if ($DEBUG) {
+		print STDERR "pid=$pid, t=$t, age=",time-$t,"\n";
+	    }
+
+	    if (time - $t < 86400
+
+		# 1. is there a process $pid running?
+		# 2. is it the same process $pid that created this directory?
+
+		&& CORE::kill(0, $pid)
+		# Works on Windows (Strawbery 5.10, anyway), even if $pid < 0
+
+		# it's possible that this is a *newer* process with the
+		# same pid ...
+		&& ($^O eq 'MSWin32' ||
+		    (-e "/proc/$pid" && (-M "/proc/$pid") > (-M $ipc_dir)))) {
+
+		if ($^O ne 'MSWin32' && $DEBUG) {
+		    my $age = (-M "/proc/$pid") - (-M $ipc_dir);
+		    print STDERR "Age of existing process: ", 1440*$age,
+		        " minutes\n";
+		}
+		    
+		warn "Process $pid appears to still be running. ",
+		        "Will not erase ipc dir $ipc_dir\n";
+		next;
+	    }
+	    # else ... Windows? how to get age of a process?
+	} elsif ($DEBUG) {
+	    print STDERR "No README.txt in $ipc_dir ... will cleanse.\n";
+	}
+
+	my $errors = _cleanse_dir($ipc_dir);
+	if ($errors > 0) {
+	    no Carp;
+
+	    # on MSWin32, errors often mean that an existing process
+	    # is hanging on to these files?
+	    if ($^O eq 'MSWin32') {
+		warn "Encountered $errors errors cleaning up $ipc_dir:\n",
+		     "$^E\n";
+	    } else {
+		warn "Encounted $errors errors cleaning up $ipc_dir\n";
+	    }
+	}
     }
-  }
-  closedir D;
-  return;
+    closedir D;
+    return;
 }
 
 sub _cleanse_dir {
-  my $dir = shift;
-  my $dh;
-  opendir $dh, $dir;
-  my $errors = 0;
-  while (my $f = readdir($dh)) {
-    next if $f eq '.' || $f eq '..';
-    if (-d "$dir/$f") {
-      $errors += _cleanse_dir("$dir/$f");
-    } else {
-      unlink "$dir/$f" or $errors++;
+    my $dir = shift;
+    my $dh;
+
+    $DB::single=1;
+
+    opendir $dh, $dir;
+    my $errors = 0;
+    while (my $f = readdir($dh)) {
+	next if $f eq '.' || $f eq '..';
+	if (-d "$dir/$f") {
+	    $errors += _cleanse_dir("$dir/$f");
+	} else {
+	    unlink "$dir/$f" or $errors++;
+	}
     }
-  }
-  closedir $dh;
-  unless ($errors) {
-    rmdir $dir and print "Removed $dir\n";
-  }
-  return $errors;
+    closedir $dh;
+    unless ($errors) {
+	rmdir $dir and print "Removed $dir\n";
+    }
+    return $errors;
 }
 
 sub _untrap_signals {
@@ -1021,8 +1120,7 @@ sub _END_background_cleanup2 {
 
   if (!$z && -d $_IPC_DIR) {
 
-    warn "Forks::Super::END_cleanup: ",
-      "rmdir $_IPC_DIR failed. $!\n";
+    warn "Forks::Super::END_cleanup: rmdir $_IPC_DIR failed. $!\n";
 
     opendir(my $_Z, $_IPC_DIR);
     my @g = grep { !/^\.nfs/ } readdir($_Z);
@@ -1106,7 +1204,7 @@ sub END_cleanup_MSWin32 {
     return;
   }
 
-  if (defined $IPC_DIR_DEDICATED) {
+  if (defined $IPC_DIR_DEDICATED && -d $_IPC_DIR) {
     local $! = undef;
     my $z = rmdir $_IPC_DIR;
     if (!$z) {
@@ -1445,7 +1543,7 @@ sub Forks::Super::Job::_config_fh_parent {
   my $job = shift;
   return if not defined $job->{fh_config};
 
-  _trap_signals(); # XXX - is this necessary?
+  # _trap_signals(); # XXX - is this necessary?
   my $fh_config = $job->{fh_config};
 
   # set up stdin first.
@@ -1917,7 +2015,7 @@ sub _config_cmd_fh_child {
   } elsif ($fh_config->{f_in}) {
 
     # standard input must be specified before the first pipe char,
-    # if any (XXX - How do you distinguish pipes that are
+    # if any (How do you distinguish pipes that are
     # for shell piping, and pipes that are part of some command
     # or command line argument? The shell can do it, obviously,
     # but there is probably lots and lots of code to do it right.
@@ -1947,7 +2045,7 @@ sub _config_cmd_fh_child {
 	"Child may not have any input to read.\n";
     }
   }
-  debug("Forks::Super::Job::config_cmd_fh_config(): child cmd is   $cmd[0]  ")
+  debug("config_cmd_fh_config(): child cmd is   $cmd[0]  ")
     if $job->{debug};
 
   $job->{$cmd_or_exec} = [ @cmd ];
@@ -2026,18 +2124,13 @@ sub _close {
   $$handle->{closed} ||= Time::HiRes::time();
   $$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
   my $z = 0;
-  if (tied *$handle) {
-      if ((tied *$handle)->CLOSE) {
-	  $z = 1;
-      }
-
-    # XXX - untie here produces 
-    #    'untie attempted while ... inner references exist' warning,
-    # XXX - where are these references?
-    #     I thought it was $j->{child_stdXXX} and $Forks::Super::CHILD_XXX{$p},
-    #     but that wasn't it
-    # XXX - is untie even necessary?
-    untie *$handle;
+  my $is_tied = !!tied *$handle;
+  if ($is_tied) {
+      $z = (tied *$handle)->CLOSE;
+  }
+  if ($is_tied) {
+      untie *$handle;
+      return $z;
   }
   $z ||= close $handle;
   if ($z) {
@@ -2102,9 +2195,11 @@ sub _close_fh_stdin {
 	$job->{child_stdin_closed} = 1;
 	debug("closed child stdin for $job->{pid}") if $job->{debug};
       }
-    } elsif (_close($job->{child_stdin})) {
-      $job->{child_stdin_closed} = 1;
-      debug("closed child stdin for $job->{pid}") if $job->{debug};
+    } else {
+	if (_close($job->{child_stdin})) {
+	    $job->{child_stdin_closed} = 1;
+	    debug("closed child stdin for $job->{pid}") if $job->{debug};
+	}
     }
   }
   # delete $Forks::Super::CHILD_STDIN{...} for this job? No.
@@ -2151,9 +2246,12 @@ sub _close_fh_stderr {
 
 sub close_fh {
   my ($job,@modes) = @_;
-  local $" = " ";
-  my $modes = "@modes" || "all";
-  $modes =~ s/all/stdin stdout stderr/i;
+  my $modes;
+  {
+      local $" = " ";
+      $modes = "@modes" || "all";
+      $modes =~ s/all/stdin stdout stderr/i;
+  }
 
   _close_fh_stdin($job) if $modes =~ /stdin/i;
   _close_fh_stdout($job) if $modes =~ /stdout/i;
@@ -2172,8 +2270,8 @@ sub Forks::Super::Job::write_stdin {
     } else {
       local $! = 0;
       my $z = print {$fh} @msg;
-      # XXX - Windows hack. Child sockets in t/43d and t/44d choke
-      #       without a small pause after each write.
+      # an MSWin32 hack. Child sockets in t/43d and t/44d choke
+      # (XXX - Why?) without a small pause after each write.
       Forks::Super::Util::pause(0.001)
 	  if $^O eq 'MSWin32' && is_socket($fh);
       if ($!) {
@@ -2363,7 +2461,7 @@ sub _emulate_readline_array {
 
   my @return = ();
   my $rs = defined($/) && length($/) ? $/ : "\x{F0F0}";
-  while ($input =~ m{$rs}) {  # XXX - what if $/ is "" or undef ?
+  while ($input =~ m{$rs}) {
     push @return, substr $input, 0, $+[0];
     substr($input, 0, $+[0], "");
   }
@@ -2472,8 +2570,7 @@ sub _check_if_job_is_complete_and_close_io {
   my ($job, $fh) = @_;
   if ($job->is_complete && Time::HiRes::time() - $job->{end} > 3) {
     if ($job->{debug}) {
-      debug("Forks::Super::_readline: ",
-	    "job $job->{pid} is complete. Closing $fh");
+      debug("_readline: job $job->{pid} is complete. Closing $fh");
     }
     if (defined($job->{child_stdout}) && $fh eq $job->{child_stdout}) {
       $job->close_fh('stdout');
@@ -2546,6 +2643,18 @@ sub init_child {
 }
 
 sub deinit_child {
+
+    my $job = $Forks::Super::Job::self;
+    if (defined($job->{share}) && defined($job->{share_ipc})) {
+	use Data::Dumper;
+	open my $fh, '>', $job->{share_ipc};
+	print $fh Data::Dumper::Dumper( $job->{share} );
+	close $fh;
+	if ($job->{debug}) {
+	    debug("shared data written to $job->{share_ipc}");
+	}
+    }
+
   if (@IPC_FILES > 0) {
     Carp::cluck("Child $$ had temp files! @IPC_FILES\n");
     unlink @IPC_FILES;
@@ -2553,7 +2662,7 @@ sub deinit_child {
   }
 
   my %closed = ();
-  foreach my $fh (@{$Forks::Super::Job::self->{child_fh_close}}, @SAFEOPENED) {
+  foreach my $fh (@{$job->{child_fh_close}}, @SAFEOPENED) {
     if (ref $fh eq 'ARRAY') {
       if ($fh->[0] eq 'shutdown') {
 	no warnings 'closed', 'unopened';

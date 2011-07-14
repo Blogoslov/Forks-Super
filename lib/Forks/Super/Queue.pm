@@ -17,14 +17,14 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID, $QUEUE_MONITOR_FREQ);
 our $QUEUE_DEBUG = $ENV{FORKS_SUPER_QUEUE_DEBUG} || 0;
 our $QUEUE_MONITOR_LIFESPAN = 14400;
 our $DEFAULT_QUEUE_PRIORITY = 0;
 our $INHIBIT_QUEUE_MONITOR = 1;
-our $NEXT_DEFERRED_ID = -100000;
+our $NEXT_DEFERRED_ID = -500000;
 our $OLD_QINTERRUPT_SIG;
 our ($MAIN_PID,$_LOCK) = ($$,0);
 
@@ -103,7 +103,7 @@ sub _launch_queue_monitor {
 
 sub _check_queue {
   # check_queue call triggered by a SIGALRM. 
-  # XXX - do we want to log it or do any other special handling?
+  # XXX - we can do logging or other special handling here ...
   check_queue();
   return;
 }
@@ -375,11 +375,11 @@ sub suspend_resume_jobs {
     my $action = $job->{suspend}->();
     if ($action < 0 && ! $job_is_suspended) {
 	$job->suspend;
-	debug("Forks::Super::Queue: suspend callback value $action for ",
+	debug("suspend_resume_jobs: suspend callback value $action for ",
 	      "job ", $job->{pid}, " ... suspending") if $job->{debug};
     } elsif ($action > 0 && $job_is_suspended) {
 	$job->resume;
-	debug("Forks::Super::Queue: suspend callback value $action for ",
+	debug("suspend_resume_jobs: suspend callback value $action for ",
 	      "job ", $job->{pid}, " ... resuming") if $job->{debug};
     }
   }

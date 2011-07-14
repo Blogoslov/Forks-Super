@@ -57,7 +57,7 @@
 BEGIN {
   if ($^O eq 'MSWin32' && $ENV{IPC_DIR} eq 'undef') {
     delete $ENV{IPC_DIR};
-    push @ARGV, "-E", "undef";
+    push @ARGV, "-e", "IPC_DIR=undef";
   }
 }
 
@@ -143,8 +143,13 @@ my %colors = (ITERATION => 'bold white',
 	      GOOD_STATUS => 'bold green',
 	      BAD_STATUS => 'bold red',
 	      'STDERR' => 'yellow bold',
+	      DEBUG => 'cyan bold',
 	      NORMAL => '');
 
+if ($debug) {
+    color_print('DEBUG', "MAX_PROC is $Forks::Super::MAX_PROC, ",
+		"on busy is $Forks::Super::ON_BUSY\n");
+}
 
 #####################################################3
 #
@@ -186,8 +191,8 @@ my $iteration;
 my $ntests = scalar @test_files;
 if ($debug) {
   # running too many tests simultaneously will use up all your filehandles ...
-  print STDERR "There are $ntests tests to run (", 
-    scalar @ARGV, " x $xrepeat)\n";
+    color_print(DEBUG => "There are $ntests tests to run (", 
+		scalar @ARGV, " x $xrepeat)\n");
 }
 my (%j,$count);
 
@@ -205,14 +210,14 @@ exit ($total_fail > 254 ? 254 : $total_fail);
 #
 sub main {
   if ($debug) {
-    print "Test files: @test_files\n";
+      color_print(DEBUG => "Test files: @test_files\n");
   }
   if (@test_files == 0) {
     die "No tests specified.\n";
   }
 
   for ($iteration = 1; $iteration <= $repeat; $iteration++) {
-    color_print 'ITERATION', "Iteration #$iteration/$repeat\n" if $repeat>1;
+    color_print ITERATION => "Iteration #$iteration/$repeat\n" if $repeat>1;
     if ($iteration > 1) {
       sleep 1;
     }
@@ -235,7 +240,8 @@ sub main {
       launch_test_file($test_file);
 
       if ($debug) {
-	print "Queue size: ", scalar @Forks::Super::Queue::QUEUE, "\n";
+	color_print(DEBUG => "Queue size: ", 
+		    scalar @Forks::Super::Queue::QUEUE, "\n");
       }
 
       # see if any tests have finished lately
@@ -250,7 +256,8 @@ sub main {
     # all tests have launched. Now wait for all tests to complete.
 
     if ($debug) {
-      print "All tests launched for this iteration, waiting for results.\n";
+	color_print(DEBUG =>
+		    "All tests launched for this iteration, waiting for results.\n");
     }
 
     my $pid = wait;
@@ -301,7 +308,7 @@ sub launch_test_file {
   }
 
   if ($debug) {
-    print "Launching test $test_file:\n";
+      color_print(DEBUG => "Launching test $test_file:\n");
   }
   my $child_fh = "out,err";
   $child_fh .= ",socket" if $use_socket;
@@ -316,10 +323,16 @@ sub launch_test_file {
     my ($k,$v) = split /=/, $env, 2;
     $ENV{$k} = $v;
   }
+
+  if ($debug) {
+      color_print DEBUG => "Launching: [ @cmd ]\n";
+  }
+
   my $pid = fork {
     cmd => [ @cmd ],
     child_fh => $child_fh,
     timeout => $timeout,
+    env => { FORKED_HARNESS => 1 },
   };
 
   $j{$pid} = $test_file;
@@ -343,7 +356,7 @@ sub process_test_output {
   $j->close_fh;
 
   if ($debug) {
-    print "Processing results of test $test_file\n";
+      color_print DEBUG => "Processing results of test $test_file\n";
   }
 
   # see which tests failed ...
@@ -397,8 +410,8 @@ sub process_test_output {
   if ($use_harness && $not_ok == 0) {
     # look for one of:
     #     t/nn-xxx.t .. ok
-    #     t/nn-xxx.t....ok
-    my @stdout2 = grep { / ?\.+ ?ok/ } @stdout;
+    #     t/nn-xxx.t .. skipped: <Reason>
+    my @stdout2 = grep { m/ ?\.+ ?ok/ || m/ ?\.+ ?skipped:/ } @stdout;
     if (@stdout2 > 0) {
       @stdout = @stdout2;
     } else {
@@ -413,13 +426,13 @@ sub process_test_output {
 	  && $j->{end} - $j->{start} >= $j->{timeout} * 0.99) {
 	  $fail{$test_file}{"TIMEOUT"}++;
       } else {
-	  $fail{$test_file}{"Unknown Error"}++;
+	  $fail{$test_file}{"UnknownError"}++;
       }
 
       unless ($really_quiet) {
-	color_print 'STDERR', "Not quite right: ", $j->toString(), "\n";
-	color_print 'STDERR', "OUTPUT: ", @stdout, "\n";
-	color_print 'STDERR', "ERROR: ", @stderr, "\n";
+	color_print STDERR => "Not quite right: ", $j->toString(), "\n";
+	color_print STDERR => "OUTPUT: ", @stdout, "\n";
+	color_print STDERR => "ERROR: ", @stderr, "\n";
       }
     }
   }
@@ -470,7 +483,7 @@ sub process_test_output {
     if ($really_quiet == 0) {
       print map{"|- $_"}@stdout;
       print "|= $dashes\n";
-      color_print 'STDERR', map{"|: $_"}@stderr;
+      color_print STDERR => map{"|: $_"}@stderr;
     }
   }
 
@@ -517,7 +530,12 @@ sub process_test_output {
   # print "$dashes\n";
 
   $total_status = $status if $total_status < $status;
-  $total_fail += $status >> 8 if $status > 0;
+  #$total_fail += $status >> 8 if $status > 0;
+  if ($status > 255) {
+      $total_fail += $status >> 8;
+  } elsif ($status > 0) {
+      $total_fail++;
+  }
   if ($status != 0) {
     if (!$use_harness 
 	|| (grep /Result: FAIL/, @stdout)
@@ -563,6 +581,13 @@ sub process_test_output {
 sub summarize {
   if (@result > 0) {
     print "\n\n\n\n\nThere were errors in iteration #$iteration:\n";
+    if (1 || $ENV{EXTRA}) {
+	my $hostname = qx(hostname 2>/dev/null);
+	chomp($hostname);
+	print "[ \$^X = $^X";
+	print ", host = $hostname" if $hostname;
+	print "]\n";
+    }
     print "=====================================\n";
     print scalar localtime, "\n";
     print @result;
@@ -571,6 +596,13 @@ sub summarize {
   }
   if ($really_quiet == 0 && scalar keys %fail > 0) {
     print "\nTest failures:\n";
+    if (1 || $ENV{EXTRA}) {
+	my $hostname = qx(hostname 2>/dev/null);
+	chomp($hostname);
+	print "[ \$^X = $^X";
+	print ", host = $hostname" if $hostname;
+	print "]\n";
+    }
     print "================\n";
     foreach my $test_file (sort keys %fail) {
 	no warnings 'numeric';
@@ -590,6 +622,13 @@ sub summarize {
   if ($total_status == 0) {
     $iteration--;
     print "All tests successful. $iteration iterations.\n";
+    if (1 || $ENV{EXTRA}) {
+	my $hostname = qx(hostname 2>/dev/null);
+	chomp($hostname);
+	print "[ \$^X = $^X";
+	print ", host = $hostname" if $hostname;
+	print "]\n";
+    }
   }
   my $elapsed = Time::HiRes::time() - $^T;
   printf "Elapsed time: %.3f\n", $elapsed; sleep 3 if $debug;

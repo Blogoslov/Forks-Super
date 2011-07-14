@@ -46,21 +46,23 @@ while (time < $t+7) {
 }
 
 ########## this is a failure point in BSD, linux #############
-# maybe some warning message is getting in the output stream
+# maybe some warning message is getting in the output stream?
+# maybe FS::read_stderr is returning an empty string
 
 if (@out != 0 || @err != 2) {
   $Forks::Super::DONT_CLEANUP = 1;
-  print STDERR "\n+stderr -stdout test: failure imminent\n";
-  print STDERR "We expect no lines from stdout and two from stderr\n";
-  print STDERR "What we get is:\n";
-  print STDERR "--------------------------- \@out ------------------\n";
-  print STDERR @out,"\n";
-  print STDERR "--------------------------- \@err ------------------\n";
-  print STDERR @err,"\n----------------------------------------------------\n";
+  diag("\n+stderr -stdout test: failure imminent, PID=$$");
+  diag("we expect no lines from stdout and two from stderr. What we get is:");
+  diag(map {"out $_: << $out[$_] >>\n"} 0..$#out);
+  diag("------------------------------------------");
+  diag(map {"err $_: << $err[$_] >>\n"} 0..$#err);
+  diag("------------------------------------------");
 }
 
 ok(@out == 0, "got no output from child");
-ok(@err == 2, "received error msg from child " . scalar @err . "\n$err[0]\n");
+ok(@err == 2, "received error msg from child " . scalar @err . "\n$err[0]\n")
+or diag("expected 2 lines, err contains:\n",
+   map{"$_: << $err[$_] >>\n"}0..$#err);
 ok($err[0] =~ /received message $msg/, "got Expected first line from child error msg");
 ok($err[1] =~ /a test/, "got Expected second line from child error msg");
 waitall; 

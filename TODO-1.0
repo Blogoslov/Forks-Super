@@ -80,6 +80,9 @@ Thoughts about a major revision. Also see the  TODO  file.
 		    For sockettype := INET, specifies ports to use
 		    for child, parent, or both ends of the socket.
 
+		    [For INET sockets, how can you commit to a port
+		    before the fork and bind/connect to it after the fork?]
+
 	    pipes [ pipes => BOOL ]
 
 		Use pipes to manage communication. Can failover to
@@ -140,6 +143,12 @@ Thoughts about a major revision. Also see the  TODO  file.
 
 		Get data from a subroutine?
 		Send output to a subroutine?
+
+	    layers => layer
+	    layers => [ @layers ]
+
+	        Apply the given set of I/O layers to the handle.
+		Examples:  :utf8 :gz :crlf :raw
 
 	Simple cases: There definitely needs to be 
 
@@ -256,4 +265,13 @@ Thoughts about a major revision. Also see the  TODO  file.
             open/init
 	        try-to-open (for read end that must wait for write end)
             close
+
+    ___ "process pool" concept, like FastCGI, for running subroutines
+        in background processes, but without having to spawn a lot of
+        processes.
+
+	Like converting a CGI script to FastCGI, you may need to
+	think carefully about the way you design your background job.
+
+	
 

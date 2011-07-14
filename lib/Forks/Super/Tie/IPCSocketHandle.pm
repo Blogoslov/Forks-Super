@@ -28,8 +28,6 @@ use IO::Socket;
 use IO::Handle;
 our @ISA = qw(IO::Socket IO::Handle);
 
-our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
-
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
 sub trivial_pause { return $^O eq 'MSWin32' 

@@ -26,7 +26,7 @@ use strict;
 use warnings;
 
 
-my $limits_file = "t/out/limits.$^O.$]";
+my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";
 my %LIMITS = (file => $limits_file);
 our $MAIN_PID = $$;
 
@@ -107,6 +107,7 @@ $LIMITS{version} = $];
 &find_max_open_sockets;
 &find_socket_capacity;
 &find_pipe_capacity;            # on some systems:  512 * ulimit -p
+&wait_waitpid_results;
 
 &find_max_fork(200);  # run last because it might crash the program
 print "Created system limitations file in: $limits_file\n";
@@ -285,6 +286,37 @@ sub find_max_open_filehandles {
 
 # XXX - TODO
 sub find_max_open_sockets {
+}
+
+# what values do CORE::wait and CORE::waitpid return
+# for bogus inputs? What are the side effects on $? ?
+sub wait_waitpid_results {
+    use POSIX ':sys_wait_h';
+    my %info = ();
+    my $pid = CORE::fork();
+    if (defined($pid) && $pid==0) {
+	sleep 3;
+	exit;
+    }
+    $info{active_waitpid_result} = waitpid $pid, &WNOHANG;
+    $info{active_waitpid_status} = $?;
+
+    $info{bogus_waitpid_result} = waitpid $pid+1, &WNOHANG;
+    $info{bogus_waitpid_status} = $?;
+
+    waitpid $pid, 0;
+
+    $info{reaped_waitpid_result} = waitpid $pid, &WNOHANG;
+    $info{reaped_waitpid_status} = $?;
+
+    local $SIG{CHLD} = 'IGNORE';
+    $pid = CORE::fork();
+    exit if $pid == 0;
+    sleep 1;
+    $info{ignore_waitpid_result} = waitpid $pid, 0;
+    $info{ignore_waitpid_status} = $?;    
+
+    write_limits( %info );
 }
 
 #

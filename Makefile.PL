@@ -1,24 +1,26 @@
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
-# use 5.007003;   # needs "safe signals" - see perlipc
 
 our %RECOMMENDED
-  = ('YAML' => '0.62',
-     'JSON' => '2.0',
-     'YAML::Tiny' => '1.39',
-     'Sys::CpuAffinity' => '0.91',
-     'Sys::CpuLoadX' => '0.02',
-     'DateTime::Format::Natural' => '0.89',
-     'Win32::API' => '0.43',
-     'Win32::Process' => '0.11',
-     'Win32::Process::Kill' => '2.64');
+    = ('YAML' => '0.62',
+       'JSON' => '2.0',
+       'YAML::Tiny' => '1.39',
+       'Sys::CpuAffinity' => '0.91',
+       'Sys::CpuLoadX' => '0.02',
+       'DateTime::Format::Natural' => '0.89',
+
+       # for MSWin32/Cygwin:
+       'Win32::API' => '0.43',
+       'Win32::Process' => '0.11',
+       'Win32::Process::Kill' => '2.64');
 
 our %REQUIRED 
-  = ('Test::More' => '0',
-     'Time::HiRes' => '1.30');
+    = ('Test::More' => '0',
+       'Time::HiRes' => '1.30');
 if ($^O eq 'MSWin32') {
-  $REQUIRED{'Win32::API'} = '0.43';
+    $REQUIRED{'Win32::API'} = '0.43';
+    # Win32::Process? 
 }
 
 # files that may exist and be nice to clean up with a  make clean
@@ -27,20 +29,20 @@ our $FILES_TO_CLEAN
 		 lib/Forks/Super/SysInfo.pm t/out/spawn*
 		 t/out/sigchld.debug t/out/test* t/out/.lock-*
 		 t/out/49.* t/out/debug1-* t/out/limits.*
-		 t/out/ipc* t/out/new-ipc* *.stackdump t/dir*
-		 lib/_Inline *.stackdump _Inline);
+		 t/out/ipc* t/out/new-ipc* t/out/66* t/dir*
+                 t/out/daemon* lib/_Inline *.stackdump _Inline);
 
 our %META_MERGE
-  = (recommends => \%RECOMMENDED,
-     no_index => { 
-	'package' => ['Sys::CpuAffinity', 
-		      'Signals::XSIG',
-		      'Signals::XSIG::Default'] });
+    = (recommends => \%RECOMMENDED,
+       no_index => { 
+	   'package' => ['Sys::CpuAffinity', 
+			 'Signals::XSIG',
+			 'Signals::XSIG::Default'] });
 
 ######################################################################
 
 if ($] < 5.007003) {
-  warn qq{
+    warn qq{
 
 WARNING !!! The Forks::Super module makes heavy use of 
 insufficiently paranoid signal handlers (See "Deferred
@@ -49,17 +51,21 @@ and is not recommended on versions of perl older than
 v5.7.3. (Your version: $])
 
 };
-  sleep 1;
+    sleep 1;
 }
 
 if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {
-  $ENV{BUNDLE_REINSTALL} = 1;
-  @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
+    if ("@ARGV" =~ /bundle=0/i) {
+	$ENV{BUNDLE} = '0';
+    } else {
+	$ENV{BUNDLE_REINSTALL} = 1;
+    }
+    @ARGV = grep { !/^bundle\b/i && !/^reinstall\b/ } @ARGV;
 }
 if (defined($ENV{BUNDLE}) && $ENV{BUNDLE} eq "0") {
-  print STDERR "Skip check and install for bundled modules.\n";
+    print STDERR "Skip check and install for bundled modules.\n";
 } else {
-  install_bundled_modules();
+    install_bundled_modules();
 }
 probe_system();
 
@@ -102,34 +108,34 @@ the Forks::Super framework to run the tests in parallel.
 # to allow re-installation of bundled modules
 #
 sub install_bundled_modules {
-  if (-d 'bundle') {
-    chdir 'bundle';
-    opendir my $sub_dh, '.';
-    while (my $submod = readdir $sub_dh) {
-      next if $submod eq '.';
-      next if $submod eq '..';
-      next if ! -d $submod;
-
-      if (-f "$submod/bundle.pl") {
+    if (-d 'bundle') {
+	chdir 'bundle';
+	opendir my $sub_dh, '.';
+	while (my $submod = readdir $sub_dh) {
+	    next if $submod eq '.';
+	    next if $submod eq '..';
+	    next if ! -d $submod;
+	    
+	    if (-f "$submod/bundle.pl") {
+		print "--------------------------------------------------\n";
+		print "Running builder for submodules/$submod\n";
+		chdir $submod;
+		system($^X,'bundle.pl',@ARGV);
+		chdir '..';
+	    }
+	}
 	print "--------------------------------------------------\n";
-	print "Running builder for submodules/$submod\n";
-	chdir $submod;
-	system($^X,'bundle.pl',@ARGV);
+	closedir $sub_dh;
 	chdir '..';
-      }
     }
-    print "--------------------------------------------------\n";
-    closedir $sub_dh;
-    chdir '..';
-  }
 }
 
 sub probe_system {
-  unless ($ENV{NOLIMITS}) {
-    print STDERR "Gathering information on current system $^O.$]\n";
-    print STDERR "and creating Forks::Super::SysInfo package.\n";
-    system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
-  }
+    unless ($ENV{NOLIMITS}) {
+	print STDERR "Gathering information on current system $^O.$]\n";
+	print STDERR "and creating Forks::Super::SysInfo package.\n";
+	system($^X, 'SysInfo.pm.PL', 'lib/Forks/Super/SysInfo.pm');
+    }
 }
 
 

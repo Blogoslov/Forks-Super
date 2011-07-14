@@ -6,7 +6,15 @@ use warnings;
 mkdir "t/out/ipc.$$";
 
 ok(tied $Forks::Super::IPC_DIR, "\$IPC_DIR is tied");
-ok(!defined($Forks::Super::IPC_DIR), "\$IPC_DIR is not defined");
+ok(!defined($Forks::Super::IPC_DIR), "\$IPC_DIR is not defined")
+  or diag("IPC_DIR is $Forks::Super::IPC_DIR, should be undef");
+
+if ($ENV{IPC_DIR} eq 'undef') {
+   SKIP: {
+       skip "file IPC disabled by environment var", 14;
+   };
+   exit;
+}
 
 $Forks::Super::IPC_DIR = "t/out/ipc.$$";
 

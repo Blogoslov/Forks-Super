@@ -29,7 +29,6 @@ use strict;
 use warnings;
 
 our @ISA = qw(Exporter IO::Handle);
-our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
 
 sub TIEHANDLE {
   my ($class, %props) = @_;
@@ -182,11 +181,12 @@ sub is_pipe {
 sub UNTIE {
     # XXX - without this method, we often get
     #   'untie attempted while ... inner references ...' message.
-    # How to fix this? Devel::FindRef was little help in
-    # diagnosing the problem :-( 
     my ($self, $existing_inner_references) = @_;
-    if ($existing_inner_references > 0) {
-	# ... 
+    if ($existing_inner_references > 1) {
+	if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
+	    warn "untie attempted while ", $existing_inner_references,
+	    	" still exist";
+	}
     }
 }
 

@@ -6,7 +6,13 @@ use warnings;
 if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
 my @cmd = ($^X, "t/external-command.pl",
@@ -60,6 +66,11 @@ sleep 5;
 Forks::Super::close_fh($pid, 'stdout');
 
 my @err = Forks::Super::read_stderr($pid);
+
+if (!Forks::Super::Config::CONFIG('filehandles')) {
+    @err = grep { !/set_signal_pid/ } @err;
+}
+
 Forks::Super::close_fh($pid, 'stderr');
 ok(@out == 4, "open3: got right number of output lines")            ### 15 ###
   or diag("open3 output was:\n@out\nExpected 4 lines");
@@ -108,10 +119,14 @@ SKIP: {
   Forks::Super::close_fh($pid, 'stdout');
   @err = <$fh_err>;
   Forks::Super::close_fh($pid, 'stderr');
+  if (!Forks::Super::Config::CONFIG('filehandles')) {
+    @err = grep { !/set_signal_pid/ } @err;
+  }
 
   ok(@out == 1 && $out[0] =~ /^Hello/, 
      "open3: time out  \@out='@out'" . scalar @out);
-  ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out");
+  ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out")
+      or diag("error was @err\n");
   waitpid $pid,0;
   ok($job->{status} != 0, 
      "open3: job timed out status $job->{status}!=0")  ### 28 ###
@@ -119,5 +134,3 @@ SKIP: {
 }
 
 #############################################################################
-
-__END__

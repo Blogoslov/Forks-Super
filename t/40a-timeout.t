@@ -25,13 +25,15 @@ SKIP: {
       . "can't test timeout feature", 3;
   }
 
-my $pid = fork { sub => sub { sleep 15; exit 0 }, timeout => 3 };
-my $t = Time::HiRes::time();
-my $p = wait;
-$t = Time::HiRes::time() - $t;
-ok($p == $pid, "$$\\wait successful");
-ok($? != 0, "job expired with non-zero exit STATUS");
-ok($t < 7.5, "Timed out in ${t}s, expected ~3s"); ### 3a ### was 5.1 obs 5.98
+  my $pid = fork { sub => sub { sleep 15; exit 0 }, 
+		   debug => $^O =~ /freebsd/i ? 1 : 0,
+		   timeout => 3 };
+  my $t = Time::HiRes::time();
+  my $p = wait;
+  $t = Time::HiRes::time() - $t;
+  ok($p == $pid, "$$\\wait successful");
+  ok($? != 0, "job expired with non-zero exit STATUS");
+  ok($t < 7.5, "Timed out in ${t}s, expected ~3s"); ### 3a ### was 5.1 obs 5.98
                                                   ### obs 7.23 with $USE_TIE_SH
 
 } # end SKIP

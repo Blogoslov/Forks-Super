@@ -6,6 +6,7 @@
 
 package Forks::Super::Util;
 use Exporter;
+use Cwd;
 use Carp;
 use strict;
 use warnings;
@@ -14,7 +15,7 @@ use constant IS_WIN32 => $^O =~ /os2|Win32/i;
 use constant IS_CYGWIN => $^O =~ /cygwin/i;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -80,7 +81,7 @@ sub isValidPid {
     }
   }
   return 0 if !defined($pid) || !is_number($pid);
-  return &IS_WIN32 ? $pid > 0 || ($pid <= -2 && $pid >= -50000) : $pid > 0;
+  return &IS_WIN32 ? $pid > 0 || ($pid <= -2 && $pid >= -200000) : $pid > 0;
 }
 
 sub set_productive_pause_code (&) {
@@ -224,6 +225,33 @@ sub is_pipe {
     $handle = $handle->{std_delegate};
   }
   return eval { $handle->opened } && -p $handle;
+}
+
+sub abs_path {
+    # robust call to Cwd::abs_path
+    my $dir = shift;
+    return if !defined $dir;
+
+    my $z = eval { $dir = Cwd::abs_path($dir); 1 };
+    unless ($z) {
+	if ($dir !~ m{^[/\\]}) {
+	    my $cwd = Cwd::getcwd();
+	    $dir = "$cwd/$dir";
+	}
+    }
+    return $dir;
+}
+
+sub _XXXXXX_taint_check {
+    use Scalar::Util q/tainted/;
+    my $obj = shift;
+    my $name = shift || '';
+    print STDERR "XXXXXX obj $name is ", "not "x!tainted($obj), "tainted\n";
+    # what is tainted about $pid ?
+    foreach my $attr (keys %$obj) {
+	my $t = tainted($obj->{$attr});
+	print STDERR "XXXXXX\t$attr => ", "not "x!$t, "tainted\n";
+    }
 }
 
 1;

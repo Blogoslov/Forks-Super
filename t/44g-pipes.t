@@ -52,7 +52,7 @@ $err = Forks::Super::read_stderr($pid, "block" => 1);
 my $t5 = Time::HiRes::time() - $t0;
 my $t54 = $t5 - $t4;
 ok(!defined($err), "blocking read on empty stderr returns empty");
-ok($t54 <= 1.0, "blocking read on empty stderr fast ${t54}s, expected <1.0s");
+ok($t54 <= 1.5, "blocking read on empty stderr fast ${t54}s, expected <1.0s");
 
 # print "\$err = $err, time = $t5, $t54\n";
 

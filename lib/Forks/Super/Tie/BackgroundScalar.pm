@@ -5,14 +5,16 @@
 # Unlike previous version of Forks::Super::Tie::BackgroundScalar,
 # you don't need to dereference the result:
 #
-# BackgroundScalar:
+# previous BackgroundScalar:
 #     $x = bg_eval { sub { sleep 3 ; 42 } };
 #     print "Expect $$x == 42\n";
 #
-# BackgroundScalar:
+# this BackgroundScalar:
 #     $x = bg_eval { sub { sleep 3 ; 42 } };
 #     print "Expect $x == 42\n";
 #
+# Also unlike the previous version, you don't actually use 'tie'
+# with this object type.
 
 package Forks::Super::Tie::BackgroundScalar;
 use Forks::Super;
@@ -230,7 +232,7 @@ sub _fetch {
 	$self->{value_set} = 1;
 	$self->{error} = "waitpid failed, result not retrieved from process";
 	bless $self, $class;
-	return;
+	return "";  # v0.53 on failure return empty string
       }
       if ($self->{job}->{status} != 0) {
 	$self->{error} = "job status: " . $self->{job}->{status};
@@ -251,7 +253,11 @@ sub _fetch {
       $self->{value_set} = 1;
     } elsif ($self->{style} eq 'qx') {
       $self->{value_set} = 1;
-      $self->{value} = $self->{stdout};
+      if (defined $self->{stdout}) {
+	  $self->{value} = $self->{stdout};
+      } else {
+	  $self->{value} = '';
+      }
     }
   }
   my $value = $self->{value};

@@ -13,7 +13,8 @@ my $limits_file = "t/out/limits.$^O.$]";
 
 if (! -r $limits_file) {
   print STDERR "$0: creating system-limits file.\n";
-  system($^X, "system-limits.PL", $limits_file);
+  system($^X, "system-limits.PL", "$limits_file.tmp");
+  rename "$limits_file.tmp", $limits_file;
 }
 
 my %info = load_limits_file($limits_file);
@@ -45,6 +46,13 @@ printF('SOCKET_CAPACITY', $info{socket_capacity}, '128.0');
 printF('PIPE_CAPACITY', $info{pipe_capacity}, '128.0');
 printF('SLEEP_ALARM_COMPATIBLE', &sleep_alarm_compat, '""');
 printF('TIME_HIRES_TOL', $info{TimeHiRes_tol}, '0.00');
+
+printF('ACTIVE_WAITPID_RESULT', $info{active_waitpid_result}, '0');
+printF('ACTIVE_WAITPID_STATUS', $info{active_waitpid_status}, '-1');
+printF('BOGUS_WAITPID_RESULT', $info{bogus_waitpid_result}, '-1');
+printF('BOGUS_WAITPID_STATUS', $info{bogus_waitpid_status}, '-1');
+printF('REAPED_WAITPID_RESULT', $info{reaped_waitpid_result}, '-1');
+printF('REAPED_WAITPID_STATUS', $info{reaped_waitpid_status}, '-1');
 
 if (defined $info{ncpu}) {
   printF('NUM_PROCESSORS', $info{ncpu}, '1');
@@ -127,5 +135,5 @@ sub sleep_alarm_compat {
     $compatible = "000";
   };
   return $compatible;
-    
 }
+

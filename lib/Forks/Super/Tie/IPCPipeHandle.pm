@@ -24,8 +24,6 @@ use IO::Pipe;
 use IO::Handle;
 our @ISA = qw(IO::Pipe IO::Handle);
 
-our $DEBUG = defined($ENV{XFH}) && $ENV{XFH} > 1;
-
 sub TIEHANDLE {
   my ($class, $real_pipe, $glob) = @_;
   $$glob->{DELEGATE} = $real_pipe;
@@ -176,6 +174,16 @@ sub DESTROY {
   my $self = shift;
   $self = {};
   return;
+}
+
+sub ___UNTIE {
+    my ($self, $existing_inner_references) = @_;
+    if ($existing_inner_references > 1) {
+	if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
+	    warn "untie attempted while ", $existing_inner_references,
+	    	" still exist";
+	}
+    }
 }
 
 #

@@ -48,22 +48,7 @@ SKIP: {
   $y = bg_qx "$^X t/external-command.pl -s=5 -s=5 -e=$z", { timeout => 2 };
   $t = Time::HiRes::time();
 
-#sleep 10;
-#print STDERR "\$y:\n";
-#print STDERR "defined: ", defined($y), "\n";
-#print STDERR "ref: ", ref($y), "\n";
-#print STDERR "raw: ", $y, "\n";
-#print STDERR "stringify: $y\n"; 
-
-my $ok1 = defined($y) == 0;
-my $ok2 = ($y eq "");
-my $ok3 = ($y eq "\n");
-
-
-#  ok(defined($y)==0
-#	 || "$y" eq ""
-#	 || "$y" eq "\n",
-  ok($ok1 || $ok2 || $ok3,
+  ok(defined($y)==0 || "$y" eq "" || "$y" eq "\n",
      "scalar bg_qx empty on failure")  ### 12 ###
 	or diag("\$y was $y, expected empty or undefined\n");
   ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");

@@ -37,7 +37,7 @@ our %EXPORT_TAGS =
     'filehandles' => [ @export_ok_vars, @EXPORT ],
     'vars'        => [ @export_ok_vars, @EXPORT ],
     'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 our $SOCKET_READ_TIMEOUT = 1.0;
 our ($MAIN_PID, $ON_BUSY, $MAX_PROC, $MAX_LOAD, $DEFAULT_MAX_PROC, $IPC_DIR);
@@ -57,10 +57,10 @@ sub import {
 	     || $args[$i] eq 'IPC_DIR'
 	     || uc $args[$i] eq 'CLEANSE') {
 
-	$ipc_dir = $args[++$i] || '';
-	if (uc $args[$i] eq 'CLEANSE') {
+	if ($args[$i] && uc $args[$i] eq 'CLEANSE') {
 	    Forks::Super::Job::Ipc::enable_cleanse_mode();
 	}
+	$ipc_dir = $args[++$i] || '';
 
     } else {
       push @tags, $args[$i];
@@ -191,6 +191,12 @@ sub _init {
     }
   };
 
+  Forks::Super::Wait::set_productive_pause_code {
+    if (&IS_WIN32) {
+      handle_CHLD(-1);
+    }
+  };
+
   tie $ON_BUSY, 'Forks::Super::Tie::Enum', qw(block fail queue);
   $ON_BUSY = 'block';
 
@@ -198,7 +204,12 @@ sub _init {
 
   Forks::Super::Queue::init();
 
-  $XSIG{CHLD}[-1] = \&Forks::Super::Sigchld::handle_CHLD;
+  ### these settings caused issues with FreeBSD, t/11
+  #$Signals::XSIG::DEFAULT_BEHAVIOR{CHLD} = \&Forks::Super::handle_CHLD;
+  #$XSIG{CHLD}[-1] = 'DEFAULT';
+
+  #$Signals::XSIG::DEFAULT_BEHAVIOR{CHLD} = \&Forks::Super::handle_CHLD;
+  $XSIG{CHLD}[-1] = \&Forks::Super::handle_CHLD;
   return;
 }
 
@@ -210,7 +221,9 @@ sub fork {
 
   $MAIN_PID ||= $$;                         # initialize on first use 
   my $job = Forks::Super::Job->new($opts);
+
   $job->_preconfig;
+
   if (defined $job->{__test}) {
     return $job->{__test};
   }
@@ -243,7 +256,7 @@ sub fork {
   }
 
   if ($job->{debug}) {
-    debug('Forks::Super::fork(): launch approved for job');
+    debug('fork: launch approved for job');
   }
   return $job->launch;
 }
@@ -265,8 +278,6 @@ sub init_child {
   # XXX - if $F::S::CHILD_FORK_OK > 0, when do we reset $XSIG{CHLD} ?
   $XSIG{CHLD} = [];
   $SIG{CHLD} = 'DEFAULT';
-  #$XSIG{CLD} = [];
-  #$SIG{CLD} = 'DEFAULT';
 
   Forks::Super::Config::init_child();
   Forks::Super::Job::init_child();
@@ -340,14 +351,28 @@ sub kill_all {
       @Forks::Super::ALL_JOBS;
   } else {
     @all_jobs = grep { $_->is_active } @Forks::Super::ALL_JOBS;
+
+    if (@all_jobs == 0) {
+	carp "kill_all: no active jobs";
+	if ($DEBUG) {
+	    debug("all jobs:");
+	    debug("   ", $_->toShortString()) for @Forks::Super::ALL_JOBS;
+	}
+    }
   }
-  return Forks::Super::kill $signal, @all_jobs;
+  if ($DEBUG) {
+      debug("kill_all sending signal $signal to @all_jobs");
+  }
+  return Forks::Super::kill ($signal, @all_jobs);
 }
 
 sub kill {
   my ($signal, @jobs) = @_;
   my $kill_proc_group = $signal =~ s/^-//;
-  my $num_signalled = 0;
+
+  my (@signalled, @terminated) = ();
+
+#  my $num_signalled = 0;
   my $run_queue_needed = 0;
 
   # convert to canonical signal name.
@@ -365,20 +390,18 @@ sub kill {
 
   my @deferred_jobs = grep { $_->is_deferred } @jobs;
   if (@deferred_jobs > 0) {
-    my @sdj_result = _signal_deferred_jobs($signal, @deferred_jobs);
-    $num_signalled += $sdj_result[0];
-    $run_queue_needed += $sdj_result[1];
-    @jobs = grep { ! $_->is_deferred } @jobs;
-    if (@jobs == 0) {
-      return $num_signalled;
-    }
+      my @signal_dj = _signal_deferred_jobs($signal, @deferred_jobs);
+      $run_queue_needed += pop @signal_dj;
+      push @signalled, @signal_dj;
+
+      @jobs = grep { ! $_->is_deferred } @jobs;
+      if (@jobs == 0) {
+	  return scalar @signalled;
+      }
   }
 
-  my @pids = map { $_->{real_pid} } @jobs;
-  if ($DEBUG) {
-    debug("Sending signal $signal to pids: ", join(' ',@pids));
-  }
-  my @terminated = ();
+  my @pids = map { $_->signal_pids } @jobs;
+#  my @terminated = ();
 
   if (&IS_WIN32) {
 
@@ -386,76 +409,114 @@ sub kill {
     # is with the Win32 API "TerminateThread". Using Perl's kill
     # usually doesn't work
 
+    if ($DEBUG) {
+      debug("Sending signal $signal to pids: ", join(' ',@pids));
+    }
     my ($signalled, $termref)
-      = Forks::Super::Job::OS::Win32::signal_procs(
+	= Forks::Super::Job::OS::Win32::signal_procs(
 			$signal, $kill_proc_group, @pids);
-    $num_signalled += $signalled;
+#    $num_signalled += $signalled;
+    push @signalled, @$signalled;
     push @terminated, @$termref;
 
   } elsif (@pids > 0) {
     if (Forks::Super::Util::is_kill_signal($signal)) {
       foreach my $pid (@pids) {
 	local $! = 0;
+	if ($DEBUG) {
+          debug("Sending (killing) signal $signal to pid: $pid");
+	}
 	if (CORE::kill $signal, $pid) {
-	  $num_signalled++;
+#	  $num_signalled++;
+	  push @signalled, $pid;
 	  push @terminated, $pid;
 	}
 	if ($!) {
-	  carp "kill error $! $^E\n";
+	  carp "Forks::Super::kill: $! $pid";
 	}
       }
     } else {
-      local $! = 0;
-      $num_signalled += CORE::kill $signal, @pids;
-      if ($!) {
-	carp "kill error $! $^E\n";
+      if ($DEBUG) {
+	debug("Sending signal $signal to pids: ", join(' ',@pids));
+      }
+      foreach my $pid (@pids) {
+	  local $! = 0;
+#	  $num_signalled += CORE::kill $signal, @pids;
+	  if (CORE::kill $signal, $pid) {
+	      push @signalled, $pid;
+	  }
+	  if ($!) {
+	      carp "Forks::Super::kill: $! @pids";
+	  }
       }
     }
   }
 
   _unreap(@terminated);
   $run_queue_needed && Forks::Super::Queue::check_queue();
-  return $num_signalled;
+  if ($DEBUG) {
+      local $" = ',';
+      debug("kill: sent SIG$signal to {@signalled} from input {@jobs}");
+  }
+  return wantarray ? @signalled : scalar @signalled;
+  # return $num_signalled;
 }
 
 sub _signal_deferred_jobs {
-  my ($signal, @jobs) = @_;
-  my $num_signalled = 0;
-  my $run_queue_needed = 0;
-  foreach my $j (@jobs) {
-    if (Forks::Super::Util::is_kill_signal($signal)) {
-      $j->_mark_complete;
-      $j->{status} = Forks::Super::Util::signal_number($signal) || -1;
-      $j->_mark_reaped;
-      $num_signalled++;
-    } elsif ($signal eq 'STOP' || $signal eq 'CONT' || $signal eq 'ZERO') {
-	$num_signalled++;
-	if ($signal eq 'STOP') {
-	    $j->{state} = 'SUSPENDED-DEFERRED';
-	} elsif ($signal eq 'CONT') {
-	    $j->{state} = 'DEFERRED';
-	    $run_queue_needed++;
-	}
-    } else {
-      carp_once [$signal], "Received signal '$signal' on deferred job(s),",
-	" Ignoring.\n";
+    my ($signal, @jobs) = @_;
+    my @signalled = ();
+    #my $num_signalled = 0;
+    my $run_queue_needed = 0;
+
+    if ($signal eq 'TSTP' || $signal eq 'TTIN' || $signal eq 'TTOU'
+	|| $signal eq 'FREEZE') {
+	$signal = 'STOP';
+    } elsif ($signal eq 'THAW') {
+	$signal = 'CONT';
+    } elsif ($signal =~ /(CHLD|CLD|JVM|LWP|URG|WINCH)/) {
+	$signal = 'ZERO';
     }
-  }
-  return ($num_signalled, $run_queue_needed);
+
+    foreach my $j (@jobs) {
+	if (Forks::Super::Util::is_kill_signal($signal)) {
+	    $j->_mark_complete;
+	    $j->{status} = Forks::Super::Util::signal_number($signal) || -1;
+	    $j->_mark_reaped;
+	    push @signalled, $j;
+	} elsif ($signal eq 'STOP' || $signal eq 'CONT' || $signal eq 'ZERO') {
+#	    $num_signalled++;
+	    push @signalled, $j;
+	    if ($signal eq 'STOP') {
+		$j->{state} = 'SUSPENDED-DEFERRED';
+	    } elsif ($signal eq 'CONT') {
+		$j->{state} = 'DEFERRED';
+	    }
+	} else {
+	    carp_once [$signal], 
+	        "Received signal '$signal' on deferred job(s),",
+	        " Ignoring.\n";
+	}
+    }
+    return (@signalled, $run_queue_needed);
+    #return ($num_signalled, $run_queue_needed);
 }
 
 sub _unreap {
-  my (@pids) = @_;
-  my $old_status = $?;
-  foreach my $pid (@pids) {
-    if ($pid == waitpid $pid, 0, 1.0) {
-      my $j = Forks::Super::Job::get($pid);
-      $j->{state} = 'COMPLETE';
-      delete $j->{reaped};
-      $? = $old_status;
+    my (@pids) = @_;
+    my $old_status = $?;
+    foreach my $pid (@pids) {
+	if ($pid == waitpid $pid, 0, 1.0) {
+	    my $j = Forks::Super::Job::get($pid);
+	    $j->{state} = 'COMPLETE';
+	    if (delete $j->{reaped}) {
+		if ($DEBUG) {
+		    debug("_unreap: unreaped $pid");
+		}
+	    }
+	    $? = $old_status;
+	}
     }
-  }
-  return;
+    return;
 }
 
 #############################################################################
@@ -535,14 +596,14 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.52
+Version 0.53
 
 =head1 SYNOPSIS
 
     use Forks::Super;
     use Forks::Super MAX_PROC => 5, DEBUG => 1;
 
-    # familiar use - parent returns PID>0, child returns zero
+    # --- familiar use - parent returns PID>0, child returns zero
     $pid = fork();
     die "fork failed" unless defined $pid;
     if ($pid > 0) {
@@ -551,7 +612,7 @@ Version 0.52
         # child code
     }
 
-    # wait for a child process to finish
+    # --- wait for a child process to finish
     $w = wait;                  # blocking wait on any child, $? holds child exit status
     $w = waitpid $pid, 0;       # blocking wait on specific child
     $w = waitpid $pid, WNOHANG; # non-blocking wait, use with POSIX ':sys_wait_h'
@@ -563,22 +624,22 @@ Version 0.52
     $pid = fork { cmd => "./myScript 17 24 $n" };
     $pid = fork { exec => [ "/bin/prog" , $file, "-x", 13 ] };
 
-    # fork directly to a Perl subroutine. Child doesn't return.
+    # --- fork directly to a Perl subroutine. Child doesn't return.
     $pid = fork { sub => $methodNameOrRef , args => [ @methodArguments ] };
     $pid = fork { sub => \&subroutine, args => [ @args ] };
     $pid = fork { sub => sub { "anonymous sub" }, args => [ @args ] );
 
-    # put a time limit on the child process
+    # --- impose a time limit on the child process
     $pid = fork { cmd => $command, 
                   timeout => 30 };            # kill child if not done in 30s
     $pid = fork { sub => $subRef , args => [ @args ],
                   expiration => 1260000000 }; # complete by 8AM Dec 5, 2009 UTC
 
-    # run a child process starting from a different directory
+    # --- run a child process starting from a different directory
     $pid = fork { dir => "some/other/directory",
                   cmd => ["command", "--that", "--runs=somewhere", "else"] };
 
-    # obtain standard filehandles for the child process
+    # --- obtain standard filehandles for the child process
     $pid = fork { child_fh => "in,out,err" };
     if ($pid == 0) {      # child process
        sleep 1;
@@ -606,15 +667,22 @@ Version 0.52
        print $child_stdin "And no back talking!\n" if $child_err;
     }
 
+    # --- retrieve variable values from a child process
+    $pid1 = fork { share => [ \$scalar, \@list ], sub => \&method };
+    $pid2 = fork { share => [ \@list, \%hash ], sub => \&someOtherMethod };
+    waitpid $pid1, 0;
+    waitpid $pid2, 0;
+    # now $scalar is set to value in 1st job, @list has values from both jobs, %hash has values from 2nd job
+
     # ---------- manage jobs and system resources ---------------
-    # runs 100 tasks but fork call blocks while there are already 5 active jobs
+    # --- runs 100 tasks but fork call blocks while there are already 5 active jobs
     $Forks::Super::MAX_PROC = 5;
     $Forks::Super::ON_BUSY = 'block';
     for ($i=0; $i<100; $i++) {
        $pid = fork { cmd => $task[$i] };
     }
 
-    # jobs fail (without blocking) if the system is too busy
+    # --- jobs fail (without blocking) if the system is too busy
     $Forks::Super::MAX_LOAD = 2.0;
     $Forks::Super::ON_BUSY = 'fail';
     $pid = fork { cmd => $task };
@@ -625,7 +693,7 @@ Version 0.52
     # Start job immediately if < 3 jobs running
     $pid = fork { sub => 'MyModule::MyMethod', args => [ @b ], max_proc => 3 };
 
-    # try to fork no matter how busy the system is
+    # --- try to fork no matter how busy the system is
     $pid = fork { force => 1, sub => \&MyMethod, args => [ @my_args ] };
 
     # when system is busy, queue jobs. When system is not busy, 
@@ -638,17 +706,17 @@ Version 0.52
     $pid = fork { cmd => $future_job, 
                   delay => 20 }       # force job onto queue for at least 20s
 
-    # assign descriptive names to tasks
+    # --- assign descriptive names to tasks
     $pid1 = fork { cmd => $command, name => "my task" };
     $pid2 = waitpid "my task", 0;
 
-    # run callbacks at various points of job life-cycle
+    # --- run callbacks at various points of job life-cycle
     $pid = fork { cmd => $command, callback => \&on_complete };
     $pid = fork { sub => $sub, args => [ @args ],
                   callback => { start => 'on_start', finish => \&on_complete,
                                 queue => sub { print "Job $_[1] queued\n" } } };
 
-    # set up dependency relationships
+    # --- set up dependency relationships
     $pid1 = fork { cmd => $job1 };
     $pid2 = fork { cmd => $job2, 
                    depend_on => $pid1 };            # put on queue until job 1 is complete
@@ -660,11 +728,11 @@ Version 0.52
     $pid7 = fork { cmd => $job7, 
                    depend_on => "group C" };        # wait for jobs 5 & 6 to complete
 
-    # manage OS settings on jobs -- may not be available on all systems
+    # --- manage OS settings on jobs -- may not be available on all systems
     $pid1 = fork { os_priority => 10 };   # like nice(1) on Un*x
     $pid2 = fork { cpu_affinity => 0x5 }; # background task to prefer CPUs #0,2
 
-    # job information
+    # --- job information
     $state = Forks::Super::state($pid);   # one of qw(ACTIVE DEFERRED COMPLETE REAPED)
     $status = Forks::Super::status($pid); # exit status ($?) for completed jobs
 
@@ -681,6 +749,9 @@ Version 0.52
     my ($fh_in, $fh_out, $pid, $job) = Forks::Super::open2(@command);
     my ($fh_in, $fh_out, $fh_err, $pid, $job) 
             = Forks::Super::open3(@command, { timeout => 60 });
+
+    # --- run a background process as a *daemon*
+    $job = fork { cmd => $cmd, daemon => 1 };
 
 =head1 DESCRIPTION
 
@@ -874,6 +945,40 @@ C<chdir> and C<dir> are synonyms.
 
 =back
 
+=head3 env
+
+=over 4
+
+=item C<< fork { env => \%values } >>
+
+Passes additional environment variable settings to a child process.
+
+=back
+
+=head3 umask
+
+=over 4
+
+=item C<< fork { umask => $mask } >>
+
+Sets the "umask" of the background process to specify the default
+permissions of files and directories created by the background process.
+See L<perlfunc/umask> and L<umask(1)>.
+
+As it is with the Perl builtin function, the C<$mask> argument is a
+number, usually given in octal form, but it is not a string of octal
+digits. So
+
+    fork { umask => "0775" , ... }
+
+will probably not do what you want. Instead, use one of
+
+    fork { umask => 0775, ... }
+    fork { umask => 509, ... }     # 509 == 0775
+    fork { umask => oct "0775", ... }
+
+=back
+
 =head3 delay
 
 =head3 start_after
@@ -1008,7 +1113,7 @@ This syntax will be extended and cleaned up in 1.0.
 
 =back
 
-=head3 Socket handles vs. file handles vs. pipes
+=head4 Socket handles vs. file handles vs. pipes
 
 Here are some things to keep in mind when deciding whether to
 use sockets, pipes, or regular files for parent-child IPC:
@@ -1058,7 +1163,7 @@ C<Forks::Super::fork>).
 
 =cut
 
-=head3 Socket and file handle gotchas
+=head4 Socket and file handle gotchas
 
 Some things to keep in mind when using socket or file handles
 to communicate with a child process.
@@ -1205,6 +1310,58 @@ way the background process is displaying in your process viewer.
 about overriding the special C<$0> variable.)
 
 =back
+
+=back
+
+=cut
+
+=head3 daemon
+
+=over 4
+
+=item C<< fork { daemon => 1 } >>
+
+Launches the background process as a I<daemon>, partially severing
+the relationship between the parent and child process.
+
+Features of daemon process:
+
+=over 4
+
+=item * closes all open file descriptors from the parent
+
+=item * begins in root directory C<"/"> unless the
+C<< dir => ... >> option is specified
+
+=item * has umask of zero unless  umask => ...  option specified
+
+=item * daemon will not be affected by signals to the parent
+
+=back
+
+The following restrictions apply to C<daemon> processes:
+
+=over 4
+
+=item * the C<finish> callback, if any, will never be called for a daemon
+
+=item * the L<< Forks::Super::Job::is_XXX|Forks::Super::Job/"is_<state>" >>,
+L<state|Forks::Super::Job/"state"> methods may not be correct for a daemon
+
+=item * the L<Forks::Super::Job::status|Forks::Super::Job/status> 
+method will not work on a daemon
+
+=item * you cannot use L<"waitpid"> on a daemon process.
+
+=item * on MSWin32, must be used with C<< cmd => ... >> or C<< exec => ... >>
+option
+
+=item * on MSWin32, this feature requires L<Win32::Process>
+
+=back
+
+Also note that C<daemon> processes will B<not> count against the
+C<$Forks::Super::MAX_PROC> limits.
 
 =back
 
@@ -1509,7 +1666,7 @@ remain in its current state.
 
     my $pid = fork { exec => "run-the-heater",
                      suspend => sub {
-                       my $t = get_temperature();
+                       my $t = get_temperature(); # in degrees Fahrenheit
                        if ($t < 68) {
                            return +1;  # too cold, make sure heater is on
                        } elsif ($t > 72) {
@@ -1519,6 +1676,45 @@ remain in its current state.
                        }
                     } };
 
+
+=back
+
+=head3 share
+
+=over 4
+
+=item C<< fork { share => [ >> I<list-of-references> C<< ] } >>
+
+Allows variables in the parent process to be updated when the child exits.
+
+Input is a listref of references -- scalar, list, or hash references --
+that may be updated in a child process. When the child process finishes,
+the values of these variables in the parent are updated with the values
+that were in the child on its exit. The value of a scalar variable will
+be overwritten with the child value, arrays and hashes will be appended
+with the child values.
+
+    use Forks::Super;
+    my $a = 'old value';
+    my @a = 1..5;
+    my %a = (abc => 'def');
+    $job = fork {
+        share => [ \$a, \@a, \%a ],
+        sub => {
+           $a = 'new value';
+           @a = qw(foo bar);
+           %a = (bar => 'foo', 19 => 42);
+        }
+    };
+    waitpid $job, 0;
+    print "\$a now contains $a\n";     # scalar overwritten => 'new value'
+    print "\@a now contains @a\n";     # list appended => 1 2 3 4 5 foo bar
+    print "\%a now contains ",keys %a,"\n"; # hash appended => abc,bar,19
+
+This option is not meaningful when used with the C<cmd> or C<exec> options.
+
+If you use the C<share> option in perl's "taint" mode, you will also
+need to pass an C<< untaint => 1 >> option to the C<fork> call.
 
 =back
 
@@ -1790,18 +1986,19 @@ returning.
 
 =item C<$num_signalled = Forks::Super::kill $signal, @jobsOrPids>
 
-Send a signal to the background processes specified
-either by process IDs, job names, or L<Forks::Super::Job>
-objects. Returns the number of jobs that were successfully
-signalled.
+A cross-platform process signalling function. Sends "signals" to the
+background processes specified by process IDs, job names, or
+L<Forks::Super::Job> objects. Returns the number of jobs that
+were successfully signalled. 
 
 This method "does what you mean" with respect to terminating,
-suspending, or resuming processes. In this way, you may "send
-signals" to jobs in the job queue (that don't even have a proper 
-process id yet). On Windows systems, which do not have a Unix-like
-signals framework, this can be accomplished through 
-the appropriate Windows API calls. It is highly recommended
-that you install the L<Win32::API> module for this purpose.
+suspending, or resuming processes. This method may "send signals"
+to jobs in the job queue (that don't even have a proper process
+id yet), or signal processes on Windows systems (which do not
+have a Unix-like signals framework). The appropriate Windows API
+calls are used to communicate with Windows processes and threads.
+It is highly recommended that you install the L<Win32::API>
+module for this purpose. 
 
 See also the L<< 
 Forks::Super::Job::suspend|Forks::Super::Job/"$job->suspend" >>
@@ -2111,11 +2308,12 @@ the command continues in a background process. When the command completes,
 interprocess communication copies the output of the command into the
 result (left hand side) variable. If the result variable is referenced
 again before the background process is complete, the program will wait
-until the background process completes.
+until the background process completes. A job that fails or otherwise
+produces no output will return the empty string (C<"">).
 
 Think of this command as a background version of Perl's backticks
-or L<qx()|perlop/"qx"> function (albeit one that always returns
-a scalar). 
+or L<qx()|perlop/"qx"> function (albeit one that can only work in
+scalar context).
 
 The background job will be spawned with the C<Forks::Super::fork> call,
 and the command can block, fail, or defer a background job in accordance
@@ -2136,7 +2334,8 @@ for C<bg_qx> are L<"cmd">, L<"sub">, L<"exec">, and L<"child_fh">.
 Like L<"bg_eval">, a call to C<bg_qx> will populate the
 variables C<$Forks::Super::LAST_JOB> and C<$Forks::Super::LAST_JOB_ID>
 with the L<Forks::Super::Job> object and the job id, respectively,
-for the job created by the C<bg_qx> call. See L<MODULE VARIABLES/"LAST_JOB"> below.
+for the job created by the C<bg_qx> call. 
+See L<MODULE VARIABLES/"LAST_JOB"> below.
 
 See also: L<"bg_eval">.
 
@@ -2464,7 +2663,11 @@ Setting this value to C<"undef"> (the string literal C<"undef">,
 not the Perl special value C<undef>) will disable 
 file-based interprocess communication for your program. 
 The module will fall back to using sockets or pipes 
-(probably sockets) for all IPC.
+(probably sockets) for all IPC. Some features of this distribution
+may not work or may not work properly if file-based IPC is disabled.
+
+    share => ...  feature
+    signalling, suspending, resuming a daemon
 
 =back
 
@@ -2828,21 +3031,6 @@ systems. It is possible that some features will not work
 as advertised. Please report any problems you encounter 
 to E<lt>mob@cpan.orgE<gt> and I'll see what I can do 
 about it.
-
-=cut
-
-# segfaults during cleanup haven't been observed in a long time ...
-# let's retire this section unless they come back ...
-
-_head2 Segfaults during cleanup
-
-On some systems, it has been observed that an application 
-using the C<Forks::Super> module may run normally, but might
-produce a segmentation fault or other error during cleanup.
-This will cause the application to exit with a non-zero exit
-code, even when the code accomplished everything it was 
-supposed to. The cause and resolution of these errors is an
-area of ongoing research.
 
 =head2 Other bugs or feature requests
 

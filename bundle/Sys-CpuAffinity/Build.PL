@@ -107,7 +107,7 @@ my $builderclass = Module::Build->subclass(
            push @successfully_compiled, $xs_file;
            File::Copy::move($xs_file, "contrib/ok/");
        }
-       unlink <lib/xs/*>;
+       unlink <lib/xs/*.xs>;
      }
      if (@successfully_compiled == 0) {
        warn q[

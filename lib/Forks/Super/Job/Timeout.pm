@@ -15,7 +15,7 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -28,7 +28,7 @@ our ($ORIG_PGRP, $NEW_PGRP, $NEW_SETSID, $NEWNEW_PGRP);
 #   - SIGQUIT is not appropriate on Cygwin 5.10 (_cygtls exception msgs)
 #   - SIGINT,QUIT not appropriate on Cygwin 5.6.1 (t/40g#3-6 fail)
 #   - linux 5.6.2 intermittent problems with any signals
-our $TIMEOUT_SIG = $ENV{FORKS_SUPER_TIMEOUT_SIG} || 'HUP';
+our $TIMEOUT_SIG = $ENV{FORKS_SUPER_TIMEOUT_SIG} || (&IS_WIN32?'QUIT':'HUP');
 
 sub Forks::Super::Job::_config_timeout_parent {
   my $job = shift;
@@ -95,7 +95,7 @@ sub Forks::Super::Job::_config_timeout_child {
       $NEW_SETSID = 0;
       if ($NEW_PGRP ne $ORIG_PGRP) {
 	if ($job->{debug}) {
-	  debug("Forks::Super::Job::_config_timeout_child: ",
+	  debug("_config_timeout_child: ",
 		"Child process group changed to $job->{pgid}");
 	}
       } else {
@@ -103,7 +103,7 @@ sub Forks::Super::Job::_config_timeout_child {
 	$NEW_SETSID = POSIX::setsid();
 	$job->{pgid} = $NEW_PGRP = getpgrp(0);
 	if ($job->{debug}) {
-	  debug("Forks::Super::Job::_config_timeout_child: ",
+	  debug("_config_timeout_child: ",
 		"Child process started new session $NEW_SETSID, ",
 		"process group $NEW_PGRP");
 	}
@@ -123,11 +123,10 @@ sub Forks::Super::Job::_config_timeout_child {
   $XSIG{ALRM}[1] = \&_child_timeout;
 
   $EXPIRATION = Time::HiRes::time() + $timeout - 1.0;
-
   $Forks::Super::Job::Timeout::USE_ITIMER = 0;
   alarm $timeout;
 
-  debug("Forks::Super::Job::_config_timeout_child(): ",
+  debug("_config_timeout_child(): ",
 	"alarm set for ${timeout}s in child process $$")
     if $job->{debug};
 
@@ -141,11 +140,16 @@ sub _child_timeout {
   # several purposes, so the fact that this function is
   # called does not necessarily mean it is time for the
   # child to exit.
-
-  return if $Forks::Super::SysInfo::CONFIG{'setitimer'}
-    && $Forks::Super::Job::Timeout::USE_ITIMER
-    && Time::HiRes::time() 
-        < $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL;
+  if ($Forks::Super::SysInfo::CONFIG{'setitimer'}
+      && $Forks::Super::Job::Timeout::USE_ITIMER
+      && Time::HiRes::time() 
+              < $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL) {
+      if ($DEBUG) {
+	  debug("SIGALRM caught in child, but expiration time ",
+		$EXPIRATION, " not reached yet (", Time::HiRes::time(), ")");
+      }
+      return;
+  }
 
   warn "Forks::Super: child process timeout\n";
   $TIMEDOUT = 1;
@@ -153,6 +157,7 @@ sub _child_timeout {
   # we wish to kill not only this child process,
   # but any other active processes that it has spawned.
   # There are several ways to do this.
+  my $job = $Forks::Super::Job::self;
 
   if (Forks::Super::Config::CONFIG('Proc::ProcessTable')) {
       my @to_kill = _child_timeout_read_procs_to_kill_from_Proc_ProcessTable();
@@ -198,12 +203,16 @@ sub _child_timeout_read_procs_to_kill_from_Proc_ProcessTable {
 sub _child_timeout_Win32 {
     my $proc = Forks::Super::Job::get_win32_proc();
     my $pid = Forks::Super::Job::get_win32_proc_pid();
+    my $job = $Forks::Super::Job::self;
     if (defined $proc) {
-      if ($proc eq '__open3__') {
+      if ($proc eq '__open3__' || $proc eq '__system1__') {
 	# Win32::Process nice to have but not required.
 	# TASKKILL is pretty standard on Windows systems, isn't it?
 	# Maybe not completely standard :-(
-	my $result = system("TASKKILL /F /T /PID $pid > nul");
+
+	# XXX - is  kill -9, $pid  suitable (see perlport#kill)
+#	my $result = system("TASKKILL /F /T /PID $pid > nul");
+	my $result = CORE::kill -9, $pid;
       } elsif ($proc eq '__system__') {
 	$proc = undef;
 	if (defined($Forks::Super::Job::self)
@@ -227,6 +236,21 @@ sub _child_timeout_Win32 {
 		  "exitCode=$exitCode");
 	  }
 	}
+      }
+    } elsif (defined($job->{signal_pid} && $job->{signal_pid} != $$)) {
+      # for a cmd-style job, signal the command
+      if ($job->{debug}) {
+	  debug("Sending SIG$TIMEOUT_SIG to ", $job->{signal_pid});
+	  sleep 5;
+      }
+      if (&IS_WIN32) {
+	  if ($job->{debug}) {
+	      debug("trying to terminate $job->{signal_pid}");
+	  }
+	  my $result = system("TASKKILL /F /T /PID $pid > nul");
+	  debug("Win32::terminate_process result was $result") if $job->{debug};
+      } else {
+	  CORE::kill $TIMEOUT_SIG, $job->{signal_pid};
       }
     } else {
       $DISABLE_INT = 1;
@@ -266,8 +290,7 @@ sub _cleanup_child {
 	  my $num_killed = CORE::kill 'INT', -$NEW_PGRP; 
 	  # kill -PID === kill PGID. Not portable
 	  if ($num_killed && $NEW_PGRP && $DEBUG) {
-	    debug("Forks::Super::child_exit: sent SIGINT to ",
-		  "$num_killed grandchildren");
+	    debug("child_exit: sent SIGINT to $num_killed grandchildren");
 	  }
 	}
       }

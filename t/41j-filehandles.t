@@ -15,7 +15,7 @@ my $pid = fork {
 };
 
 ok(isValidPid($pid), "$$\\job launched");
-sleep 1;
+sleep 2;
 my $t = Time::HiRes::time();
 my $y = $pid->read_stdout();
 $t = Time::HiRes::time() - $t;
@@ -47,7 +47,7 @@ $t = Time::HiRes::time();
 $z = $pid->read_stdout(block => 1);
 $t = Time::HiRes::time() - $t;
 ok($z eq "abc\n", "blocking \$obj->read_stdout() ok");
-ok($t >= 2.0, "blocking read took ${t}s expected ~4s");
+ok($t >= 1.7, "blocking read took ${t}s expected ~4s");    ### 11 ###
 
 $t = Time::HiRes::time();
 $z = <$pid>;

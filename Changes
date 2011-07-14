@@ -1,11 +1,23 @@
 Revision history for Forks-Super
 
+0.53    2011-07-14
+        Introduce  daemon  option to fork.
+        Introduce  share => list-of-refs  option to fork.
+        Introduce  env => \%kvpairs , umask => mask  options to fork.
+        Fixed -MForks::Super=cleanse bug introduced in 0.52
+        Forks::Super::kill on cmd-style job now delivers signal to the external
+        command, not the perl process that called system().
+        Increased initial deferred job id from -100K to -500K.
+        MSWin32 refactoring: fork-to-cmd, fork-to-exec, OS priority code.
+	bg_eval, bg_qx commands now return empty string on failure, never undef.
+        Upgrade Signals::XSIG bundle to v0.12.
+
 0.52    2011-06-21
         Calling Forks::Super::LazyEval::bg_eval and bg_qx in list context
 	doesn't work and is now disabled.
         Performance enhancement for fork with file-based IPC.
         Upgrade Sys-CpuAffinity bundle to v1.01
-        Bug fix in timeout code that cause BSD to hang.
+        Bug fix in timeout code that hangs BSD (looks like it didn't work)
 	Test fixes.
 
 0.51    2011-04-18

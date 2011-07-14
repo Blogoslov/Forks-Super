@@ -1,6 +1,6 @@
 use Forks::Super ':test';
 use Forks::Super::Config ':all';
-use Test::More tests => 6;
+use Test::More tests => 5;
 use strict;
 use warnings;
 
@@ -12,7 +12,6 @@ use warnings;
 # like setting the priority of a background process
 # or setting the CPU affinity of a background process
 #
-
 
 ######################################################################
 
@@ -105,14 +104,24 @@ SKIP: {
   close $T;
 
   my $phandle = Forks::Super::Job::OS::Win32::get_process_handle($winpid);
+
+  diag("\$winpid is $winpid\n", (grep{/$winpid/}qx(TASKLIST)),
+       "\$phandle is $phandle\n");
+
   if ($phandle) {
     my ($proc_affinity, $sys_affinity) = (0,0);
     my $result 
       = Forks::Super::Job::OS::Win32::win32api("GetProcessAffinityMask",
 					     $phandle, $proc_affinity,
 					     $sys_affinity);
-    $proc_affinity = ord($proc_affinity);
+    $proc_affinity = unpack "L", substr($proc_affinity."\0\0\0\0",0,4);
+    $sys_affinity = unpack "L", substr($sys_affinity."\0\0\0\0",0,4);
     my $result2 = Sys::CpuAffinity::getAffinity($winpid);
+
+    diag("proc_affinity: $proc_affinity");
+    diag("sys_affinity:  $sys_affinity");
+    diag("SCU::getAffinity($winpid): $result2");
+
     ok($result != 0 && $proc_affinity == 1, 
        "MSWin32 set affinity on external Win32::Process $proc_affinity==1"
       ." $result/$result2");
@@ -127,41 +136,43 @@ waitall;
 
 # Win32 specific test: a spawned process should have the same priority
 # as the job that spawned it
-
-SKIP: {
-  if ($^O ne 'MSWin32') {
-    skip "priority test of Win32 Process object on $^O", 1;
-  }
-
-  skip "priority test unavailable", 1;
-
-  unlink "$output";
-  my $pid = fork {
-    cmd => [ $^X, "t/external-command.pl", 
-	     "-o=$output", "--winpid", "-s=10" ],
-      os_priority => 1
-  };
-  sleep 2;
-  open(my $T, '<', $output);
-  my $winpid = <$T>;
-  close $T;
-
-  my $phandle = Forks::Super::Job::OS::Win32::get_process_handle($winpid);
-  if ($phandle) {
-    my ($proc_affinity, $sys_affinity) = (0,0);
-    my $result 
-      = Forks::Super::Job::OS::Win32::win32api("GetProcessAffinityMask",
-					     $phandle, $proc_affinity,
-					     $sys_affinity);
-    $proc_affinity = ord($proc_affinity);
-    my $result2 = Sys::CpuAffinity::getAffinity($winpid);
-    ok($result != 0 && $proc_affinity == 1, 
-       "MSWin32 set affinity on external Win32::Process $proc_affinity==1"
-      ." $result/$result2");
-  } else {
-    ok(0, "could not obtain handle to external process on pid $winpid");
-  }
-}
+#
+#SKIP: {
+#  if ($^O ne 'MSWin32') {
+#    skip "priority test of Win32 Process object on $^O", 1;
+#  }
+#
+#  skip "priority test unavailable", 1;
+#
+#  unlink "$output";
+#  my $pid = fork {
+#    cmd => [ $^X, "t/external-command.pl", 
+#	     "-o=$output", "--winpid", "-s=10" ],
+#    os_priority => 4, 
+#  };
+#  sleep 2;
+#  open(my $T, '<', $output);
+#  my $winpid = <$T>;
+#  close $T;
+#
+#diag "winpid is $winpid\n";
+#
+#  my $phandle = Forks::Super::Job::OS::Win32::get_process_handle($winpid);
+#  if ($phandle) {
+#    my ($proc_affinity, $sys_affinity) = (chr(0) x 4, chr(0) x 4);
+#    my $result 
+#      = Forks::Super::Job::OS::Win32::win32api("GetProcessAffinityMask",
+#					     $phandle, $proc_affinity,
+#					     $sys_affinity);
+#
+#    my $result2 = Sys::CpuAffinity::getAffinity($winpid);
+#    ok($result != 0 && $proc_affinity == 1, 
+#       "MSWin32 set affinity on external Win32::Process $proc_affinity==1"
+#      ." $result/$result2");
+#  } else {
+#    ok(0, "could not obtain handle to external process on pid $winpid");
+#  }
+#}
 
 waitall;
 unlink $output;
@@ -179,7 +190,8 @@ sub get_os_priority {
   }
 
   if ($^O eq 'MSWin32') {
-    return Forks::Super::Job::OS::Win32::get_thread_priority($pid);
+    #return Forks::Super::Job::OS::Win32::get_thread_priority($pid);
+    return Forks::Super::Job::OS::Win32::get_priority($pid);
   }
   return;
 }

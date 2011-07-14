@@ -14,6 +14,15 @@ if (${^TAINT}) {
   $ENV{PATH} = "";
   ($^X) = $^X =~ /(.*)/;
   ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+
+  # since v0.53 (daemon code) we call Cwd::abs_path or Cwd::getcwd and
+  # the default IPC directory is tainted ...
+  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+  }
+  ($ipc_dir) = $ipc_dir =~ /(.*)/;
+  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
 #######################################################

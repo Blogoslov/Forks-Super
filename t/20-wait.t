@@ -66,18 +66,3 @@ for (my $i=0; $i<5; $i++) {
 }
 $t = Time::HiRes::time() - $t;
 ok($t <= 1, "fast return wait on nothing ${t}s, expected <=1s"); ### 94 ###
-
-
-
-__END__
-
--------------------------------------------------------
-
-Feature:	wait function
-
-What to test:	wait function when there is something to reap immediately
-		wait function when we wait for something to reap
-		wait function when there is nothing to reap
-		multiple wait calls for multiple reaps
-
--------------------------------------------------------

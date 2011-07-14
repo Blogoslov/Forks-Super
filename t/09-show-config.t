@@ -42,6 +42,7 @@ print STDERR "Using tied IPC filehandles: ",
 	" $Forks::Super::Job::Ipc::USE_TIE_FH",
 	" $Forks::Super::Job::Ipc::USE_TIE_SH",
 	" $Forks::Super::Job::Ipc::USE_TIE_PH\n";
+print STDERR "Time_HiRes_TOL: $Forks::Super::SysInfo::TIME_HIRES_TOL\n";
 
 print STDERR "\n";
 

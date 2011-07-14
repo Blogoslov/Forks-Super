@@ -38,13 +38,16 @@ sub child_suspend_callback_function {
   }
   if ($d < 10) {
       print $DEBUG " :  suspend\n";
-      open SEM, '>>', "$file.sem";
-      flock SEM, 2;
-      close SEM;
+      open my $SEM, '>>', "$file.sem";
+      flock $SEM, 2;
+      close $SEM;
 
       # there is still a race condition here, as the child process could seize
       # the semaphore between now and the time the  SIGSTOP  actually gets
       # sent from the parent to the child.
+
+      # If that happens, this test will hang and possibly timeout.
+
       return -1;
   }
   if ($d < 15) {
@@ -58,9 +61,9 @@ sub child_suspend_callback_function {
 sub read_value {
   no warnings 'unopened';
   my $fh;
-  unless(open $fh, '<', $file) {
-    sleep 1;
-    open $fh, '<', $file;
+  for (1..10) {
+      last if open $fh, '<', $file;
+      sleep 1;
   }
   my $F = <$fh>;
   close $fh;
@@ -121,8 +124,23 @@ if (exists $SIG{TSTP}) {
 # then process should resume and run for 5-10 seconds
 
 Forks::Super::Util::pause($t1 + 2.0 - Time::HiRes::time());
+
 ok($job->{state} eq 'ACTIVE', "$$\\job has started")
       or diag("job state was ", $job->{state}, " expected ACTIVE");
+
+
+
+# www.cpantesters.org/cpan/report/25b3453c-a320-11e0-8b35-dd57e1de4735:
+#    job was COMPLETE at this point, not ACTIVE?
+if ($job->{state} eq 'COMPLETE') {
+   my $waitpid = waitpid $job, 0;
+   my $status = $job->{status};
+   diag("ack. job is COMPLETE when it should be active? waitpid:$waitpid ",
+        "status:$status. Don't expect the rest of this test to go well.");
+}
+
+
+
 my $w = read_value();
 ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
 

@@ -56,8 +56,6 @@ for (my $i=0; $i<4; $i++) {
 # (see www.cpantesters.org/cpan/report/b2d2eb00-6ec0-11e0-ab3a-49fa30e3b300)
 # include some diag() statements to help track it down ...
 
-diag("sending data to child processes ...");
-
 my @data = (@INC,%INC,keys(%!),keys(%ENV),0..99)[0 .. 99];
 my (@pdata, @cdata);
 for (my $i=0; $i<@data; $i++) {
@@ -66,15 +64,12 @@ for (my $i=0; $i<@data; $i++) {
 }
 
 for my $pid (@pids) {
-    diag("closing child processes $pid ...");
   Forks::Super::write_stdin($pid, "__END__\r\n");
   Forks::Super::write_stdin($pid, "__END__\r\n");
   $pid->close_fh('stdin');
 }
 
-diag("waiting on child processes ...");
 waitall;
-diag("reading child process output ...");
 
 foreach (@pids) {
   push @cdata, Forks::Super::read_stdout($_);

@@ -70,7 +70,7 @@ sub repeater {
 
 #######################################################
 
-my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
+my $pid = fork { sub => \&repeater, timeout => 12, args => [ 3, 1 ], 
 		 child_fh => "in,out,err,pipe" };
 
 ok(isValidPid($pid), "pid $pid valid");
