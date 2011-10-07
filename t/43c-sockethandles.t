@@ -60,7 +60,7 @@ sub repeater {
     Forks::Super::pause();
   }
   if (0 && $Forks::Super::DEBUG) { # f_in can't be read in socket context
-    my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
+    my $f_in = Forks::Super::Job->this->{fh_config}->{f_in};
     Forks::Super::debug("repeater: time expired. ",
 			"Not processing any more input");
     Forks::Super::debug("input was from file: $f_in");

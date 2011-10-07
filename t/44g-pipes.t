@@ -44,7 +44,7 @@ $out = Forks::Super::read_stdout($pid, "block" => 1);
 my $t4 = Time::HiRes::time() - $t0;
 my $t43 = $t4 - $t3;
 ok($out =~ /^baz/, "successful blocking read on stdout");
-ok($t43 > 3.5, "read blocked stdout ${t43}s, expected ~5s");
+ok($t43 > 3.1, "read blocked stdout ${t43}s, expected ~5s");        ### 10 ###
 
 #### no more input on STDOUT or STDERR
 
@@ -92,3 +92,4 @@ ok($x, "read stdout with block");
 $x = $pid->read_stderr();
 ok(!$x, "read unavail stderr");
 
+# waitall;

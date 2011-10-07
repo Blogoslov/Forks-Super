@@ -9,48 +9,48 @@ use vars qw(%ATTR %VALUE);
 # Used in Forks::Super for $ON_BUSY and $QUEUE_INTERRUPT
 
 sub TIESCALAR {
-  my ($class, @attr) = @_;
-  my $self;
-  bless \$self, $class;
-  $VALUE{\$self} = $attr[0];
-  $ATTR{\$self} = [ @attr ];
-  return \$self;
+    my ($class, @attr) = @_;
+    my $self;
+    bless \$self, $class;
+    $VALUE{\$self} = $attr[0];
+    $ATTR{\$self} = [ @attr ];
+    return \$self;
 }
 
 sub FETCH {
-  my $self = shift;
-  return $VALUE{$self};
+    my $self = shift;
+    return $VALUE{$self};
 }
 
 sub STORE {
-  my ($self,$value) = @_;
-  foreach my $attr (@{$ATTR{$self}}) {
-    if (uc $value eq uc $attr) {
-      $VALUE{$self} = $attr;
-      return;
+    my ($self,$value) = @_;
+    foreach my $attr (@{$ATTR{$self}}) {
+	if (uc $value eq uc $attr) {
+	    $VALUE{$self} = $attr;
+	    return;
+	}
     }
-  }
-  if ($ATTR{""}) {
-    $VALUE{$self} = "";
-  } else {
-    carp "Invalid assignment to enumerated tied scalar\n";
-  }
-  return;
+    if ($ATTR{''}) {
+	$VALUE{$self} = '';
+    } else {
+	carp "Invalid assignment to enumerated tied scalar\n";
+    }
+    return;
 }
 
 sub _has_attr {
-  my ($obj, $value) = @_;
-  foreach my $attr (@{$ATTR{$obj}}) {
-    if (uc $value eq uc $attr) {
-      return 1;
+    my ($obj, $value) = @_;
+    foreach my $attr (@{$ATTR{$obj}}) {
+	if (uc $value eq uc $attr) {
+	    return 1;
+	}
     }
-  }
-  return 0;
+    return 0;
 }
 
 sub _get_value {
-  my ($obj) = @_;
-  return $VALUE{$obj};
+    my ($obj) = @_;
+    return $VALUE{$obj};
 }
 
 1;

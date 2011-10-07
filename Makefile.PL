@@ -29,7 +29,7 @@ our $FILES_TO_CLEAN
 		 lib/Forks/Super/SysInfo.pm t/out/spawn*
 		 t/out/sigchld.debug t/out/test* t/out/.lock-*
 		 t/out/49.* t/out/debug1-* t/out/limits.*
-		 t/out/ipc* t/out/new-ipc* t/out/66* t/dir*
+		 t/out/ipc* t/out/new-ipc* t/out/66* t/dir* t/out/24*
                  t/out/daemon* lib/_Inline *.stackdump _Inline);
 
 our %META_MERGE
@@ -167,9 +167,6 @@ sub MY::postamble {
 
 fasttest :: pure_all
 	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q
-
-fastertest :: pure_all
-	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q -m 15 -s
 
 # ------ stress test: run all tests in parallel 100 times
 

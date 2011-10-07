@@ -64,6 +64,7 @@ if ($pid) {
     # If that works, it will suppress the "WSFO time out ..." error.
     my $target_pgid = $$;
     if (fork() == 0) {
+      $0="system-limits.PL cygwin cleanup";
       sleep 30;
       my @proc_table = qx(/usr/bin/ps);
       shift @proc_table;             # skip header
@@ -104,7 +105,7 @@ $LIMITS{version} = $];
 &checkif_sleep_alarm_compatible;
 &count_number_of_cpus;
 &find_max_open_filehandles;     # on some systems:  ulimit -n
-&find_max_open_sockets;
+&find_max_open_sockets;         # TODO
 &find_socket_capacity;
 &find_pipe_capacity;            # on some systems:  512 * ulimit -p
 &wait_waitpid_results;
@@ -172,7 +173,7 @@ sub checkif_sleep_alarm_compatible {
     alarm 0;
   };
   if ($compatible > 0) {
-    print STDERR "sleep and alarm are compatible on this system\n";
+    print STDERR "$compatible: sleep and alarm are compatible on this system\n";
   } else {
     # either "alarm" isn't implemented, or
     # "alarm" or "sleep" are implemented in terms of each other,
@@ -207,6 +208,7 @@ sub find_max_fork {
 	exit 0;
       } elsif ($pid == 0) {
 	print STDERR "";
+	$0 = "system-limits.PL \&find_max_fork";
 	sleep 10;
 	exit 0;
       }
@@ -284,8 +286,8 @@ sub find_max_open_filehandles {
   return $i;
 }
 
-# XXX - TODO
 sub find_max_open_sockets {
+    # TODO
 }
 
 # what values do CORE::wait and CORE::waitpid return
@@ -295,12 +297,14 @@ sub wait_waitpid_results {
     my %info = ();
     my $pid = CORE::fork();
     if (defined($pid) && $pid==0) {
+	$0 = "system-limits.PL wait_waitpid_results";
 	sleep 3;
 	exit;
     }
     $info{active_waitpid_result} = waitpid $pid, &WNOHANG;
     $info{active_waitpid_status} = $?;
 
+    # XXX - not idiot proof - $pid+1 could be a valid process identifier
     $info{bogus_waitpid_result} = waitpid $pid+1, &WNOHANG;
     $info{bogus_waitpid_status} = $?;
 
@@ -314,7 +318,7 @@ sub wait_waitpid_results {
     exit if $pid == 0;
     sleep 1;
     $info{ignore_waitpid_result} = waitpid $pid, 0;
-    $info{ignore_waitpid_status} = $?;    
+    $info{ignore_waitpid_status} = $?;
 
     write_limits( %info );
 }
@@ -334,6 +338,9 @@ sub count_number_of_cpus {
   $ncpu = 0;
   if (eval "require Sys::CpuAffinity; 1") {
     $ncpu = Sys::CpuAffinity::getNumCpus();
+
+    # darwin: result might have format "1 [2 cores]"
+    $ncpu =~ s{\d+ \[(\d+) cores\]}{$1};
   }
   if ($ncpu == 0 && eval "require Test::Smoke::SysInfo;1") {
     my $sysinfo = Test::Smoke::SysInfo->new();
@@ -369,7 +376,7 @@ sub count_number_of_cpus {
 
   if ($ncpu > 0) {
     print STDERR "There are $ncpu cpus on this system.\n";
-    write_limits( ncpu => $ncpu );
+    write_limits( ncpu => $ncpu + 0 );
   } else {
     print STDERR "I am having trouble detecting the number\n";
     print STDERR "of processors on your system. Consider\n";
@@ -458,6 +465,7 @@ __END_SLAVE_CODE__
 
   unlink $output_file, $pid_file;
   if (fork() == 0) {
+    $0 = "system-limits.PL __get_capacity";
     sleep $timeout + 1;
     open my $pf, '<', $pid_file;
     my $pid = 0 + <$pf>;

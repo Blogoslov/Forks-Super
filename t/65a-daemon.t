@@ -47,7 +47,7 @@ SKIP: {
     my $pid = fork {
 	daemon => 1,
 	env => { output => $output },
-	name => 'daemon1',
+	name => 'daemon1'
     };
     if ($$ != $test_pid) {
 	&run_simple_daemon;
@@ -73,18 +73,26 @@ SKIP: {
       ok($k, "SIGZERO on daemon successful");
       ok($pid->{intermediate_pid}, "intermediate pid set on job");
 
-      sleep 2;
-      $pid->suspend;
-      sleep 3;
-      ok($pid->is_suspended, "is_suspended ok on daemon")
-	  or diag("job $pid state: ", $pid->state);
-      my $s1 = -s $output;
-      sleep 2;
-      my $s2 = -s $output;
-      $pid->resume;
-      ok($s1 && $s1 == $s2, "suspend/resume on daemon ok")
-	  or diag("expected $s1/$s2 to be the same");
-      sleep 1;
+      if (Forks::Super::Util::IS_WIN32ish && 
+	  !Forks::Super::Config::CONFIG_module('Win32::API')) {
+
+	  ok(1, "# suspend daemon unavailable on $^O without Win32::API");
+	  ok(1, "# resume daemon unavailable on $^O without Win32::API");
+      } else {
+
+	  sleep 2;
+	  $pid->suspend;
+	  sleep 3;
+	  ok($pid->is_suspended, "is_suspended ok on daemon")
+	      or diag("job $pid state: ", $pid->state);
+	  my $s1 = -s $output;
+	  sleep 2;
+	  my $s2 = -s $output;
+	  $pid->resume;
+	  ok($s1 && $s1 == $s2, "suspend/resume on daemon ok")
+	      or diag("expected $s1/$s2 to be the same");
+	  sleep 1;
+      }
       ok(0 == $pid->is_suspended, "is_suspended ok on daemon");
       ok(0 != $pid->is_active, "is_active for daemon");
 

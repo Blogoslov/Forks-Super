@@ -20,8 +20,8 @@ $p1 = fork { sub => sub { sleep 3 }, name => "simple2", delay => 3 };
 $t = Time::HiRes::time();
 $p2 = fork { sub => sub { sleep 3 }, 
 	depend_start => "simple2", queue_priority => 10 };
-$p3 = fork { sub => sub {}, queue_priority => 5 };
 $t = Time::HiRes::time() - $t;
+$p3 = fork { sub => sub {}, queue_priority => 5 };
 ok($t <= 1.5, "fast return for queued job ${t}s expected <= 1s"); ### 15 ###
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);

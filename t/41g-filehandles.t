@@ -51,7 +51,7 @@ sub repeater {
     seek STDIN, 0, 1;
   }
   if ($Forks::Super::DEBUG) {
-    my $f_in = $Forks::Super::Job::self->{fh_config}->{f_in};
+    my $f_in = Forks::Super::Job->this->{fh_config}->{f_in};
     Forks::Super::debug("repeater: time expired. ",
 			"Not processing any more input");
     Forks::Super::debug("input was from file: $f_in");

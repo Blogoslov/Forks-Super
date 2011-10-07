@@ -17,7 +17,7 @@ my ($a,@a,%a);
 
 if (!Forks::Super::Config::CONFIG('filehandles')) {
   SKIP: {
-    skip "share feature requires file-based IPC", 4;
+    skip "share feature requires file-based IPC", 13;
   }
   exit;
 }
@@ -50,6 +50,7 @@ my $len = scalar @a;
 $pid = fork {
      sub => sub { sleep 2; %a = (abc => 'xyz', mno => 'pqr'); @a = ('foo') },
      share => [ \%a , \@a ],
+     untaint => $untaint
 };
 waitpid $pid, 0;
 ok($a{mno} eq 'pqr', "hash value passed from child to parent");
@@ -73,7 +74,8 @@ $pid = fork {
 	 $a{"Super"} = "Forks";
      },
      timeout => 3,   
-     share => [ \$a, \%a, \@a ]
+     share => [ \$a, \%a, \@a ],
+     untaint => $untaint
 };
 waitpid $pid, 0;
 

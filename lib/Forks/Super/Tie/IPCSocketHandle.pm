@@ -26,7 +26,9 @@ use warnings;
 use Carp;
 use IO::Socket;
 use IO::Handle;
+
 our @ISA = qw(IO::Socket IO::Handle);
+our $VERSION = '0.54';
 
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
@@ -38,12 +40,43 @@ sub TIEHANDLE {
   $$glob->{DELEGATE} = $real_socket;
   eval {
     bless $glob, 'Forks::Super::Tie::IPCSocketHandle::Delegator';
-  } or carp "Forks::Super::Tie::IPCSocketHandle: ",
+  } or carp 'Forks::Super::Tie::IPCSocketHandle: ',
   		"failed to bless tied obj as Delegator\n";
 
   # any attributes that the real socket had should be passed
   # on to the glob.
-  $$glob->{$_} = $$real_socket->{$_} foreach keys %$$real_socket;
+  foreach (keys %$$real_socket) {
+      $$glob->{$_} = $$real_socket->{$_};
+  }
+
+  # apply PerlIO layers to the socket here ...
+  my $job = $$glob->{job} || Forks::Super::Job->this;
+  if (defined($job) && $job->{debug}) {
+      Forks::Super::Debug::debug("io layers are @{$job->{fh_config}{layers}}");
+  }
+  if (defined($job) && $job->{fh_config}{layers}) {
+      my @io_layers = @{$job->{fh_config}{layers}};
+      if ($$real_socket->{is_read}) {
+	  @io_layers = reverse @io_layers;
+      }
+      foreach my $layer (@io_layers) {
+	  for my $redo (1..2) {
+	      local $! = 0;
+	      if (binmode $real_socket, $layer) {
+		  if ($job->{debug}) {
+		      Forks::Super::Debug::debug("applied PerlIO layer $layer",
+						 " to socket $real_socket");
+		  }
+		  last;
+	      } elsif ($redo==1) {
+		   carp 'Forks::Super::Tie::IPCSocketHandle: ',
+ 	              "failed to apply PerlIO layer $layer to $real_socket: $!";
+	      }
+	      Forks::Super::pause(0.01);
+	  }
+      }
+  }
+
 
   my $self = { SOCKET => $real_socket, GLOB => $glob };
   $self->{_FILENO} = CORE::fileno($real_socket);
@@ -62,7 +95,7 @@ sub OPEN {
 sub BINMODE {
   my ($self, $layer) = @_;
   $self->{BINMODE}++;
-  return binmode $self->{SOCKET}, $layer || ":raw";
+  return binmode $self->{SOCKET}, $layer || ':raw';
 }
 
 sub GETC {
@@ -72,35 +105,29 @@ sub GETC {
 }
 
 sub FILENO {
-  my $self = shift;
-  $self->{FILENO}++;
-  return $self->{_FILENO};
+    my $self = shift;
+    $self->{FILENO}++;
+    return $self->{_FILENO};
 }
 
 sub PRINT {
-  my ($self, @list) = @_;
-  $self->{PRINT}++;
+    my ($self, @list) = @_;
+    $self->{PRINT}++;
 
-  my $bytes = join(defined $, ? $, : '', @list)
+    my $bytes = join(defined $, ? $, : '', @list)
                   . (defined $\ ? $\ : '');
 
-  #my $glob = $self->{GLOB};
-  #my $socket = $self->{SOCKET};
-  #my $fileno = $self->FILENO;
- 
-  my $z = print {$self->{SOCKET}} @list;
-  #my $z = !!syswrite $self->{SOCKET}, $bytes;
-  #my $z = !!$self->WRITE($bytes);
-  if ($^O eq 'MSWin32') {
-    trivial_pause();
-  }
-  return $z;
+    my $z = print {$self->{SOCKET}} @list;
+    if ($^O eq 'MSWin32') {
+	trivial_pause();
+    }
+    return $z;
 }
 
 sub PRINTF {
-  my ($self, $template, @list) = @_;
-  $self->{PRINTF}++;
-  return $self->PRINT(sprintf $template, @list);
+    my ($self, $template, @list) = @_;
+    $self->{PRINTF}++;
+    return $self->PRINT(sprintf $template, @list);
 }
 
 sub WRITE {
@@ -116,94 +143,99 @@ sub WRITE {
 }
 
 sub READLINE {
-  # TODO - call F::S::J::Ipc::_read_socket for appropriate job, sockhandle
-  my $self = shift;
-  $self->{READLINE}++;
+    # TODO - call F::S::J::Ipc::_read_socket for appropriate job, sockhandle
+    my $self = shift;
+    $self->{READLINE}++;
 
-  my $glob = $self->{GLOB};
-  if ($$glob->{job} || ref($$glob->{job})) {
-    return Forks::Super::Job::Ipc::_read_socket(
-	$self->{SOCKET}, $$glob->{job}, wantarray);
-  }
+    my $glob = $self->{GLOB};
+    if ($$glob->{job} || ref($$glob->{job})) {
+	return Forks::Super::Job::Ipc::_read_socket(
+	    $self->{SOCKET}, $$glob->{job}, wantarray);
+    }
 
-  return readline($self->{SOCKET});
+    return readline($self->{SOCKET});
 }
 
 sub TELL {
-  my $self = shift;
-  $self->{TELL}++;
-  return tell $self->{SOCKET};
+    my $self = shift;
+    $self->{TELL}++;
+    return tell $self->{SOCKET};
 }
 
 sub EOF {
-  my $self = shift;
-  return eof $self->{SOCKET};
+    my $self = shift;
+    return eof $self->{SOCKET};
 }
 
 sub READ {
-  my ($self, undef, $length, $offset) = @_;
-  $self->{READ}++;
-  return read $self->{SOCKET}, $_[1], $length, $offset || 0;
+    my ($self, undef, $length, $offset) = @_;
+    $self->{READ}++;
+    return read $self->{SOCKET}, $_[1], $length, $offset || 0;
 }
 
 sub SEEK {
-  my ($self, $position, $whence) = @_;
-  $self->{SEEK}++;
-  return seek $self->{SOCKET}, $position, $whence;
+    my ($self, $position, $whence) = @_;
+    $self->{SEEK}++;
+    return seek $self->{SOCKET}, $position, $whence;
 }
 
 sub is_pipe {
-  return 0;
+    return 0;
 }
 
 sub opened {
-  my $self = shift;
-  return $self->{SOCKET}->opened;
+    my $self = shift;
+    return $self->{SOCKET}->opened;
 }
 
 sub shutdown {
-  my ($self, $how) = @_;
-  my $glob = $self->{GLOB};
-  while (defined $$glob->{std_delegate}) {
-    $self = tied *{$glob->{std_delegate}};
-    $glob = $self->{GLOB};
-  }
-  $self->{_SHUTDOWN} ||= 0;
+    my ($self, $how) = @_;
+    my $glob = $self->{GLOB};
+    while (defined $$glob->{std_delegate}) {
+	$self = tied *{$glob->{std_delegate}};
+	$glob = $self->{GLOB};
+    }
+    $self->{_SHUTDOWN} ||= 0;
 
-  if (($self->{_SHUTDOWN} & (1 + $how)) == 1 + $how) {
-    return 1;    # already shutdown
-  }
-  if (!defined $self->{SOCKET}) {
-    return 1;
-  }
-  my $result = shutdown($self->{SOCKET}, $how);
-  if ($result) {
-    $self->{_SHUTDOWN} |= 1 + $how;
-  }
-  return $result;
+    if (($self->{_SHUTDOWN} & (1 + $how)) == 1 + $how) {
+	return 1;    # already shutdown
+    }
+    if (!defined $self->{SOCKET}) {
+	return 1;
+    }
+    my $result = shutdown($self->{SOCKET}, $how);
+    if ($result) {
+	$self->{_SHUTDOWN} |= 1 + $how;
+    }
+    return $result;
 }
 
 sub CLOSE {
-  my $self = shift;
-  if ($Forks::Super::Job::INSIDE_END_QUEUE) {
-    untie *{$self->{GLOB}};
-    if ($self->{SOCKET}) {
-      CORE::shutdown $self->{SOCKET}, 2;
-      close $self->{SOCKET};
+    my $self = shift;
+    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
+	untie *{$self->{GLOB}};
+	if ($self->{SOCKET}) {
+	    CORE::shutdown $self->{SOCKET}, 2;
+	    close $self->{SOCKET};
+	}
+	close *{$self->{GLOB}};
     }
-    close *{$self->{GLOB}};
-  }
     
-  $self->{CLOSE}++;
-  $self->{_SHUTDOWN} ||= 0;
-  my $glob = $self->{GLOB};
-  my $how = -1 + (( ($$glob->{is_read} || 0)
-		    + 2 * ($$glob->{is_write} || 0)) 
-		  || 3);
+    $self->{CLOSE}++;
+    $self->{_SHUTDOWN} ||= 0;
+    my $glob = $self->{GLOB};
 
-  delete $self->{SOCKET};
-  ${$self->{GLOB}}->{closed}++;
-  return $self->shutdown($how);
+    my $how = $$glob->{is_read} || 0;
+    $how += 2*($$glob->{is_write} || 0);
+    $how = ($how+2) % 3;
+
+#    my $how = -1 + (( ($$glob->{is_read} || 0)
+#		      + 2 * ($$glob->{is_write} || 0)) 
+#		    || 3);
+
+    delete $self->{SOCKET};
+    ${$self->{GLOB}}->{closed}++;
+    return $self->shutdown($how);
 }
 
 sub DESTROY {
@@ -222,8 +254,10 @@ sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
   my $method = $Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD;
   $method =~ s/.*:://;
   my $delegator = shift;
+  return if !$delegator;
+
   my $delegate = $$delegator->{DELEGATE};
-  return unless $delegator && $delegate;
+  return if !$delegate;
 
   ## no critic (StringyEval)
   if (wantarray) {

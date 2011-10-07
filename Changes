@@ -1,5 +1,14 @@
 Revision history for Forks-Super
 
+0.54    2011-10-07
+        Allows PerlIO layers in  child_fh  spec.
+        Upgraded bundled Signals-XSIG to v0.13, Sys-CpuAffinity to 1.04.
+        More effort backporting to Perl v5.6.
+        kill func can signal procs that were not launched by Forks::Super.
+        Improvements to suspend/resume functions in Cygwin.
+        Fixes for daemon code introduced in v0.53.
+        Perl::Critic-inspired refactoring.
+
 0.53    2011-07-14
         Introduce  daemon  option to fork.
         Introduce  share => list-of-refs  option to fork.
@@ -9,16 +18,16 @@ Revision history for Forks-Super
         command, not the perl process that called system().
         Increased initial deferred job id from -100K to -500K.
         MSWin32 refactoring: fork-to-cmd, fork-to-exec, OS priority code.
-	bg_eval, bg_qx commands now return empty string on failure, never undef.
+        bg_eval, bg_qx commands now return empty string on failure, never undef.
         Upgrade Signals::XSIG bundle to v0.12.
 
 0.52    2011-06-21
         Calling Forks::Super::LazyEval::bg_eval and bg_qx in list context
-	doesn't work and is now disabled.
+        doesn't work and is now disabled.
         Performance enhancement for fork with file-based IPC.
         Upgrade Sys-CpuAffinity bundle to v1.01
         Bug fix in timeout code that hangs BSD (looks like it didn't work)
-	Test fixes.
+        Test fixes.
 
 0.51    2011-04-18
         Include IPCPipeHandle.pm in manifest (D'oh)
@@ -47,7 +56,7 @@ Revision history for Forks-Super
         Revised and reintroduced F::S::Tie::IPCFileHandle, IPCSocketHandle
         tied classes for debugging. Ultimately these classes will provide
         a common interface for file- and socket-based IPC.
-	Attach job information to all filehandles opened in the module.
+        Attach job information to all filehandles opened in the module.
 
 0.44    2011-02-12
         Upgrade Sys-CpuAffinity bundle to 0.99.

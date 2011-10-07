@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -50,7 +50,9 @@ sub Forks::Super::Job::_config_os_child {
       umask $job->{umask};
   }
 
-  $ENV{_FORK_PPID} = $$ if &IS_WIN32;
+  if (&IS_WIN32) {
+      $ENV{_FORK_PPID} = $$;
+  }
   if (defined $job->{os_priority}) {
       set_os_priority($job);
   }
@@ -62,35 +64,34 @@ sub Forks::Super::Job::_config_os_child {
 }
 
 sub set_os_priority {
-  my ($job) = @_;
-  my $priority = $job->{os_priority} || 0;
-  my $q = -999;
+    my ($job) = @_;
+    my $priority = $job->{os_priority} || 0;
 
-  local $@ = undef;
-  my $z = eval {
-    setpriority(0,0,$priority);
-  };
-  return 1 unless $@;
+    local $@ = undef;
+    my $z = eval {
+	setpriority(0,0,$priority);
+    };
+    return 1 if !$@;
 
-  if (&IS_WIN32) {
-    if (!CONFIG('Win32::API')) {
-      if ($job->{os_priority_call} == 1) {
-	carp "Forks::Super::Job::_config_os_child(): ",
-	  "cannot set child process priority on MSWin32.\n",
-	  "Install the Win32::API module to enable this feature.\n";
-      }
-      return;
+    if (&IS_WIN32) {
+	if (!CONFIG('Win32::API')) {
+	    if ($job->{os_priority_call} == 1) {
+		carp 'Forks::Super::Job::_config_os_child(): ',
+		    "cannot set child process priority on MSWin32.\n",
+		    "Install the Win32::API module to enable this feature.\n";
+	    }
+	    return;
+	}
+
+	require Forks::Super::Job::OS::Win32;
+	return Forks::Super::Job::OS::Win32::set_os_priority($job, $priority);
     }
 
-    require Forks::Super::Job::OS::Win32;
-    return Forks::Super::Job::OS::Win32::set_os_priority($job, $priority);
-  }
-
-  if ($job->{os_priority_call} == 1) {
-    carp "Forks::Super::Job::_config_os_child(): ",
-      "failed to set child process priority on $^O\n";
-  }
-  return;
+    if ($job->{os_priority_call} == 1) {
+	carp 'Forks::Super::Job::_config_os_child(): ',
+	    "failed to set child process priority on $^O\n";
+    }
+    return;
 }
 
 sub set_cpu_affinity {
@@ -98,14 +99,14 @@ sub set_cpu_affinity {
   my $n = $job->{cpu_affinity};
 
   if ($n == 0 || (ref($n) eq 'ARRAY' && @$n==0)) {
-    carp "Forks::Super::Job::_config_os_child(): ",
+    carp 'Forks::Super::Job::_config_os_child(): ',
       "desired cpu affinity set to zero. Is that what you really want?\n";
   }
 
   if (CONFIG('Sys::CpuAffinity')) {
     return Sys::CpuAffinity::setAffinity($$, $n);
   } elsif ($job->{cpu_affinity_call} == 1) {
-    carp_once "Forks::Super::_config_os_child(): ",
+    carp_once 'Forks::Super::_config_os_child(): ',
       "cannot set child process's cpu affinity.\n",
       "Install the Sys::CpuAffinity module to enable this feature.\n";
   }
@@ -116,11 +117,13 @@ sub validate_cpu_affinity {
   my $job = shift;
   $job->{_cpu_affinity} = $job->{cpu_affinity};
   my $np = get_number_of_processors();
-  $np = 0 if $np <= 0;
+  if ($np <= 0) {
+      $np = 0;
+  }
   if (ref($job->{cpu_affinity}) eq 'ARRAY') {
     my @cpu_list = grep { $_ >= 0 && $_ < $np } @{$job->{cpu_affinity}};
     if (@cpu_list == 0) {
-      carp "Forks::Super::Job::_config_os_child: ",
+      carp 'Forks::Super::Job::_config_os_child: ',
 	"desired cpu affinity [ @{$job->{cpu_affinity}} ] ",
 	"does not specify any of the valid $np processors ",
 	"available on your system.\n";
@@ -134,7 +137,7 @@ sub validate_cpu_affinity {
       $job->{cpu_affinity} &= (2 ** $np) - 1;
     }
     if ($job->{cpu_affinity} <= 0) {
-      carp "Forks::Super::Job::_config_os_child: ",
+      carp 'Forks::Super::Job::_config_os_child: ',
 	"desired cpu affinity $job->{_cpu_affinity} does not specify any of the ",
 	  "valid $np processors that seem to be available on your system.\n";
       return 0;
@@ -144,31 +147,31 @@ sub validate_cpu_affinity {
 }
 
 sub get_cpu_load {
-  if (CONFIG('Sys::CpuLoadX')) {
-    my $load = Sys::CpuLoadX::get_cpu_load();
-    if ($load >= 0.0) {
-      return $load;
-    } else {
-      carp_once "Forks::Super::Job::OS::get_cpu_load: ",
-	"Sys::CpuLoadX module is installed but still ",
-	  "unable to get current CPU load for $^O $].";
-      return -1.0;
+    if (CONFIG('Sys::CpuLoadX')) {
+	my $load = Sys::CpuLoadX::get_cpu_load();
+	if ($load >= 0.0) {
+	    return $load;
+	} else {
+	    carp_once 'Forks::Super::Job::OS::get_cpu_load: ',
+	        'Sys::CpuLoadX module is installed but still ',
+	        "unable to get current CPU load for $^O $].";
+	    return -1.0;
+	}
+    } else { # pray for `uptime`.
+	my $uptime = qx(uptime 2>/dev/null);        ## no critic (Backtick)
+	$uptime =~ s/\s+$//;
+	my @uptime = split /[\s,]+/, $uptime;
+	if (@uptime > 2) {
+	    if ($uptime[-3] =~ /\d/ && $uptime[-3] >= 0.0) {
+		return $uptime[-3];
+	    }
+	}
     }
-  } else { # pray for `uptime`.
-    my $uptime = qx(uptime 2>/dev/null);        ## no critic (Backtick)
-    $uptime =~ s/\s+$//;
-    my @uptime = split /[\s,]+/, $uptime;
-    if (@uptime > 2) {
-      if ($uptime[-3] =~ /\d/ && $uptime[-3] >= 0.0) {
-	return $uptime[-3];
-      }
-    }
-  }
 
-  my $install = "Install the Sys::CpuLoadX module";
-  carp_once "Forks::Super: max_load feature not available.\n",
-    "$install to enable this feature.\n";
-  return -1.0;
+    my $install = 'Install the Sys::CpuLoadX module';
+    carp_once "Forks::Super: max_load feature not available.\n",
+        "$install to enable this feature.\n";
+    return -1.0;
 }
 
 sub get_number_of_processors {
@@ -178,8 +181,8 @@ sub get_number_of_processors {
     || _get_number_of_processors_from_ENV()
     || $Forks::Super::SysInfo::NUM_PROCESSORS
     || do {
-      my $install = "Install the Sys::CpuAffinity module";
-      carp_once "Forks::Super::get_number_of_processors(): ",
+      my $install = 'Install the Sys::CpuAffinity module';
+      carp_once 'Forks::Super::get_number_of_processors(): ',
 	"feature unavailable.\n",
 	"$install to enable this feature.\n";
       -1
@@ -269,9 +272,10 @@ sub kill_Win32_process_tree {
     # How many ways are there to kill a process in Windows?
     # How many do you need?
 
-    ## no critic (Backtick)
     my $c1 = () = grep { /ERROR/ } qx(TASKKILL /PID $pid /F /T 2>&1);
-    $c1 = system("TSKILL $pid /A > nul") if $c1;
+    if ($c1) {
+	$c1 = system("TASKILL $pid /A > nul");
+    }
     if ($c1 && CONFIG('Win32::Process::Kill')) {
       $c1 = !Win32::Process::Kill::Kill($pid);
     }
@@ -279,7 +283,7 @@ sub kill_Win32_process_tree {
     if ($c1) {
       my $c2 = () = qx(TASKLIST /FI \"pid eq $pid\" 2> nul);
       if ($c2 == 0) {
-	warn "Forks::Super::Job::OS::kill_Win32_process_tree: ",
+	warn 'Forks::Super::Job::OS::kill_Win32_process_tree: ',
 	  "$pid: no such process?\n";
       }
     }
@@ -287,6 +291,37 @@ sub kill_Win32_process_tree {
   }
   return $count;
 }
+
+# called from Forks::Super::Job::_postlaunch_daemon_Win32
+#
+# if job has daemon option AND timeout option, then we want to
+# kill off a daemon process after the timeout expires.
+#
+# one way to do this is to launch a separate small program
+# that does nothing but enforce the timeout.
+#
+sub totally_kludgy_process_monitor {
+    my ($pid, $timeout) = @_;
+
+    # program to monitor a pid:
+    #     sleep 1,kill 0,$pid or exit for 1..$timeout;kill -9,$pid
+    my $prog = "sleep 1,kill(0,$pid)||exit for 1..$timeout;kill -9,$pid";
+    if (&IS_WIN32) {
+	return system 1, qq[$^X -e "$prog"];
+    } else {
+	my $pm_pid = CORE::fork();
+	if (!defined $pm_pid) {
+	    carp 'FSJ::OS::totally_kludgy_process_monitor: ',
+	    	'fork to process monitor failed';
+	    return;
+	}
+	if ($pm_pid == 0) {
+	    exec($^X, '-e', $prog);
+	}
+	return $pm_pid;
+    }
+}
+
 
 1;
 

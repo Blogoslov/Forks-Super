@@ -1,5 +1,17 @@
 Revision history for Sys-CpuAffinity
 
+1.04	2011-09-29
+        Tweaks to linux XS code which may or may not reduce mysterious
+        segfaults.
+
+1.03	2011-08-30
+	Implemented IsWow64 detection in Windows.
+        Using taskset in linux to count CPUs.
+
+1.02	2011-06-17
+	Removed trivial hello.xs code snippet on the theory that it results
+	in segfaults on linux.
+
 1.01	2011-04-21
 	XS fixes for FreeBSD.
 	Improved several techniques for counting CPUs.

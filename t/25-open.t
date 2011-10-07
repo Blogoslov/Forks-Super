@@ -4,8 +4,8 @@ use strict;
 use warnings;
 
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
 
     my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
     if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
@@ -22,7 +22,7 @@ my ($fh_in, $fh_out, $pid, $job) = Forks::Super::open2(@cmd);
 
 ok(defined($fh_in) && defined($fh_out), "open2: child fh available");
 ok(isValidPid($pid), "open2: valid pid $pid");
-sleep 1;
+sleep 2;
 ok(defined($job), "open2: received job object");
 ok($job->{state} eq 'ACTIVE', "open2: job is active " . $job->{state});
 
@@ -30,7 +30,10 @@ my $msg = sprintf "%05x", rand() * 99999;
 my $z = print {$fh_in} "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open2: print to input handle ok = $z");
-sleep 6;
+for (1..10) {
+    Forks::Super::Util::pause(1);
+    last if $job->{state} eq 'COMPLETE';
+}
 
 my @out = Forks::Super::read_stdout($pid);
 Forks::Super::close_fh($pid, 'stdout');
@@ -59,8 +62,10 @@ $msg = sprintf "%05x", rand() * 99999;
 $z = print $fh_in "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
 ok($z > 0, "open3: print to input handle ok = $z");
-sleep 5;
-
+for (1..10) {
+    Forks::Super::Util::pause(1.0);
+    last if $job->is_complete;
+}
 
 @out = Forks::Super::read_stdout($pid);
 Forks::Super::close_fh($pid, 'stdout');
@@ -99,13 +104,13 @@ SKIP: {
     skip "alarm(), sleep() incompatible, can't test additional options", 7;
   }
 
-  $cmd[3] = "-s=10";
+  $cmd[3] = "-s=15";
   ($fh_in, $fh_out, $fh_err, $pid, $job) 
-    = Forks::Super::open3(@cmd, {timeout => 5});
+    = Forks::Super::open3(@cmd, {timeout => 10});
   
   Forks::Super::Debug::use_Carp_Always();
 
-  ok(defined($fh_in) && defined($fh_out) && defined($fh_err),
+  ok(defined($fh_in) && defined($fh_out) && defined($fh_err),    ### 22 ###
      "open3: child fh available");
   ok(defined($job), "open3: received job object");
   ok($job->{state} eq 'ACTIVE', "open3: respects additional options");
@@ -114,7 +119,12 @@ SKIP: {
   $z = print $fh_in "$msg\n";
   Forks::Super::close_fh($pid,'stdin');
   ok($z > 0, "open3: print to input handle ok = $z");
-  sleep 5;
+
+  for (1..20) {
+      Forks::Super::Util::pause(1.0);
+      last if $job->is_complete;
+  }
+
   @out = <$fh_out>;
   Forks::Super::close_fh($pid, 'stdout');
   @err = <$fh_err>;

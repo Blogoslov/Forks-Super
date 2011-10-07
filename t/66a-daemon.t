@@ -86,7 +86,7 @@ my $wait = CORE::wait;
 $t = Time::HiRes::time - $t;
 my $fail = 0;
 
-ok($t < 2.0, "child process finished quickly ${t}s, expected fast");
+ok($t < 3.0, "child process finished quickly ${t}s, expected fast");  ### 1 ###
 ok($wait == $child_pid, "CORE::wait captured child process");
 
 sleep 3;
@@ -106,8 +106,11 @@ close $dh;
 ok($dppid == 1 || $dppid eq "unknown\n" || $dppid eq "unknown$/",
    "daemon process does not have a parent");
 
+if (${^TAINT}) {
+    ($dpid) = $dpid =~ /([-\d]*)/;
+}
+
 my $nk = CORE::kill 'TERM', $dpid;
-#Forks::Super::kill 'TERM', $daemon;
 ok($nk == 1, "daemon process $dpid was signalled");
 sleep 2;
 my $s3 = -s $daemon_output;

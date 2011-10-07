@@ -18,11 +18,12 @@ our @EXPORT_OK = qw(untied %DEFAULT_BEHAVIOR);
 our %DEFAULT_BEHAVIOR;
 *DEFAULT_BEHAVIOR = \%Signals::XSIG::Default::DEFAULT_BEHAVIOR;
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 our (%XSIG, %_XSIG, %SIGTABLE, $_REFRESH, $_DISABLE_WARNINGS);
 our $_INITIALIZED = 0;
 our $SIGTIE = bless {}, 'Signals::XSIG::TieSIG';
 our $XSIGTIE = bless {}, 'Signals::XSIG::TieXSIG';
+our $TIEARRAY_CLASS = 'Signals::XSIG::TieArray';
 
 my %TIEDSCALARS = (); # map signal names to S::X::TiedScalar objs
 my %alias = ();
@@ -32,6 +33,10 @@ my %alias = ();
 sub _init {
   return if $_INITIALIZED;
   $_REFRESH = 0;
+  if ($Config{PERL_VERSION} <= 6) {
+      require Signals::XSIG::TieArray56;
+      $TIEARRAY_CLASS = 'Signals::XSIG::TieArray56';
+  }
 
   my @z = ();
   my @num = split ' ', $Config{sig_num};
@@ -48,7 +53,7 @@ sub _init {
   foreach my $sig (@name, '__WARN__', '__DIE__') {
     tie $_XSIG{$sig}, 'Signals::XSIG::TieScalar', $sig;
     $_XSIG{$sig} = [];
-    tie @{$_XSIG{$sig}}, 'Signals::XSIG::TieArray', $sig;
+    tie @{$_XSIG{$sig}}, $TIEARRAY_CLASS, $sig;
     $_XSIG{$sig}[0] = $SIG{$sig};
   }
   tie %SIG, 'Signals::XSIG::TieSIG';
@@ -98,6 +103,10 @@ sub __shadow_signal_handler {
   my $start = $h->{start} - 1;
   my $ignore_main_default = 0;
 
+  # @HANDLER_SEQUENCE: the handlers that have already processed this signal
+  # will using 'local' be sufficient to distinguish handler count when
+  # signal handling is interrupted by another signal?
+  local @Signals::XSIG::HANDLER_SEQUENCE = ();
   while (@handlers) {
     my $subhandler = shift @handlers;
     $start++;
@@ -118,6 +127,7 @@ sub __shadow_signal_handler {
       }
       next if $seen_default++;
       Signals::XSIG::Default::perform_default_behavior($signal, @args);
+      push @Signals::XSIG::HANDLER_SEQUENCE, 'DEFAULT';
     } else {
       next if !defined &$subhandler;
       no strict 'refs';                    ## no critic (NoStrict)
@@ -126,6 +136,7 @@ sub __shadow_signal_handler {
       } else {
 	$subhandler->($signal, @args);
       }
+      push @Signals::XSIG::HANDLER_SEQUENCE, $subhandler;
     }
   }
   return;
@@ -176,20 +187,24 @@ sub untied (&) {                    ## no critic (SubroutinePrototypes)
 # calling package.
 sub _qualify_handler {
   my $handler = shift;
-  if (defined($handler) && $handler ne ''
-      && $handler ne 'IGNORE' && $handler ne 'DEFAULT') {
 
-    my $qr = qr/^Signals::XSIG/;
-    if (substr($handler,0,1) eq '*') {
+  if (!defined($handler)
+      || $handler eq ''
+      || $handler eq 'IGNORE'
+      || $handler eq 'DEFAULT') {
+      return $handler;
+  }
+
+  if (substr($handler,0,1) eq '*') {
       my $n = 0;
       my $package = caller;
       while (defined($package) && $package =~ /^Signals::XSIG/) {
-	$package = caller(++$n);
+	  $package = caller(++$n);
       }
+
       $handler = qualify($handler, $package || 'main');
-    } else {
+  } else {
       $handler = qualify($handler, 'main');
-    }
   }
   return $handler;
 }
@@ -460,7 +475,7 @@ sub Signals::XSIG::TieScalar::TIESCALAR {
 
   my $self = bless { key => $key }, 'Signals::XSIG::TieScalar';
   $self->{val} = [];
-  tie @{$self->{val}}, 'Signals::XSIG::TieArray', $key;
+  tie @{$self->{val}}, $TIEARRAY_CLASS, $key;
   $TIEDSCALARS{$key} = $self;
   return $self;
 }
@@ -491,7 +506,7 @@ sub Signals::XSIG::TieScalar::STORE {
     my $key = $self->{key};
     $self->{val} = [];
     tie @{$self->{val}}, 
-      'Signals::XSIG::TieArray',
+      $TIEARRAY_CLASS,
       $self->{key}, @$value;
     (tied @{$self->{val}})->_refresh_SIG;
     return $old;
@@ -586,7 +601,7 @@ Signals::XSIG - install multiple signal handlers through %XSIG
 
 =head1 VERSION
 
-Version 0.12
+Version 0.13
 
 =head1 SYNOPSIS
 
@@ -650,6 +665,10 @@ and the end-user's signal handler (if any) will be invoked.
     ...
     1;
 
+Now the user of your module can still install their own
+C<SIGUSR1> handler through C<$SIG{USR1}> without interfering
+with your owm C<SIGUSR1> handler.
+
 =item 2. 
 
 You have multiple "layers" of signal handlers that you
@@ -662,9 +681,11 @@ about signals received.
     # log all warning messages
     $XSIG{__WARN__}[1] = \&log_messages;
     do_some_stuff();
+
     # now enable extra logging -- warn will invoke both functions now
     $XSIG{__WARN__}[2] = \&log_messages_with_authority;
     do_some_more_stuff();
+
     # done with that block. disable extra layer of logging
     $XSIG{__WARN__}[2] = undef;
     # continue, &log_warnings will still be called at next warn statement

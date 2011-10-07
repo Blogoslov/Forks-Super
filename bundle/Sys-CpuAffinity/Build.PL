@@ -17,7 +17,7 @@ if ($ENV{AUTOMATED_TESTING}) {
 
   # Some systems may require the XS code to be built before the
   # number of processors can be detected (Irix is like that),
-  # so this gate won't always work.
+  # so this gate check won't always work.
 
   use Config;
   my $status = system($Config{perlpath}, "-Ilib", "-MSys::CpuAffinity",
@@ -26,6 +26,7 @@ if ($ENV{AUTOMATED_TESTING}) {
   if ($status >> 8 == 1) {
 
     print STDERR <<"___";
+
 Single processor system with automated smoke testing detected.
 Aborting build because many tests in this distribution are skipped
 or dumbed down for single-processor systems, and the resulting
@@ -36,7 +37,11 @@ and install this module as opposed to just testing it.
 
 ___
   ;
-    exit 0;
+
+    # a CPAN tester hack to get an NA report
+    # instead of a FAIL report
+    die "No support for OS - one processor and automated testing";
+
   }
 }
 
@@ -46,12 +51,12 @@ ___
 print "\n";
 if ($^O =~ /solaris/i) {
   print <<"";
-$^O users: the  pbind(1m)  utility and  processor_bind(2)  library
-function on this platform only allow a process to be bound to a single
+$^O users: this platform's  pbind(1m)  utility and  processor_bind(2)
+library function only allow a process to be bound to a single
 CPU. Calls to  &Sys::CpuAffinity::setAffinity  that specify more than
 one processor might only bind the process to a single processor.
 
-; 
+;                                                                     #';
 }
 if ($^O =~ /irix/i) {
   print <<"";
@@ -107,7 +112,7 @@ my $builderclass = Module::Build->subclass(
            push @successfully_compiled, $xs_file;
            File::Copy::move($xs_file, "contrib/ok/");
        }
-       unlink <lib/xs/*.xs>;
+       unlink <lib/xs/*>;
      }
      if (@successfully_compiled == 0) {
        warn q[
@@ -204,7 +209,7 @@ my $builder = $builderclass->new(
 	module_name         => 'Sys::CpuAffinity',
 	license             => 'perl',
 	dist_author         => q[Marty O'Brien <mob@cpan.org>],
-        dist_version        => '1.01',
+        dist_version        => '1.04',
 	#dist_version_from   => 'lib/Sys/CpuAffinity.pm',
 	build_requires      => {
 		'Module::Build'      => 0.25,
@@ -231,7 +236,6 @@ my $builder = $builderclass->new(
 	extra_linker_flags   => $extra_linker_flags,
 	sign                 => 0,
 );
-
 
 $builder->create_build_script();
 

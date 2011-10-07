@@ -15,7 +15,7 @@ our @ISA = qw(Exporter);
 our @EXPORT = qw(%DEFAULT_BEHAVIOR);
 
 our %DEFAULT_BEHAVIOR;
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 my @snam = split ' ', $Config{sig_name};
 my @snum = split ' ', $Config{sig_num};

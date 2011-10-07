@@ -5,7 +5,7 @@
 # It is hard to test all the different possible OS-versions
 # (98,2000,XP,Vista,7,...) and different configurations
 # (32- vs 64-bit, for one), so expect this module to be
-# incomplete, to not always do things in the best way or all
+# incomplete, to not always do things in the best way on all
 # systems. The highest ambitions for this module are to not
 # cause too many general protection faults and to fail gracefully.
 #
@@ -18,7 +18,7 @@ use Carp;
 use strict;
 use warnings;
 
-if (!&IS_WIN32 && !&IS_CYGWIN) {
+if (!&Forks::Super::Util::IS_WIN32ish) {
     Carp::confess "Loaded Win32-only module into \$^O=$^O!\n";
 }
 
@@ -27,7 +27,7 @@ if (!&IS_WIN32 && !&IS_CYGWIN) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 ##################################################################
@@ -46,7 +46,7 @@ our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 eval {
 
     require Win32::API;
-
+    
     Win32::API::Struct->typedef(
 	THREADENTRY32 => qw{
 	DWORD dwSize;
@@ -57,9 +57,11 @@ eval {
 	LONG tpDeltaPri;
 	DWORD dwFlags;
     });
-};
+} or carp 'Win32::API module is highly highly recommended ';
+
 
 our %_WIN32_API_SPECS = (
+    # Prototypes for the API function we are interested in
     GetActiveProcessorCount => 'DWORD GetActiveProcessorCount(WORD g)',
     GetCurrentProcess => 'HANDLE GetCurrentProcess()',
     GetCurrentProcessId => 'DWORD GetCurrentProcessId()',
@@ -92,10 +94,10 @@ our %_WIN32_API_SPECS = (
 sub win32api {
     my $function = shift;
     if (!defined $_THREAD_API->{$function}) {
-	return unless CONFIG('Win32::API');
+	return if !CONFIG('Win32::API');
 	my $spec = $_WIN32_API_SPECS{$function};
 	if (!defined $spec) {
-	    croak "Forks::Super::Job::OS::Win32: ",
+	    croak 'Forks::Super::Job::OS::Win32: ',
 	        "requested unrecognized Win32 API function $function!\n";
 	}
 
@@ -110,10 +112,10 @@ sub win32api {
 
 sub _load_win32api {
     my $function = shift;
-    return unless CONFIG('Win32::API');
+    return if !CONFIG('Win32::API');
     my $spec = $_WIN32_API_SPECS{$function};
     if (!defined $spec) {
-	croak "Forks::Super::Job::OS::Win32: ",
+	croak 'Forks::Super::Job::OS::Win32: ',
 	    "requested unrecognized Win32 API function $function!\n";
     }
 
@@ -163,9 +165,19 @@ sub get_thread_handle {
     }
 
     return 0
+	# 0x0060: THREAD_SET_INFORMATION | THREAD_QUERY_INFORMATION
 	|| win32api('OpenThread', 0x0060, 1, $thread_id)
+
+	# 0x0C00: THREAD_QUERY_LIMITED_INFORMATION
+	#         | THREAD_SET_LIMITED_INFORMATION
 	|| win32api('OpenThread', 0x0C00, 1, $thread_id)
+
+	# 0x0040: THREAD_SET_INFORMATION
+	# 0x0020: THREAD_QUERY_INFORMATION
 	|| win32api('OpenThread', $set_info ? 0x0040 : 0x0020, 1, $thread_id)
+
+	# 0x0200: THREAD_SET_LIMITED_INFORMATION
+	# 0x0400: THREAD_QUERY_LIMITED_INFORMATION
 	|| win32api('OpenThread', $set_info ? 0x0200 : 0x0400, 1, $thread_id);
 }
 
@@ -246,32 +258,45 @@ sub get_current_thread_id {
 #             CORE::kill will respect a %SIG handler
 #             CORE::kill ok *IF* any signal handler is defined in the thread
 #             without a %SIG handler, the whole process will be terminated
-#             *IF* not sure signal handler is installed,
-#                 terminate the thread with the API
+#             *IF* you are not *SURE* that a signal handler is installed,
+#                 use the API to terminate the thread
+#
+# Other signals to a process
+# There aren't any other known signals on Windows, but in case an unrecognized
+#     one shows up ...
+#	      CORE::kill will terminate the process (I guess)
+#             Signal handlers are ignored
+#             Don't know what DWIM behavior is for arbitrary signal,
+#                 terminate (with API) or ignore would be reasonable defaults
+#
+# Other signals to a thread
+#             CORE::kill will respect a %SIG handler
+#             CORE::kill will terminate the whole process w/o a %SIG handler
+#             Don't use CORE::kill unless you are *SURE* a signal handler exists
+#             Don't know what DWIM behavior is for arbitrary signal,
+#                  terminate (with API) or ignore are reasonable defaults
 #
 # Non-Windows signals:
 #             cannot be handled,
 #             cannot be used directly with CORE::kill
 #             translate them into "similar" Windows signals
-#             FREEZE,TSTP,TTIN,TTOU ==> treat like SIGSTOP
-#                 use API to suspend
-#             THAW ==> treat like SIGCONT
-#                 use API to resume
+#             FREEZE,TSTP,TTIN,TTOU ==> treat like SIGSTOP, use API to suspend
+#             THAW ==> treat like SIGCONT, use API to resume
 #             JVM1,JVM2,LWP,URG,WINCH      ==> ignore or treat like SIGZERO
 #                 send SIGZERO with CORE::kill ok
-#             
-#
-#
 #
 # * Windows "kill" signals are ABRT ALRM FPE HUP ILL NUMxx PIPE SEGV TERM
-
-
-
 
 
 # DWIM Unix-style signal to Windows processes and threads
 sub signal_procs {
     my ($signal, $kill_proc_group, @pids) = @_;
+    # XXX - $kill_proc_group directive is inconsistently applied
+
+    if ($DEBUG) {
+	debug('FSJ::OS::Win32: ',
+	      "Sending signal $signal to pids: ", join(' ',@pids));
+    }
 
     # signals that should have no effect on Windows processes and threads
     if ($signal eq 'CHLD' || $signal eq 'CLD' || $signal eq 'JVM1'
@@ -280,166 +305,61 @@ sub signal_procs {
 	$signal = 'ZERO';
     }
 
-    # my $num_signalled = 0;
     my @signalled = ();
     my @terminated = ();
     my $tasklist = '';
     foreach my $pid (sort {$a <=> $b} @pids) {
-
-	if ($DEBUG) {
-	    debug("sending SIG$signal to $pid ...");
-	}
-
-	if ($pid < 0) {
-	    my ($signalled, $termref) = signal_thread($signal,-$pid);
-
-	    if ($signalled) {
-		push @signalled, $pid;
-		#$num_signalled++;
-		push @terminated, @$termref;
-	    } else {
-		if (!CONFIG('Win32::API')) {
-		    carp_once "Using potentially unsafe kill() command ",
-		        "on MSWin32 psuedo-process.\n",
-		        "Install Win32::API module for a safer alternative.\n";
-		}
-		local $! = 0;
-		# KILL is safe to send with CORE::kill
-#		$num_signalled += CORE::kill($kill_proc_group 
-#					     ? -$signal : $signal, $pid);
-		if (CORE::kill($kill_proc_group ? -$signal : $signal,$pid)) {
-		    push @signalled, $pid;
-		}
-		carp "MSWin32 kill error $! $^E\n" if $!;
-	    }
-	} elsif ($signal eq 'ZERO' || $signal eq '0') {
-	    # CORE::kill 'ZERO' is safe for processes and threads
-	    # **BUT** kill 'ZERO' will return 1 for a zombie process
-	    # (or rather, a process launched with "system 1,..." that
-	    # is not sufficiently detached from the process that 
-	    # launched it), which is usually not what we want.
-
-	    # Getting a handle to a process and checking that the result
-	    # of  GetExitCodeProcess  != 259 (STILL_ACTIVE) is just a
-	    # little bit slower but it is exactly what we usually want.
-	    if (0) {
-#		$num_signalled += CORE::kill 0, $pid;
-		if (CORE::kill 0,$pid) {
-		    push @signalled,$pid;
-		}
-	    } elsif (1) {
-		my $handle = get_process_handle($pid, 0);
-		if ($handle != 0) {
-		    my $xcode = pack("I",0);
-		    my $z = win32api('GetExitCodeProcess',$handle,$xcode);
-#		    $num_signalled += $z && unpack("I",$xcode) == 259;
-		    if ($z && unpack("I",$xcode)==259) {
-			push @signalled, $pid;
-		    }
-		}
-	    } else {
-		if (!$tasklist) {
-		    # XXXXXX - is this portable across MSWin32 platforms?
-		    my @z = qx(TASKLIST /FO LIST);
-		    @z = grep { s/^PID:\s+// } @z;
-		    chomp(@z);
-		    local $" = ' ';
-		    $tasklist = " @z ";
-		}
-		if ($tasklist =~ / $pid /) {
-#		    $num_signalled++;
-		    push @signalled, $pid;
-		}
-	    }
-	} elsif ($signal eq 'CONT' || $signal eq 'THAW') {
-
-#	    $num_signalled += resume_process($pid);
-	    if (resume_process($pid)) {
-		push @signalled, $pid;
-	    }
-
-	} elsif ($signal eq 'STOP' || $signal eq 'TSTP'
-		 || $signal eq 'FREEZE' || $signal eq 'TTIN' 
-		 || $signal eq 'TTOU') {
-
-#	    $num_signalled += suspend_process($pid);
-	    if (suspend_process($pid)) {
-		push @signalled, $pid;
-	    }
-
-	} elsif ($signal eq 'INT' || $signal eq 'QUIT' || $signal eq 'BREAK') {
-
-	    # sending SIGINT, SIGQUIT, or SIGBREAK to a process are
-	    # emulated differently on Windows than most other signals.
-	    # By default they will terminate a process, but they can
-	    # be handled by a %SIG entry more or less like in Unix.
-
-	    if (CORE::kill $signal, $pid) {
-#		$num_signalled++;
-		push @signalled, $pid;
-		Forks::Super::Sigchld::handle_CHLD(-1);
-		if (!signal_procs('ZERO',$pid)) {
-		    push @terminated, $pid;
-		}
-		#if ($pid->is_complete) {
-		#    push @terminated, $pid;
-		#}
-	    }
-
-	} elsif (Forks::Super::Util::is_kill_signal($signal)) {
-
-	    my $signo =  Forks::Super::Util::signal_number($signal);
-	    if (terminate_process($pid, $signo)) {
-#		$num_signalled++;
-		push @signalled, $pid;
-		push @terminated, $pid;
-	    }
-
-	} else {
-	    carp_once "Forks::Super::Win32::signal_process: "
-		. "signal $signal not recognized, treating as SIGKILL";
-#	    $num_signalled += CORE::kill(($kill_proc_group 
-#					 ? -9 : 'KILL'), $pid);
-	    if (CORE::kill($kill_proc_group ? -9 : 'KILL', $pid)) {
-		push @signalled, $pid;
-		push @terminated, $pid;
-	    }
+	my $termref = signal_process($signal, $pid, $kill_proc_group);
+	if ($termref) {
+	    push @signalled, $pid;
+	    push @terminated, @$termref;
 	}
     }
-#    return ($num_signalled, \@terminated);
     return (\@signalled, \@terminated);
+}
+
+sub signal_process {
+    my ($signal, $pid, $kill_proc_group) = @_;
+    if ($pid < 0) {
+	return signal_thread($signal, -$pid);
+    } elsif ($signal eq 'ZERO' || $signal eq '0') {
+	return [] if sigzero_process($pid);
+    } elsif (Forks::Super::Util::is_continue_signal($signal)) {
+	return [] if resume_process($pid);
+    } elsif (Forks::Super::Util::is_stop_signal($signal)) {
+	return [] if suspend_process($pid);
+    } elsif (Forks::Super::Util::is_kill_signal($signal)) {
+	return [$pid] if sigkill_process($signal, $pid);
+    } else {
+	carp_once 'Forks::Super::Win32::signal_process: '
+	    . "signal $signal not recognized, treating as SIGKILL";
+	if (CORE::kill($kill_proc_group ? -9 : 'KILL', $pid)) {
+	    return [$pid];
+	}
+    }
+    return;
 }
 
 # DWIM Unix-style signal to a Win32 thread
 sub signal_thread {
     my ($signal, $thread_id) = @_;
     local $! = 0;
-    my $signalled = 0;
-    my @terminated = ();
-
-    if ($signal eq 'CHLD' || $signal eq 'CLD' || $signal eq 'JVM1'
-	    || $signal eq 'JVM2' || $signal eq 'LWP' || $signal eq 'URG'
-	    || $signal eq 'WINCH') {
-	$signal = 'ZERO';
-    }
 
     if (Forks::Super::Util::is_kill_signal($signal)) {
 	if (terminate_thread($thread_id)) {
-	    $signalled = 1;
-	    push @terminated, -$thread_id;
+	    return [ -$thread_id ];
 	}
-    } elsif ($signal eq 'STOP' || $signal eq 'TSTP' || $signal eq 'FREEZE'
-	     || $signal eq 'TTIN' || $signal eq 'TTOU') {
+    } elsif (Forks::Super::Util::is_stop_signal($signal)) {
 	if (suspend_thread($thread_id)) {
-	    $signalled = 1;
+	    return [];
 	}
-    } elsif ($signal eq 'CONT' || $signal eq 'THAW') {
+    } elsif (Forks::Super::Util::is_continue_signal($signal)) {
 	if (resume_thread($thread_id)) {
-	    $signalled = 1;
+	    return [];
 	}
     } elsif ($signal eq 'ZERO' || $signal eq '0') {
 	if (sigzero_thread($thread_id)) {
-	    $signalled = 1;
+	    return [];
 	}
     } else {
 	# XXX - should we ignore an unrecognized signal or terminate the
@@ -449,18 +369,18 @@ sub signal_thread {
 	# because if the signal isn't handled (with a %SIG handler),
 	# then the entire process will be killed.
 
-	carp_once [$signal], "Forks::Super::kill(): ",
+	carp_once [$signal], 'Forks::Super::kill(): ',
 	      "Called on MSWin32 with SIG$signal\n",
 	      "Ignored because this module can't find a suitable way to\n",
 	      "express that signal on MSWin32.\n";
     }
-    return ($signalled, \@terminated);
+    return;
 }
 
 sub terminate_process {
     my ($pid,$exitCode) = @_;
     # 0x0001: PROCESS_TERMINATE
-    my $procHandle = win32api('OpenProcess', 0x0001, 0, $pid);
+    my $procHandle = win32api('OpenProcess', 0x0001, 1, $pid);
     if ($procHandle) {
 	my $z = win32api('TerminateProcess',$procHandle,$exitCode || 0);
 	if ($z==0) {
@@ -474,7 +394,14 @@ sub terminate_process {
 sub _enumerate_threads_for_process {
     my $process_id = shift;
 
+    if (!defined $process_id) {
+	Carp::cluck '_enumerate_threads_for_process ',
+	    "called with no process id!\n";
+	return;
+    }
+
     # 0x00000004: TH32CS_SNAPTHREAD
+    # 0x00000008: XXXXXX
     my $snapshot = win32api('CreateSnapshot', 0x0000000C, $process_id);
     if (!$snapshot) {
 	carp $^E;
@@ -482,8 +409,10 @@ sub _enumerate_threads_for_process {
     }
     my $thread_entry = Win32::API::Struct->new('THREADENTRY32');
     $thread_entry->{dwSize} = 28;
-    $thread_entry->{$_} = 0 for qw(cntUsage thread_id owner_process_id 
-				   tpBasePri tpDeltaPri dwFlags);
+    foreach my $field (qw(cntUsage thread_id owner_process_id 
+				   tpBasePri tpDeltaPri dwFlags)) {
+	$thread_entry->{$field} = 0;
+    }
     my $z = win32api('Thread32First', $snapshot, $thread_entry);
     if (!$z) {
 	carp $^E;
@@ -504,17 +433,24 @@ sub suspend_process {
     my $pid = shift;
     if ($pid == $$) {
 	# suspend the current thread ...
-	croak "implement me: suspend the current thread";
+	croak 'implement me: suspend the current thread';
     }
     # there is no SuspendProcess function in the API, so instead we have to
     # enumerate all the threads in the process
     # and call suspend thread on each one.
 
+    # SuspendThread is not particularly safe (you could suspend a thread
+    # while it is allocating memory, or has a lock on some mutex, and
+    # hang your program). That's the way it goes sometimes.
+
     my @thread_ids = _enumerate_threads_for_process($pid);
+    return if @thread_ids == 0;
+
     foreach my $thread_id (@thread_ids) {
 	debug("suspending thread $thread_id in process $pid...") if $DEBUG;
 	suspend_thread($thread_id);
     }
+    suspend_thread($pid);
     return 1;
 }
 
@@ -523,17 +459,20 @@ sub resume_process {
     # now do the opposite of suspend_process: enumerate all
     # the threads of a process and call ResumeThread on them
     my @thread_ids = _enumerate_threads_for_process($pid);
+    return if @thread_ids == 0;
+
     foreach my $thread_id (@thread_ids) {
 	debug("resuming thread $thread_id in process $pid ...") if $DEBUG;
 	resume_thread($thread_id);
     }
+    resume_thread($pid);
     return 1;
 }
 
 sub terminate_thread {
     my ($thread_id) = @_;
     my $handle = get_thread_handle($thread_id, 'terminate');
-    return 0 unless $handle;
+    return 0 if !$handle;
     local $! = 0;
     my $result = win32api('TerminateThread', $handle, 0);
     if ($!) {
@@ -545,12 +484,17 @@ sub terminate_thread {
 sub suspend_thread {
     my ($thread_id) = @_;
     my $handle = get_thread_handle($thread_id, 'suspend');
-    return 0 unless $handle;
+    if (!$handle) {
+	return 0;
+    }
 
     local $! = 0;
     my $result = win32api('SuspendThread', $handle);
     if ($!) {
 	carp "Forks::Super::Job::OS::Win32::suspend_thread(): $! / $^E";
+    }
+    if (&IS_CYGWIN) {
+	$result = win32api('SuspendThread', $handle);
     }
     return $result > -1;
 }
@@ -558,7 +502,7 @@ sub suspend_thread {
 sub resume_thread {
     my ($thread_id) = @_;
     my $handle = get_thread_handle($thread_id, 'suspend');
-    return 0 unless $handle;
+    return 0 if !$handle;
 
     local $! = 0;
     # Win32 threads maintain a "suspend count". If you call
@@ -574,15 +518,116 @@ sub resume_thread {
     return $result > -1;
 }
 
+sub sigzero_process {
+    # CORE::kill 'ZERO' is safe for processes and threads
+    # **BUT** kill 'ZERO' will return 1 for a zombie process
+    # (or rather, a process launched with "system 1,..." that
+    # is not sufficiently detached from the process that 
+    # launched it), which is usually not what we want.
+
+    # Getting a handle to a process and checking that the result
+    # of  GetExitCodeProcess  != 259 (STILL_ACTIVE) is just a
+    # little bit slower but it is exactly what we usually want.
+
+    my $pid = shift;
+    my $handle = get_process_handle($pid, 0);
+    if ($handle != 0) {
+	my $xcode = pack('I',0);
+	my $z = win32api('GetExitCodeProcess',$handle,$xcode);
+	if ($z && (unpack('I',$xcode))[0]==259) {
+	    return $pid;
+	}
+    }
+    return;
+}
+
 sub sigzero_thread {
     my ($thread_id) = @_;
     my $handle = get_thread_handle($thread_id);
-    return 0 unless $handle;
+    return 0 if !$handle;
 
-    my $xcode = pack("I", 0);
+    my $xcode = pack('I', 0);
     my $result = win32api('GetExitCodeThread',$handle,$xcode);
-    $xcode = unpack("I", $xcode);
+    $xcode = unpack('I', $xcode);
+
+    # 259: STILL_ACTIVE
     return $result != 0 && $xcode == 259;
+}
+
+sub sigkill_process {
+    my ($signal, $pid) = @_;
+    my $signo =  Forks::Super::Util::signal_number($signal);
+    my $result;
+
+    if ($signal eq 'INT' || $signal eq 'QUIT' || $signal eq 'BREAK') {
+
+	# sending SIGINT, SIGQUIT, or SIGBREAK to a process is
+	# emulated differently on Windows than for most other signals.
+	# By default they will terminate a process, but they can
+	# be handled by a %SIG entry more or less like in Unix.
+
+	debug("CORE::kill $signal => $pid");
+	if (CORE::kill $signal, $pid) {
+	    $result = [$pid];
+	} else {
+	    debug("CORE::kill $signal,$pid  not successful");
+	    if (sigkill_process_harder($signo, $pid)) {
+		$result = [$pid];
+	    }
+	}
+    } else {
+	if (terminate_process($pid, $signo)) {
+	    $result = [$pid];
+	    debug("terminate_process($pid,$signal) successful") if $DEBUG;
+	} else {
+	    debug("terminate_process($pid,$signal) not successful") if $DEBUG;
+	}
+    }
+    Forks::Super::Sigchld::handle_CHLD(-1);
+    return $result;
+}
+
+sub sigkill_process_harder {
+    my ($signo, $pid) = @_;
+    my $result;
+
+    # this didn't work ... does the process exist?
+    my $handle = get_process_handle($pid, 0);
+    if ($handle != 0) {
+	my $xcode = pack('I',0);
+	my $z = win32api('GetExitCodeProcess',$handle,$xcode);
+	if ($z && unpack('I',$xcode)==259) {
+	    # yep, the process exists
+
+	    # Maybe this is a detached process (like from 
+	    # Forks::Super::Job::_postlaunch_daemon_Win32).
+	    # CORE::kill  doesn't seem to work so well with
+	    # those processes. Let's try something else:
+
+	    # In any case, this next section is a refactor candidate
+
+	    if (Forks::Super::Config::CONFIG('Win32::Process')) {
+		my ($obj, $flags);
+		my $oresult = Win32::Process::Open($obj, $pid, $flags);
+		if ($oresult) {
+		    $oresult = $obj->Kill($signo);
+		    if ($oresult) {
+			$result = [$pid];
+		    }
+		}
+	    } else {
+		# let's try the same thing using the handle
+		# XXX - not tested
+
+		$handle = get_process_handle($pid, 1) || $handle;
+		$z = win32api('TerminateProcess',$handle,15);
+		if ($z) {
+		    $result = [$pid];
+		}
+	    }
+	}
+    }
+    return $result;
 }
 
 ######################################################################
@@ -666,7 +711,7 @@ sub set_thread_priority {
 	$thread_id = win32api('GetCurrentThreadId');
     }
     my $handle = get_thread_handle($thread_id);
-    return 0 unless $handle;
+    return 0 if !$handle;
     return win32api('SetThreadPriority', $handle, $priority);
 }
 
@@ -676,20 +721,20 @@ sub set_os_priority_process {
     my ($process_id, $priority) = @_;
     my $handle = get_process_handle($process_id, 1);
     if (!$handle) {
-	carp_once "Forks::Super::Win32::set_os_priority_process: ",
+	carp_once 'Forks::Super::Win32::set_os_priority_process: ',
 	    "no handle for PID $process_id";
 	return;
     }
     if ($priority < 1) {
-	carp "Forks::Super::Win32: ",
+	carp 'Forks::Super::Win32: ',
 	    "changing os priority setting from $priority to 1 ",
-	    "(valid range is 1-31)";
+	    '(valid range is 1-31)';
 	$priority = 1;
     }
     if ($priority > 31) {
-	carp "Forks::Super::Win32: ",
+	carp 'Forks::Super::Win32: ',
 	    "changing os priority setting from $priority to 31 ",
-	    "(valid range is 1-31)";
+	    '(valid range is 1-31)';
 	$priority = 31;
     }
 
@@ -738,7 +783,7 @@ sub set_os_priority {
     my $thread_id = get_current_thread_id();
     my $handle = get_thread_handle($thread_id);
     if (!$handle) {
-	carp_once "Forks::Super::Job::OS::set_os_priority: ",
+	carp_once 'Forks::Super::Job::OS::set_os_priority: ',
 	    "no Win32 handle available for thread\n";
 	return;
     }
@@ -746,8 +791,11 @@ sub set_os_priority {
     # we don't want to muck with the process priority from here ...
     # we will just set the thread priority
     my $base_priority = get_process_base_priority();
-    $desired_priority = 1 if $desired_priority < 1;
-    $desired_priority = 31 if $desired_priority > 31;
+    if ($desired_priority < 1) {
+	$desired_priority = 1;
+    } elsif ($desired_priority > 31) {
+	$desired_priority = 31;
+    }
     my @fifteens = (15) x 31;
     my $thread_priority = 
 	([],[],[],[],
@@ -782,7 +830,7 @@ sub get_process_priority_class { # for the current process
     local $! = 0;
     my $result = win32api('GetPriorityClass', $phandle);
     if ($!) {
-	carp_once "Forks::Super::Job::OS: ",
+	carp_once 'Forks::Super::Job::OS: ',
 	    "Error retrieving current process priority class $! / $^E\n";
     }
     return $result;
@@ -791,20 +839,20 @@ sub get_process_priority_class { # for the current process
 sub get_process_base_priority {
     my $pid = shift;
     my $class = get_process_priority_class($pid);
-    if ($class == 0x0100) { # realtime
+    if ($class == 0x0100) { #      0x0100: realtime
 	return 24;
-    } elsif ($class == 0x20) { # normal
+    } elsif ($class == 0x20) { #   0x0020: normal
 	return 8;
-    } elsif ($class == 0x40) { # idle
+    } elsif ($class == 0x40) { #   0x0040: idle
 	return 4;
-    } elsif ($class == 0x80) { # high
+    } elsif ($class == 0x80) { #   0x0080: high
 	return 13;
-    } elsif ($class == 0x4000) { # below normal
+    } elsif ($class == 0x4000) { # 0x4000: below normal
 	return 6;
-    } elsif ($class == 0x8000) { # above normal
+    } elsif ($class == 0x8000) { # 0x8000: above normal
 	return 10;
     } else {
-	carp "Forks::Super::Win32::get_process_base_priority: ",
+	carp 'Forks::Super::Win32::get_process_base_priority: ',
 		"unknown priority class $class";
 	return 8;
     }
@@ -850,9 +898,9 @@ sub system1_win32_process {
     $Forks::Super::Job::WIN32_PROC = '__system1__';
     $ENV{'__FORKS_SUPER_PARENT_THREAD'} = $$;
     $Forks::Super::Job::WIN32_PROC_PID = system 1, @cmd;
-    # XXX - handle failure ?
     if ($? == 255 << 8) {
 	# system 1, ...  failed. XXX - what should we do?
+	croak "system 1,{@cmd}  call failed: $! $^E";
     }
     $job->set_signal_pid($Forks::Super::Job::WIN32_PROC_PID);
     if (defined($job->{cpu_affinity}) && CONFIG('Sys::CpuAffinity')) {
@@ -867,6 +915,24 @@ sub system1_win32_process {
     my $c1 = $?;
     $Forks::Super::Job::WIN32_PROC = undef;
     return $c1;
+}
+
+
+# called from Forks::Super::Job::_postlaunch_daemon_Win32
+#
+# if job has daemon option AND timeout option, then we want to
+# kill off a daemon process after the timeout expires.
+#
+# one way to do this is to launch a separate small program
+# that does nothing but enforce the timeout.
+#
+sub totally_kludgy_process_monitor {
+    my ($pid, $timeout) = @_;
+
+    # program to monitor a pid:
+    #     sleep 1,kill 0,$pid or exit for 1..$timeout;kill -9,$pid
+    my $prog = "sleep 1,kill(0,$pid)||exit for 1..$timeout;kill -9,$pid";
+    return system 1, qq[$^X -e "$prog"];
 }
 
 1;

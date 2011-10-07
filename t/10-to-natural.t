@@ -28,6 +28,7 @@ ok($job->{state} eq "ACTIVE", "active state");
 my $waitpid = waitpid($pid,WNOHANG);
 
 # XXX: wait WNOHANG on active process should return 0 or -1 ???
+#      I think all platforms behave the same way except Cygwin.
 ok(-1 == $waitpid || 0 == $waitpid, "non-blocking wait succeeds");
 
 ok(! defined $job->{status}, "no job status");

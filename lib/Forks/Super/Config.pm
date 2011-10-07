@@ -19,71 +19,73 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(CONFIG CONFIG_module);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 
 our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %SIGNO);
 
 
 sub init {
 
-  %CONFIG = ();
-  $CONFIG{filehandles} = 1;
+    %CONFIG = ();
+    $CONFIG{filehandles} = 1;
 
-  $IS_TEST = 0;
-  $IS_TEST_CONFIG = 0;
+    $IS_TEST = 0;
+    $IS_TEST_CONFIG = 0;
 
-  $CONFIG{'Win32::API'} = 0 if $ENV{NO_WIN32_API};
-
-  use Config;
-  my $i = 0;
-  if (defined $Config::Config{'sig_name'}) {
-    %SIGNO = map { $_ => $i++ } split / /, $Config::Config{'sig_name'};
-  }
-
-  if (defined $ENV{FORKS_SUPER_CONFIG}) {
-    my @cfg_spec = split /,/, $ENV{FORKS_SUPER_CONFIG};
-    foreach my $spec (@cfg_spec) {
-      if ($spec =~ s/^!//) {
-	$CONFIG{$spec} = 0;
-      } elsif ($spec =~ s/^\?//) {
-	delete $CONFIG{$spec};
-	CONFIG($spec);
-      } else {
-	$CONFIG{$spec} = 1;
-      }
+    if ($ENV{NO_WIN32_API}) {
+	$CONFIG{'Win32::API'} = 0;
     }
-  }
-  return;
+
+    use Config;
+    my $i = 0;
+    if (defined $Config::Config{'sig_name'}) {
+	%SIGNO = map { $_ => $i++ } split / /, $Config::Config{'sig_name'};
+    }
+
+    if (defined $ENV{FORKS_SUPER_CONFIG}) {
+	my @cfg_spec = split /,/, $ENV{FORKS_SUPER_CONFIG};
+	foreach my $spec (@cfg_spec) {
+	    if ($spec =~ s/^!//) {
+		$CONFIG{$spec} = 0;
+	    } elsif ($spec =~ s/^\?//) {
+		delete $CONFIG{$spec};
+		CONFIG($spec);
+	    } else {
+		$CONFIG{$spec} = 1;
+	    }
+	}
+    }
+    return;
 }
 
 sub init_child {
-  untie $CONFIG{'filehandles'};
-  untie %CONFIG;
-# unconfig('filehandles');
-  return;
+    untie $CONFIG{'filehandles'};
+    untie %CONFIG;
+#   unconfig('filehandles');
+    return;
 }
 
 sub unconfig {
-  my $module = shift;
-  $CONFIG{$module} = 0;
-  return 0;
+    my $module = shift;
+    $CONFIG{$module} = 0;
+    return 0;
 }
 
 sub config {
-  my $module = shift;
-  $CONFIG{$module} = 1;
-  return 1;
+    my $module = shift;
+    $CONFIG{$module} = 1;
+    return 1;
 }
 
 sub configif {
-  my $module = shift;
-  return $CONFIG{$module} if defined $CONFIG{$module};
-  return config($module);
+    my $module = shift;
+    return $CONFIG{$module} if defined $CONFIG{$module};
+    return config($module);
 }
 
 sub deconfig {
-  my $module = shift;
-  return delete $CONFIG{$module};
+    my $module = shift;
+    return delete $CONFIG{$module};
 }
 
 #
@@ -94,90 +96,91 @@ sub deconfig {
 # we have to run it for every child.
 #
 sub CONFIG {
-  my ($module, $warn, @settings) = @_;
-  if (defined $CONFIG{$module}) {
-    return $CONFIG{$module};
-  }
+    my ($module, $warn, @settings) = @_;
+    if (defined $CONFIG{$module}) {
+	return $CONFIG{$module};
+    }
 
-  if (substr($module,0,1) eq '/') {
-    return $CONFIG{$module} = CONFIG_external_program($module);
-  } elsif ($module eq 'filehandles') {
-    return $CONFIG{$module} = 1; # available by default
-  } else {
-    return $CONFIG{$module} =
-      CONFIG_module($module,$warn,@settings);
-  }
+    if (substr($module,0,1) eq '/') {
+	return $CONFIG{$module} = CONFIG_external_program($module);
+    } elsif ($module eq 'filehandles') {
+	return $CONFIG{$module} = 1; # available by default
+    } else {
+	return $CONFIG{$module} =
+	    CONFIG_module($module,$warn,@settings);
+    }
 }
 
 sub CONFIG_module {
-  my ($module,$warn, @settings) = @_;
-  if (defined $CONFIG{$module}) {
-    return $CONFIG{$module};
-  }
-  my $zz = eval " require $module ";     ## no critic (StringyEval)
-  if ($@) {
-    carp "Forks::Super::CONFIG: ",
-      "Module $module could not be loaded: $@\n" if $warn;
-    return 0;
-  }
+    my ($module,$warn, @settings) = @_;
+    if (defined $CONFIG{$module}) {
+	return $CONFIG{$module};
+    }
+    my $zz = eval " require $module ";     ## no critic (StringyEval)
+    if ($@) {
+	carp 'Forks::Super::CONFIG: ',
+	    "Module $module could not be loaded: $@\n" if $warn;
+	return 0;
+    }
 
-  if (@settings) {
-    $zz = eval " $module->import(\@settings) ";  ## no critic (StringyEval)
-    if ($@ && $warn) {
-      carp "Forks::Super::CONFIG: ",
-	"Module $module was loaded but could not import with settings [",
-	join (',', @settings), "]\n";
+    if (@settings) {
+	$zz = eval " $module->import(\@settings) ";  ## no critic (StringyEval)
+	if ($@ && $warn) {
+	    carp 'Forks::Super::CONFIG: Module ',
+	        "$module was loaded but could not import with settings [",
+ 	        join (',', @settings), "]\n";
+	}
     }
-  }
-  if ($IS_TEST_CONFIG) {
-    my $v = eval "\$$module" . '::VERSION' or do {}; ## no critic (StringyEval)
-    if (defined $v) {
-      print STDERR "[$module enabled (v$v)]\n";
-    } else {
-      print STDERR "[$module enabled]\n";
+
+    if ($IS_TEST_CONFIG) {
+	my $v = eval "\$$module" . '::VERSION';       ## no critic (StringyEval)
+	if (defined $v) {
+	    print STDERR "[$module enabled (v$v)]\n";
+	} else {
+	    print STDERR "[$module enabled]\n";
+	}
     }
-  }
-  return 1;
+    return 1;
 }
 
 sub CONFIG_external_program {
-  my ($external_program) = @_;
-  if (defined $CONFIG{$external_program}) {
-    return $CONFIG{$external_program};
-  }
-
-  if (-x $external_program) {
-    if ($IS_TEST_CONFIG) {
-      print STDERR "CONFIG\{$external_program\} enabled\n";
+    my ($external_program) = @_;
+    if (defined $CONFIG{$external_program}) {
+	return $CONFIG{$external_program};
     }
-    return $external_program;
-  }
 
-  my $xprogram = $external_program;
-  $xprogram =~ s:^/::;
-  if (-w "/dev/null") {
-      my $which = qx(which $xprogram 2>/dev/null); ## no critic (Backtick)
-      $which =~ s/\s+$//;
-      if ($which && -x $which) {
-	  if ($IS_TEST_CONFIG) {
-	      print STDERR "CONFIG\{$external_program\} enabled\n";
-	  }
-	  return $CONFIG{$external_program} = $CONFIG{$which} = $which;
-      }
-  }
-
-  # poor man's which
-  my @path1 = split /:/, $ENV{PATH};
-  my @path2 = split /;/, $ENV{PATH};
-  foreach my $path (@path1, @path2, '.') {
-    if (-x "$path/$xprogram") {
-      if ($IS_TEST_CONFIG) {
-	print STDERR "CONFIG\{$external_program\} enabled\n";
-      }
-      return $CONFIG{$external_program} = "$path/$xprogram";
+    if (-x $external_program) {
+	if ($IS_TEST_CONFIG) {
+	    print STDERR "CONFIG\{$external_program\} enabled\n";
+	}
+	return $external_program;
     }
-  }
-  return 0;
+
+    my $xprogram = $external_program;
+    $xprogram =~ s{^/}{};
+    if (-w '/dev/null') {
+	my $which = qx(which $xprogram 2>/dev/null); ## no critic (Backtick)
+	$which =~ s{\s+$}{};
+	if ($which && -x $which) {
+	    if ($IS_TEST_CONFIG) {
+		print STDERR "CONFIG\{$external_program\} enabled\n";
+	    }
+	    return $CONFIG{$external_program} = $CONFIG{$which} = $which;
+	}
+    }
+
+    # poor man's which
+    my @path1 = split /:/, $ENV{PATH};
+    my @path2 = split /;/, $ENV{PATH};
+    foreach my $path (@path1, @path2, '.') {
+	if (-x "$path/$xprogram") {
+	    if ($IS_TEST_CONFIG) {
+		print STDERR "CONFIG\{$external_program\} enabled\n";
+	    }
+	    return $CONFIG{$external_program} = "$path/$xprogram";
+	}
+    }
+    return 0;
 }
 
 1;

@@ -50,6 +50,13 @@ SKIP: {
       sleep 1;
       Forks::Super::kill('QUIT', $pid1) unless $pid1->is_complete;
   }
+  for (1..3) {
+      last if $pid1->is_complete;
+      Forks::Super::kill('KILL',$pid1);
+      Forks::Super::kill('CONT',$pid1);
+      sleep 1;
+  }
+# $pid1->wait;
 
   #Forks::Super::Debug::use_Carp_Always();
 
@@ -57,11 +64,11 @@ SKIP: {
   # use the !! idiom to track the actual number of processes signalled
   #$zero = Forks::Super::kill('ZERO', $pid1, $pid2, $pid3);
   $zero = !!Forks::Super::kill('ZERO', $pid1)
-      + !!Forks::Super::kill('ZERO', $pid2)
-      + !!Forks::Super::kill('ZERO', $pid3);
+      + 2*!!Forks::Super::kill('ZERO', $pid2)
+      + 4*!!Forks::Super::kill('ZERO', $pid3);
 
-  ok($zero==2, "successfully sent SIGZERO to 2 exec procs")    ### 17 ###
-  or diag("\$zero was $zero, expected 2");
+  ok($zero==6, "successfully sent SIGZERO to 2 exec procs")    ### 17 ###
+  or diag("\$zero was $zero, expected 6");
 
   my $t = Time::HiRes::time();
   my $p = waitpid $pid1, 0, 20;

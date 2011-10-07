@@ -18,35 +18,35 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(run_callback);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 
 sub run_callback {
-  my ($job, $callback) = @_;
-  my $key = "_callback_$callback";
-  if (!defined $job->{$key}) {
-    return;
-  }
-  if ($job->{debug}) {
-    debug("run_callback: Job ",$job->{pid}," running $callback callback");
-  }
-  my $ref = ref $job->{$key};
-  if ($ref ne 'CODE' && ref ne '') {
-    carp "Forks::Super::Job::run_callback: invalid callback $callback. ",
-      "Got $ref, expected CODE or subroutine name\n";
-    return;
-  }
+    my ($job, $callback) = @_;
+    my $key = "_callback_$callback";
+    if (!defined $job->{$key}) {
+	return;
+    }
+    if ($job->{debug}) {
+	debug('run_callback: Job ',$job->{pid}," running $callback callback");
+    }
+    my $ref = ref $job->{$key};
+    if ($ref ne 'CODE' && ref ne '') {
+	carp "Forks::Super::Job::run_callback: invalid callback $callback. ",
+	    "Got $ref, expected CODE or subroutine name\n";
+	return;
+    }
 
-  $job->{"callback_time_$callback"} = Time::HiRes::time();
-  $callback = delete $job->{$key};
+    $job->{"callback_time_$callback"} = Time::HiRes::time();
+    $callback = delete $job->{$key};
 
-  no strict 'refs';
-  if (ref $callback eq 'HASH') {
-    Carp::confess("bad callback: $callback ",
-		  "(did you forget to specify \"sub\" { }?)");
-  } else {
-    $callback->($job, $job->{pid});
-  }
-  return;
+    if (ref $callback eq 'HASH') {
+	Carp::confess "bad callback: $callback ",
+	    '(did you forget to specify "sub" { }?)';
+    } else {
+	no strict 'refs';
+	$callback->($job, $job->{pid});
+    }
+    return;
 }
 
 sub _preconfig_callbacks {
@@ -58,16 +58,16 @@ sub _preconfig_callbacks {
   if (!defined $job->{callback}) {
     return;
   }
-  if (ref $job->{callback} eq "" || ref $job->{callback} eq 'CODE') {
+  if (ref $job->{callback} eq '' || ref $job->{callback} eq 'CODE') {
     $job->{callback} = { finish => $job->{callback} };
   }
   if (defined $job->{callback}{finish} && $job->{daemon}) {
-      carp "Forks::Super::_preconfig_callbacks: ",
+      carp 'Forks::Super::_preconfig_callbacks: ',
           "'finish' callback is not going to be called with a daemon process";
   }
   foreach my $callback_type (qw(finish start queue fail)) {
     if (defined $job->{callback}{$callback_type}) {
-      $job->{"_callback_" . $callback_type}
+      $job->{'_callback_' . $callback_type}
 	= qualify_sub_name($job->{callback}{$callback_type});
       if ($job->{debug}) {
 	debug("_preconfig_callbacks: registered callback type $callback_type");

@@ -23,8 +23,10 @@
 use Carp;
 use strict;
 use warnings;
+my $log;
 my $logfile = $ENV{LOG_FILE} || $ENV{LOGFILE} ||
     croak "No log file specified in \$ENV{LOG_FILE}.\n";
+$0 = $ENV{DAEMON_NAME} || "t/external_daemon.pl";
 
 my $value = $ENV{VALUE} 
 || do {
@@ -32,13 +34,16 @@ my $value = $ENV{VALUE}
     10 
 };
 
-open my $log, '>', $logfile;
-close STDERR; open STDERR, '>', "$logfile.err";
+open $log, '>', $logfile;
+close STDERR; 
+open STDERR, '>', "$logfile.err";
 select $log;
 $| = 1;
 
 print "Hello. This is daemon process $$.\n";
 print "My parent pid is ";
+print(eval { getppid() } || "<unavailable for $^O>");
+print ",";
 sleep 3;
 print(eval { getppid() } || "<unavailable for $^O>");
 print "\n";
@@ -51,6 +56,6 @@ for my $i (1 .. $value) {
 END {
     print "Good bye after ", time-$^T, " seconds.\n";
     print "Exit status is $?\n";
-    close $log;
+    close $log if $log;
     close STDERR;
 }

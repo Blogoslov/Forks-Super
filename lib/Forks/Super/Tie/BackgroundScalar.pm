@@ -67,6 +67,8 @@ use overload
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
+our $VERSION = '0.54';
+
 # "protocols" for serializing data and the methods used
 # to carry out the serialization
 
@@ -82,7 +84,9 @@ my %serialization_dispatch = (
 	require => sub { require JSON },
 	encode => sub {
 	    my $data = shift;
-	    $data = "$data" if ref $data eq '';
+	    if (ref $data eq '') {
+		$data = "$data";
+	    }
 	    return JSON->new->objToJson([$data]);
 	},
 	decode => sub { return JSON->new->jsonToObj($_[0])->[0] }
@@ -92,7 +96,9 @@ my %serialization_dispatch = (
 	require => sub { require JSON },
 	encode => sub { 
 	    my $data = shift;
-	    $data = "$data" if ref $data eq '';
+	    if (ref $data eq '') {
+		$data = "$data";
+	    }
 	    return JSON::encode_json([$data]);
 	},
 	decode => sub { return JSON::decode_json($_[0])->[0] }
@@ -107,10 +113,10 @@ my %serialization_dispatch = (
 		if ($job->{untaint}) {
 		    ($data) = $data =~ /(.*)/s;
 		} else {
-		    carp "Forks::Super::bg_eval/bg_qx(): ",
-		        "Using Data::Dumper for serialization, which cannot ",
+		    carp 'Forks::Super::bg_eval/bg_qx(): ',
+		        'Using Data::Dumper for serialization, which cannot ',
 		        "operate on 'tainted' data. Use bg_eval {...} ",
-		        "{untaint => 1} or bg_qx COMMAND, ",
+		        '{untaint => 1} or bg_qx COMMAND, ',
 		        "{untaint => 1} to retrieve the result.\n";
 		    return;
 		}
@@ -173,8 +179,8 @@ sub _encode {
 	$serialization_dispatch{$protocol}{'require'}->();
 	return $serialization_dispatch{$protocol}{encode}->($data);
     } else {
-	croak "Forks::Super::Tie::BackgroundScalar: ",
-	    "YAML, JSON, or Data::Dumper required to use bg_eval";
+	croak 'Forks::Super::Tie::BackgroundScalar: ',
+	    'YAML, JSON, or Data::Dumper required to use bg_eval';
     }
 }
 
@@ -184,8 +190,8 @@ sub _decode {
 	$serialization_dispatch{$protocol}{require}->();
 	return $serialization_dispatch{$protocol}{decode}->($data,$job);
     } else {
-	croak "Forks::Super::Tie::BackgroundScalar: ",
-	    "YAML, JSON, or Data::Dumper required to use bg_eval";
+	croak 'Forks::Super::Tie::BackgroundScalar: ',
+	    'YAML, JSON, or Data::Dumper required to use bg_eval';
     }
 }
 
@@ -225,25 +231,25 @@ sub _fetch {
   if (!$self->{value_set}) {
     if (!$self->{job}->is_complete) {
       my $pid = Forks::Super::waitpid $self->{job_id}, WREAP_BG_OK;
-      if ($pid != $self->{job}->{real_pid} && $pid != $self->{job}->{pid}) {
+      if ($pid != $self->{job}{real_pid} && $pid != $self->{job}{pid}) {
 
-	carp "Forks::Super::bg_eval: ",
+	carp 'Forks::Super::bg_eval: ',
 	  "failed to retrieve result from process!\n";
 	$self->{value_set} = 1;
-	$self->{error} = "waitpid failed, result not retrieved from process";
+	$self->{error} = 'waitpid failed, result not retrieved from process';
 	bless $self, $class;
-	return "";  # v0.53 on failure return empty string
+	return '';  # v0.53 on failure return empty string
       }
-      if ($self->{job}->{status} != 0) {
-	$self->{error} = "job status: " . $self->{job}->{status};
+      if ($self->{job}{status} != 0) {
+	$self->{error} = 'job status: ' . $self->{job}{status};
       }
       # XXX - what other error conditions are there to set ?
     }
 
     if ($self->{style} eq 'eval') {
       my $stdout = join'', Forks::Super::read_stdout($self->{job_id});
-      unless (eval {
-	  $self->{value} = _decode($self->{job}->{_lazy_proto}, 
+      if (!eval {
+	  $self->{value} = _decode($self->{job}{_lazy_proto}, 
 				   $stdout, $self->{job});
 	  1
 	      }) {

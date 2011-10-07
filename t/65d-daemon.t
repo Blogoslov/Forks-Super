@@ -7,15 +7,15 @@ use warnings;
 
 our $CWD = &Cwd::getcwd;
 if (${^TAINT}) {
-  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-  }
-  ($ipc_dir) = $ipc_dir =~ /(.*)/;
-  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
-  ($CWD) = $CWD =~ /(.*)/;
-  ($^X) = $^X =~ /(.*)/;
-  $ENV{PATH}='';
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+    ($CWD) = $CWD =~ /(.*)/;
+    ($^X) = $^X =~ /(.*)/;
+    $ENV{PATH}='';
 }
 
 ### to cmd
@@ -47,18 +47,27 @@ SKIP: {
     ok($pid->{intermediate_pid}, "intermediate pid set on job");
 
 
-    sleep 2;
-    $pid->suspend;
-    sleep 3;
-    my $s1 = -s $output;
-    sleep 2;
-    my $s2 = -s $output;
-    $pid->resume;
-    sleep 2;
-    my $s22 = -s $output;
-    ok($s1 && $s1 == $s2 && $s2 != $s22,
-       "suspend/resume on daemon ok $s1/$s2/$s22")
-	or diag("$s1/$s2");
+    if (Forks::Super::Util::IS_WIN32ish &&
+	!Forks::Super::Config::CONFIG_module('Win32::API')) {
+
+	ok(1, "# suspend/resume daemon unavailable on $^O without Win32::API");
+
+    } else {
+
+	sleep 3;
+	$pid->suspend;
+	sleep 3;
+	my $s1 = -s $output;
+	sleep 2;
+	my $s2 = -s $output;
+	$pid->resume;
+	sleep 2;
+	my $s22 = -s $output;
+	ok($s1 == $s2 && $s2 != $s22,
+	   "suspend/resume on daemon ok $s1/$s2/$s22")
+	    or diag("$s1/$s2");
+    }
+
     sleep 1;
     $Forks::Super::Debug::DEBUG = 0;
 

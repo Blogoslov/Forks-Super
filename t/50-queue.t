@@ -17,16 +17,17 @@ my $pid1 = fork { sub => sub { sleep 5 } };
 my $pid2 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1) && isValidPid($pid2), "two successful fork calls");
 my $pid3 = fork { sub => sub { sleep 5 } };
-ok(@Forks::Super::Queue::QUEUE == 1, "third fork call is deferred");
+ok(@Forks::Super::Queue::QUEUE == 1, "third fork call is deferred")    ### 3 ###
+    or diag("script time is ", time-$^T);
 ok($pid3 < -10000, "deferred job has large negative id");
 my $j = Forks::Super::Job::get($pid3);
 ok(defined $j, "job object avail for deferred job");
-ok($j->{state} eq "DEFERRED", "deferred job in DEFERRED state");
+ok($j->{state} eq "DEFERRED", "deferred job in DEFERRED state");       ### 6 ###
 
 waitall;
 
 ok($j->is_complete, "waitall waits for deferred job to complete");
-ok($j->{real_pid} != $j->{pid}, "real_pid != pid for deferred job");
+ok($j->{real_pid} != $j->{pid}, "real_pid != pid for deferred job");   ### 8 ###
 ok(isValidPid($j->{real_pid}), "real_pid is valid pid");
 
 ############################################

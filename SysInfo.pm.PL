@@ -34,6 +34,10 @@ use warnings;
 # This information may not be accurate and is not
 # intended for any other purpose.
 
+## no critic (ProhibitMagicNumbers)
+
+our \$VERSION = '0.54';
+
 ____;
 
 printF('SYSTEM', "'$info{system}'", "'unknown'");
@@ -53,6 +57,8 @@ printF('BOGUS_WAITPID_RESULT', $info{bogus_waitpid_result}, '-1');
 printF('BOGUS_WAITPID_STATUS', $info{bogus_waitpid_status}, '-1');
 printF('REAPED_WAITPID_RESULT', $info{reaped_waitpid_result}, '-1');
 printF('REAPED_WAITPID_STATUS', $info{reaped_waitpid_status}, '-1');
+printF('IGNORE_WAITPID_RESULT', $info{ignore_waitpid_result}, '-1');
+printF('IGNORE_WAITPID_STATUS', $info{ignore_waitpid_status}, '-1');
 
 if (defined $info{ncpu}) {
   printF('NUM_PROCESSORS', $info{ncpu}, '1');

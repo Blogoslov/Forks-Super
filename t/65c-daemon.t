@@ -24,7 +24,7 @@ if (${^TAINT}) {
 my $output = "$CWD/t/out/daemon3.$$.out";
 my $pid = fork {
     daemon => 1,
-    env => { LOG_FILE => $output, VALUE => 10 },
+    env => { LOG_FILE => $output, VALUE => 15 },
     name => 'daemon3',
     cmd => [ $^X, "$CWD/t/external-daemon.pl" ]
 };
@@ -45,33 +45,46 @@ SKIP: {
     my $k = Forks::Super::kill 'ZERO', $pid;
     ok($k, "SIGZERO on daemon successful");
     ok($pid->{intermediate_pid}, "intermediate pid set on job");
+    diag("intermediate pid was $pid->{intermediate_pid}");
     
-    sleep 2;
-    $pid->suspend;
-    sleep 3;
-    my $s1 = -s $output;
-    sleep 2;
-    my $s2 = -s $output;
-    $pid->resume;
-    sleep 2;
-    my $s22 = -s $output;
-    ok($s1 && $s1 == $s2 && $s2 != $s22, 
-       "suspend/resume on daemon ok $s1/$s2/$s22")
-	or diag("$s1/$s2/$s22");
+    if (Forks::Super::Util::IS_WIN32ish &&
+	!Forks::Super::Config::CONFIG_module('Win32::API')) {
 
-# print STDERR "Sending kill to $pid, ", $pid->signal_pid, "\n";
-    sleep 2;
+	ok(1, "# suspend/resume daemon unavailable on $^O without Win32::API");
 
+    } else {
+
+	sleep 2;
+	$pid->suspend;
+	sleep 4;
+	my $s1 = -s $output;
+	sleep 1;
+	my $s2 = -s $output;
+	$pid->resume;
+	sleep 2;
+	my $s22 = -s $output;
+	ok($s1 && $s1 == $s2 && $s2 != $s22, 
+	   "suspend/resume on daemon ok $s1/$s2/$s22")
+	    or diag("$s1/$s2/$s22");
+    }
+
+    sleep 2;
     my $k1 = Forks::Super::kill 'QUIT', $pid;
+    sleep 3;
+
     for (1..2) {
         # sometimes signal doesn't kill process the first time?
         sleep 1;
-	Forks::Super::kill('QUIT', $pid) unless $pid->is_complete;
+	if (!$pid->is_complete) {
+	    diag("resending kill signal to $pid");
+	    Forks::Super::kill('KILL', $pid);
+	}
     }
+    sleep 3;
 
 
     my $s3 = -s $output;
-    sleep 4;
+    sleep 2;
 
     # failure point in Cygwin where a zombie process is left and $k2 => 1
     my $k2 = Forks::Super::kill 'ZERO', $pid;
@@ -93,4 +106,8 @@ SKIP: {
     }
 }
 
-unlink $output,"$output.err" unless $ENV{KEEP};
+if ($ENV{KEEP}) {
+    print STDERR "output in $output, $output.err\n";
+} else {
+    unlink $output,"$output.err";
+}

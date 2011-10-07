@@ -15,7 +15,10 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.53';
+use constant FOREVER => 9E9;
+use constant LONG_TIME => 9E8;
+
+our $VERSION = '0.54';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -41,148 +44,159 @@ sub Forks::Super::Job::_config_timeout_parent {
 # Should only run from a child process immediately after the fork.
 #
 sub Forks::Super::Job::_config_timeout_child {
-  my $job = shift;
-  my $timeout = 9E9;
+    my $job = shift;
+    my $timeout = &FOREVER;
+    
+    if (exists $SIG{$TIMEOUT_SIG}) {
+	$SIG{$TIMEOUT_SIG} = 'DEFAULT';
+    }
 
-  if (exists $SIG{$TIMEOUT_SIG}) {
-    $SIG{$TIMEOUT_SIG} = 'DEFAULT';
-  }
+    if (defined $job->{timeout}) {
+	$timeout = _time_from_natural_language($job->{timeout}, 1);
+    }
+    if (defined $job->{expiration}) {
+	$job->{expiration} = _time_from_natural_language($job->{expiration}, 0);
+	if ($job->{expiration} - Time::HiRes::time() < $timeout) {
+	    $timeout = $job->{expiration} - Time::HiRes::time();
+	}
+    }
+    if ($timeout > &LONG_TIME) {
+	return;
+    }
+    $job->{_timeout} = $timeout;
+    $job->{_expiration} = $timeout + Time::HiRes::time();
 
-  if (defined $job->{timeout}) {
-    $timeout = _time_from_natural_language($job->{timeout}, 1);
+    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
+	croak 'Forks::Super: alarm() not available on this system. ',
+	    "timeout,expiration options not allowed.\n";
+    }
+
+    # Un*x systems - try to establish a new process group for
+    # this child. If this process times out, we want to have
+    # an easy way to kill off all the grandchildren.
+    #
+    # On Windows, if a child (i.e., a psuedo-process) launches
+    # a REAL process (with system, exec, Win32::Process::Create, etc.)
+    # then the only reliable way I've found to take it out is
+    # with the system command TASKKILL.
+    #
+    # see the END{} block that covers child cleanup below
+    #
+    if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+	_change_process_group_child();
+    }
+    
+    if ($timeout < 1) {
+	croak 'Forks::Super::Job::_config_timeout_child(): quick timeout';
+    }
+
     if ($job->{style} eq 'exec') {
-      carp "Forks::Super: exec option used, timeout option ignored\n";
-      return;
+	carp "Forks::Super: exec option used, expiration option ignored\n";
+	# XXX - see &F::S::J::OS::totally_kludgy_process_monitor
+	#       for a possible workaround
+	return;
     }
-  }
-  if (defined $job->{expiration}) {
-    $job->{expiration} = _time_from_natural_language($job->{expiration}, 0);
-    if ($job->{expiration} - Time::HiRes::time() < $timeout) {
-      $timeout = $job->{expiration} - Time::HiRes::time();
-    }
-    if ($job->{style} eq 'exec') {
-      carp "Forks::Super: exec option used, expiration option ignored\n";
-      return;
-    }
-  }
-  if ($timeout > 9E8) {
+
+    $XSIG{ALRM}[1] = \&_child_timeout;
+
+    $EXPIRATION = Time::HiRes::time() + $timeout - 1.0;
+    $Forks::Super::Job::Timeout::USE_ITIMER = 0;
+    alarm $timeout;
+
+    debug('_config_timeout_child(): ',
+	  "alarm set for ${timeout}s in child process $$")
+	if $job->{debug};
     return;
-  }
-  $job->{_timeout} = $timeout;
-  $job->{_expiration} = $timeout + Time::HiRes::time();
-
-  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-    croak "Forks::Super: alarm() not available on this system. ",
-      "timeout,expiration options not allowed.\n";
-    # return;
-  }
-
-  # Un*x systems - try to establish a new process group for
-  # this child. If this process times out, we want to have
-  # an easy way to kill off all the grandchildren.
-  #
-  # On Windows, if a child (i.e., a psuedo-process) launches
-  # a REAL process (with system, exec, Win32::Process::Create, etc.)
-  # then the only reliable way I've found to take it out is
-  # with the system command TASKKILL.
-  #
-  # see the END{} block that covers child cleanup below
-  #
-  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    if (eval { $ORIG_PGRP = getpgrp(0);1 }) {
-      setpgrp(0, $$);
-      $NEW_PGRP = $job->{pgid} = getpgrp(0);
-      $NEW_SETSID = 0;
-      if ($NEW_PGRP ne $ORIG_PGRP) {
-	if ($job->{debug}) {
-	  debug("_config_timeout_child: ",
-		"Child process group changed to $job->{pgid}");
-	}
-      } else {
-	# setpgrp didn't work, try POSIX::setsid
-	$NEW_SETSID = POSIX::setsid();
-	$job->{pgid} = $NEW_PGRP = getpgrp(0);
-	if ($job->{debug}) {
-	  debug("_config_timeout_child: ",
-		"Child process started new session $NEW_SETSID, ",
-		"process group $NEW_PGRP");
-	}
-      }
-    } else {
-      $Forks::Super::SysInfo::CONFIG{'getpgrp'} = 0;
-    }
-  }
-
-  if ($timeout < 1) {
-    if ($Forks::Super::Config::IS_TEST) {
-      die "Forks::Super: quick timeout\n";
-    }
-    croak "Forks::Super::Job::_config_timeout_child(): quick timeout";
-  }
-
-  $XSIG{ALRM}[1] = \&_child_timeout;
-
-  $EXPIRATION = Time::HiRes::time() + $timeout - 1.0;
-  $Forks::Super::Job::Timeout::USE_ITIMER = 0;
-  alarm $timeout;
-
-  debug("_config_timeout_child(): ",
-	"alarm set for ${timeout}s in child process $$")
-    if $job->{debug};
-
-  return;
 }
+
+sub _change_process_group_child {
+    my ($job) = @_;
+    if (eval { $ORIG_PGRP = getpgrp(0);1 }) {
+	setpgrp(0, $$);
+	$NEW_PGRP = $job->{pgid} = getpgrp(0);
+	$NEW_SETSID = 0;
+	if ($NEW_PGRP ne $ORIG_PGRP) {
+	    if ($job->{debug}) {
+		debug('_config_timeout_child: ',
+		      "Child process group changed to $job->{pgid}");
+	    }
+	} else {
+	    # setpgrp didn't work, try POSIX::setsid
+	    $NEW_SETSID = POSIX::setsid();
+	    $job->{pgid} = $NEW_PGRP = getpgrp(0);
+	    if ($job->{debug}) {
+		debug('_config_timeout_child: ',
+		      "Child process started new session $NEW_SETSID, ",
+		      "process group $NEW_PGRP");
+	    }
+	}
+    } else {
+	$Forks::Super::SysInfo::CONFIG{'getpgrp'} = 0;
+    }
+    return;
+}
+
 
 # to be run in a child if that child times out
 sub _child_timeout {
 
-  # the SIGALRM handler in the child might be used for
-  # several purposes, so the fact that this function is
-  # called does not necessarily mean it is time for the
-  # child to exit.
-  if ($Forks::Super::SysInfo::CONFIG{'setitimer'}
-      && $Forks::Super::Job::Timeout::USE_ITIMER
-      && Time::HiRes::time() 
-              < $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL) {
-      if ($DEBUG) {
-	  debug("SIGALRM caught in child, but expiration time ",
-		$EXPIRATION, " not reached yet (", Time::HiRes::time(), ")");
-      }
-      return;
-  }
-
-  warn "Forks::Super: child process timeout\n";
-  $TIMEDOUT = 1;
-
-  # we wish to kill not only this child process,
-  # but any other active processes that it has spawned.
-  # There are several ways to do this.
-  my $job = $Forks::Super::Job::self;
-
-  if (Forks::Super::Config::CONFIG('Proc::ProcessTable')) {
-      my @to_kill = _child_timeout_read_procs_to_kill_from_Proc_ProcessTable();
-      if (@to_kill > 0) {
-	  Forks::Super::kill($TIMEOUT_SIG, @to_kill);
-      }
-  } elsif ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
-      local $SIG{$TIMEOUT_SIG} = 'IGNORE';
-      $DISABLE_INT = 1;
-      my $SIG = $Forks::Super::Config::SIGNO{$TIMEOUT_SIG} || 15;
-      CORE::kill -$SIG, getpgrp(0);
-      $DISABLE_INT = 0;
+    # the SIGALRM handler in the child might be used for
+    # several purposes, so the fact that this function is
+    # called does not necessarily mean it is time for the
+    # child to exit.
+    if ($Forks::Super::SysInfo::CONFIG{'setitimer'}
+	&& $Forks::Super::Job::Timeout::USE_ITIMER
+	&& Time::HiRes::time() 
+		< $EXPIRATION - $Forks::Super::SysInfo::TIME_HIRES_TOL) {
+	if ($DEBUG) {
+	    debug('SIGALRM caught in child, but expiration time ',
+		  $EXPIRATION, ' not reached yet (', Time::HiRes::time(), ')');
+	}
+	return;
     }
-  } elsif (&IS_WIN32) {
-      _child_timeout_Win32();
-  }
-  if (&IS_WIN32 && $DEBUG) {
-    debug("Process $$/$Forks::Super::MAIN_PID exiting with code 255");
-  }
-  exit 255;
+
+    warn "Forks::Super: child process timeout\n";
+    $TIMEDOUT = 1;
+
+    # we wish to kill not only this child process,
+    # but any other active processes that it has spawned.
+    # There are several ways to do this.
+    my $job = Forks::Super::Job->this;
+
+    if (Forks::Super::Config::CONFIG('Proc::ProcessTable')) {
+	my @to_kill = 
+	    _child_timeout_read_procs_to_kill_from_Proc_ProcessTable();
+	if (defined $Forks::Super::Job::CHILD_EXEC_PID) {
+	    push @to_kill, $Forks::Super::Job::CHILD_EXEC_PID;
+	}
+	if (@to_kill > 0) {
+	    Forks::Super::kill($TIMEOUT_SIG, @to_kill);
+	}
+    } elsif (_child_timeout_has_new_process_group()) {
+
+	local $SIG{$TIMEOUT_SIG} = 'IGNORE';
+	$DISABLE_INT = 1;
+	my $SIG = $Forks::Super::Config::SIGNO{$TIMEOUT_SIG} || 15;
+	CORE::kill -$SIG, getpgrp(0);
+	$DISABLE_INT = 0;
+
+    } elsif (&IS_WIN32) {
+	_child_timeout_Win32();
+    }
+    exit 255;
+}
+
+sub _child_timeout_has_new_process_group {
+    if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+	if ($NEW_SETSID || ($ORIG_PGRP ne $NEW_PGRP)) {
+	    return 1;
+	}
+    }
+    return 0;
 }
 
 sub _child_timeout_read_procs_to_kill_from_Proc_ProcessTable {
-    my $ps = Proc::ProcessTable->new();
+    my $ps = eval { Proc::ProcessTable->new() } || return;
     my (%ppid, @to_kill) = ();
     foreach my $p (@{$ps->table}) {
       $ppid{$p->pid} = $p->ppid;
@@ -203,100 +217,89 @@ sub _child_timeout_read_procs_to_kill_from_Proc_ProcessTable {
 sub _child_timeout_Win32 {
     my $proc = Forks::Super::Job::get_win32_proc();
     my $pid = Forks::Super::Job::get_win32_proc_pid();
-    my $job = $Forks::Super::Job::self;
+    my $job = Forks::Super::Job->this;
     if (defined $proc) {
-      if ($proc eq '__open3__' || $proc eq '__system1__') {
-	# Win32::Process nice to have but not required.
-	# TASKKILL is pretty standard on Windows systems, isn't it?
-	# Maybe not completely standard :-(
+	if ($proc eq '__open3__' || $proc eq '__system1__') {
+	    # Win32::Process nice to have but not required.
+	    # TASKKILL is pretty standard on Windows systems, isn't it?
+	    # Maybe not completely standard :-(
 
-	# XXX - is  kill -9, $pid  suitable (see perlport#kill)
-#	my $result = system("TASKKILL /F /T /PID $pid > nul");
-	my $result = CORE::kill -9, $pid;
-      } elsif ($proc eq '__system__') {
-	$proc = undef;
-	if (defined($Forks::Super::Job::self)
-	    && $Forks::Super::Job::self->{debug}) {
-	  
-	  debug("Job ", $Forks::Super::Job::self->toShortString(),
-		" has timed out. The grandchildren from this process",
-		" are NOT being terminated.");
+	    # kill -9, $pid is suitable, right? (see perlport#kill)
+#	    my $result = system("TASKKILL /F /T /PID $pid > nul");
+	    my $result = CORE::kill -9, $pid;
+
+	} elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
+	    my ($ec,$exitCode);
+	    $ec = $proc->GetExitCode($exitCode);
+	    if ($exitCode == &Win32::Process::STILL_ACTIVE
+		|| $ec == &Win32::Process::STILL_ACTIVE) {
+
+		my $result = system("TASKKILL /F /T /PID $pid > nul");
+
+		$proc->GetExitCode($exitCode);
+		if ($DEBUG) {
+		    debug("Terminating active MSWin32 process result=$result ",
+			  "exitCode=$exitCode");
+		}
+	    }
 	}
-      } elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
-	my ($ec,$exitCode);
-	$ec = $proc->GetExitCode($exitCode);
-	if ($exitCode == &Win32::Process::STILL_ACTIVE
-	    || $ec == &Win32::Process::STILL_ACTIVE) {
-
-	  my $result = system("TASKKILL /F /T /PID $pid > nul");
-
-	  $proc->GetExitCode($exitCode);
-	  if ($DEBUG) {
-	    debug("Terminating active MSWin32 process result=$result ",
-		  "exitCode=$exitCode");
-	  }
+    } elsif (defined($job->{signal_pid}) && $job->{signal_pid} != $$) {
+	# for a cmd-style job, signal the command
+	if ($job->{debug}) {
+	    debug("trying to terminate $job->{signal_pid}");
 	}
-      }
-    } elsif (defined($job->{signal_pid} && $job->{signal_pid} != $$)) {
-      # for a cmd-style job, signal the command
-      if ($job->{debug}) {
-	  debug("Sending SIG$TIMEOUT_SIG to ", $job->{signal_pid});
-	  sleep 5;
-      }
-      if (&IS_WIN32) {
-	  if ($job->{debug}) {
-	      debug("trying to terminate $job->{signal_pid}");
-	  }
-	  my $result = system("TASKKILL /F /T /PID $pid > nul");
-	  debug("Win32::terminate_process result was $result") if $job->{debug};
-      } else {
-	  CORE::kill $TIMEOUT_SIG, $job->{signal_pid};
-      }
-    } else {
-      $DISABLE_INT = 1;
-      Forks::Super::kill($TIMEOUT_SIG, $$);
-      $DISABLE_INT = 0;
+	# XXX - use FSJ::OS::Win32::terminate_process instead ?
+	my $result = system("TASKKILL /F /T /PID $pid > nul");
+	debug("Win32::terminate_process result was $result") 
+	    if $job->{debug};
     }
     return;
 }
 
 sub _cleanup_child {
-  if (defined $Forks::Super::Config::CONFIG{'alarm'}
-      && $Forks::Super::SysInfo::CONFIG{'alarm'}) {
-    alarm 0;
-  }
-  if ($TIMEDOUT) {
+    # typically called from an END { } block when a child
+    # with a timeout is exiting.
+
+    if (defined $Forks::Super::Config::CONFIG{'alarm'}
+	&& $Forks::Super::SysInfo::CONFIG{'alarm'}) {
+
+	alarm 0;
+    }
+    return if !$TIMEDOUT;
+
     if ($DISABLE_INT) {
-      # our child process received its own SIGINT that got sent out
-      # to its children/process group. We intended the exit status
-      # here to be as if it had die'd.
-      
-      $? = 255;
+	# our child process received its own SIGINT that got sent out
+	# to its children/process group. We intended the exit status
+	# here to be as if it had die'd.
+
+	$? = 255;
     }
+
     if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-      # try to kill off any grandchildren
-      if ($ORIG_PGRP == $NEW_PGRP) {
-	carp "Forks::Super::child_exit: original setpgrp call failed, ",
-	  "child-of-child process might not be terminated.\n";
-      } else {
-	setpgrp(0, $ORIG_PGRP);
-	$NEWNEW_PGRP = getpgrp(0);
-	if ($NEWNEW_PGRP eq $NEW_PGRP) {
-	  carp "Forks::Super::child_exit: final setpgrp call failed, ",
-	    "[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
-	      "child-of-child processes might not be terminated.\n";
+	# try to kill off any grandchildren
+	if ($ORIG_PGRP == $NEW_PGRP) {
+	    carp 'Forks::Super::child_exit: original setpgrp call failed, ',
+			"child-of-child process might not be terminated.\n";
 	} else {
-	  local $SIG{INT} = 'IGNORE';
-	  my $num_killed = CORE::kill 'INT', -$NEW_PGRP; 
-	  # kill -PID === kill PGID. Not portable
-	  if ($num_killed && $NEW_PGRP && $DEBUG) {
-	    debug("child_exit: sent SIGINT to $num_killed grandchildren");
-	  }
+	    setpgrp(0, $ORIG_PGRP);
+	    $NEWNEW_PGRP = getpgrp(0);
+	    if ($NEWNEW_PGRP eq $NEW_PGRP) {
+		carp 'Forks::Super::child_exit: ',
+		    	'final setpgrp call failed, ',
+		    	"[$ORIG_PGRP/$NEW_PGRP/$NEWNEW_PGRP] ",
+		    	"child-of-child processes might not be terminated.\n";
+	    } else {
+		local $SIG{INT} = 'IGNORE';
+		my $num_killed = CORE::kill 'INT', -$NEW_PGRP; 
+		# kill -PID === kill PGID. Not portable
+		if ($num_killed && $NEW_PGRP && $DEBUG) {
+		    debug('child_exit: ',
+			  "sent SIGINT to $num_killed grandchildren");
+		}
+	    }
 	}
-      }
     }
-  }
-  return 1; # done
+    return 1; # done
 }
 
 sub warm_up {
@@ -315,7 +318,7 @@ sub _time_from_natural_language {
     return $time;
   }
 
-  if (Forks::Super::Config::CONFIG("DateTime::Format::Natural")) {
+  if (Forks::Super::Config::CONFIG('DateTime::Format::Natural')) {
     my $now = DateTime->now;
     my $dt_nl_parser = DateTime::Format::Natural->new(datetime => $now,
 						   lang => 'en',
@@ -328,9 +331,9 @@ sub _time_from_natural_language {
       return $dt->epoch;
     }
   } else{
-    carp "Forks::Super::Job::Timeout: ",
+    carp 'Forks::Super::Job::Timeout: ',
 	"time spec $time may contain natural language. ",
-	"Install the  DateTime::Format::Natural  module ",
+	'Install the  DateTime::Format::Natural  module ',
 	"to use this feature.\n";
     return $time;
   }

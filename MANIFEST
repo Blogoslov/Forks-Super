@@ -6,6 +6,7 @@ lib/Forks/Super/Job.pm
 lib/Forks/Super/Job/Callback.pm
 lib/Forks/Super/Job/Ipc.pm
 lib/Forks/Super/Job/OS.pm
+lib/Forks/Super/Job/OS/Cygwin.pm
 lib/Forks/Super/Job/OS/Win32.pm
 lib/Forks/Super/Job/Timeout.pm
 lib/Forks/Super/LazyEval.pm
@@ -18,8 +19,9 @@ lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Util.pm
 lib/Forks/Super/Wait.pm
-lib/Signals/XSIG.pm                       # v0.10 bundled with v0.49
-lib/Signals/XSIG/Default.pm               # v0.10 bundled with v0.49
+lib/Signals/XSIG.pm                       # v0.13 bundled with v0.54
+lib/Signals/XSIG/Default.pm               # v0.13 bundled with v0.54
+lib/Signals/XSIG/TieArray56.pm            # v0.13 bundled with v0.54
 Makefile.PL
 MANIFEST
 README
@@ -31,9 +33,11 @@ t/01a-import.t
 t/01b-import.t
 t/01c-import.t
 t/02-tie-on_busy.t
-t/03-queue-ties.t
+t/03a-queue-ties.t
+t/03b-queue-func.t
 t/04-ipc-dir.t
 t/05-util.t
+t/06-job.t
 t/09-show-config.t
 t/10-to-natural.t
 t/11-to-command.t
@@ -53,9 +57,10 @@ t/24a-kill.t
 t/24b-kill.t
 t/24c-kill.t
 t/24d-kill.t
+t/24e-kill.t
 t/25-open.t
-t/30a-child-fork-behavior.t
-t/30b-child-fork-behavior.t
+t/30a-fork-from-child.t
+t/30b-fork-from-child.t
 t/31-chld-signal.tt
 t/32-stress-test.t
 t/40a-timeout.t
@@ -83,6 +88,7 @@ t/42f-filehandles.t
 t/42g-filehandles.t
 t/42h-filehandles.t
 t/42i-filehandles.t
+t/42l-filehandles.t
 t/43a-sockethandles.t
 t/43b-sockethandles.t
 t/43c-sockethandles.t
@@ -91,6 +97,7 @@ t/43e-sockethandles.t
 t/43f-sockethandles.t
 t/43g-sockethandles.t
 t/43h-sockethandles.t
+t/43l-sockethandles.t
 t/44a-pipes.t
 t/44b-pipes.t
 t/44c-pipes.t
@@ -98,6 +105,7 @@ t/44d-pipes.t
 t/44f-pipes.t
 t/44g-pipes.t
 t/44h-pipes.t
+t/44l-pipes.t
 t/45-no-filehandles.t
 t/46a-busy.t
 t/46b-userbusy.t

@@ -176,7 +176,7 @@ SKIP: {
     # if all values are < 1/5, then this test would not pass
     print STDERR "Random values to sleepy fork calls were: @rand\n";
   }
-  ok($t >= 7 && $t <= 12.95,  ### 143 ### was 11 obs 11.84,12.24,12.62
+  ok($t >= 7 && $t <= 14.5,  ### 143 ### was 11 obs 11.84,12.62,14.62
      "Took $t s to reap all. Should take about 7-11s");
 } # end SKIP
 

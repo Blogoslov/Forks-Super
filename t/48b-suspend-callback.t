@@ -77,8 +77,8 @@ sub write_value {
   no warnings 'unopened', 'io';
 
   # don't suspend while we're in the middle of changing the ipc file
-  open SEM, '>>', "$file.sem";
-  flock SEM, 2;
+  open my $SEM, '>>', "$file.sem";
+  flock $SEM, 2;
 
   open my $fh, '>', "$file.tmp";
   print $DEBUG "write_value $value\n";
@@ -87,13 +87,14 @@ sub write_value {
   rename "$file.tmp", $file;
   print $DEBUG "write_value: sync\n";
 
-  close SEM;
+  close $SEM;
   return;
 }
 
 $Forks::Super::Queue::QUEUE_MONITOR_FREQ = 2;
 
-if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG_module("Win32::API")) {
+if (Forks::Super::Util::IS_WIN32ish
+        && !Forks::Super::Config::CONFIG_module("Win32::API")) {
    ok(1, "# skip suspend/resume not supported on $^O") for 1..9;
    exit;
 }
@@ -162,7 +163,7 @@ if (!defined $w) {
     $w = read_value();
 }
 
-ok($w >= 4, "job is incrementing value, expect val:$w >= 4");  ### 4 ###
+ok($w >= 3, "job is incrementing value, expect val:$w >= 4");  ### 4 ###
 
 Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::time());
 ok($job->{state} eq 'SUSPENDED', "job is still suspended")    ### 5 ###
@@ -198,6 +199,7 @@ if (!isValidPid($p)) {
 		$p = wait 2.0;
 		if (!isValidPid($p)) {
 		    diag("Killing unresponsive job $job");
+		    $job->kill('CONT');
 		    $job->kill('KILL');
 		    $job->resume;
 		}

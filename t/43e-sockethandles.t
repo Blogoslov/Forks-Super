@@ -30,12 +30,12 @@ ok(defined $Forks::Super::CHILD_STDOUT{$pid}, "\%CHILD_STDOUT defined");
 ok(defined $Forks::Super::CHILD_STDERR{$pid}, "\%CHILD_STDERR defined");
 
 if ($^O eq 'MSWin32' && defined($Forks::Super::IPC_DIR)) {
-  ok(!is_socket($Forks::Super::CHILD_STDIN{$pid}),
+  ok(!is_socket($Forks::Super::CHILD_STDIN{$pid}),                  ### 5 ###
      "CHILD_STDIN is not a socket for cmd-style fork on MSWin32");
   ok(!is_socket($Forks::Super::CHILD_STDOUT{$pid}),
      "CHILD_STDOUT is not a socket for cmd-style fork on MSWin32");
 } else {
-  ok(is_socket($Forks::Super::CHILD_STDIN{$pid}),
+  ok(is_socket($Forks::Super::CHILD_STDIN{$pid}),                   ### 5 ###
      "CHILD_STDIN is a socket for cmd-style fork");
   ok(is_socket($Forks::Super::CHILD_STDOUT{$pid}),
      "CHILD_STDOUT is a socket for cmd-style fork");
@@ -51,7 +51,7 @@ $pid->close_fh('stdin');
 my $t = Time::HiRes::time();
 waitpid $pid, 0;
 $t = Time::HiRes::time() - $t;
-ok($t > 1.01 && $t < 6.25,              ### 8 ### was 1.25/5.05,obs 1.05/6.12
+ok($t > 1.01 && $t < 6.25,              ### 9 ### was 1.25/5.05,obs 1.05/6.12
    "compound command took ${t}s, expected ~2s");
 sleep 1;
 

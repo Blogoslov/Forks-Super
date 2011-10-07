@@ -4,22 +4,24 @@ use strict;
 use warnings;
 
 SKIP: {
-  if ($^O eq 'MSWin32' && !Forks::Super::Config::CONFIG_module("Win32::API")) {
-    skip "suspend/resume not supported on MSWin32", 13;
-  }
+    if (&Forks::Super::Util::IS_WIN32ish && 
+	!Forks::Super::Config::CONFIG_module("Win32::API")) {
+
+	skip "suspend/resume not supported on $^O - install Win32::API", 17;
+    }
 
 my $pid = fork {
-  sub => sub {
-    for (my $i=0; $i<7; $i++) {
-      sleep 1;
-    }
-  } };
+    sub => sub {
+	for (my $i=0; $i<7; $i++) {
+	    sleep 1;
+	}
+    } };
 
 my $j = Forks::Super::Job::get($pid);
 ok(isValidPid($pid) && $j->{state} eq "ACTIVE", "$$\\created $pid");
 sleep 3;
 if ($^O eq 'MSWin32') {
-   diag("Calling suspend method for $j. This is pid $$.");
+    diag("Calling suspend method for $j. This is pid $$.");
 }
 $j->suspend;
 ok($j->{state} eq "SUSPENDED", "job was suspended");
@@ -39,7 +41,14 @@ ok($t >= 1.95, "\"time stopped\" while job was suspended, ${t} >= 3s");
 # waitpid|action=fail returns Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT
 # waitpid|action=resume restarts the job
 
-$pid = fork { sub => sub { sleep 1 for (1..6) } };
+$pid = fork { 
+    sub => sub { 
+	$SIG{STOP} = sub {
+	    die "Trapped a signal $_[0] that shouldn\'t be trappable ...\n"
+	};
+	sleep 1 for (1..6) 
+    } 
+};
 $j = Forks::Super::Job::get($pid);
 sleep 3;
 $j->suspend;
@@ -107,6 +116,5 @@ waitall;
 # DEFERRED + SIGSTOP --> SUSPENDED-DEFERRED
 # SUSPENDED + SIGCONT --> ACTIVE
 # SUSPENDED-DEFERRED + SIGCONT -> DEFERRED or ACTIVE
-
-# XXX - MSWin32 check STOP+STOP+STOP+STOP+CONT --> ACTIVE
+# MSWin32 check STOP+STOP+STOP+STOP+CONT --> ACTIVE
 

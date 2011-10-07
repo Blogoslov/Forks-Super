@@ -17,14 +17,19 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.53';
+our $VERSION = '0.54';
+
+# must sync FIRST_DEFERRED_ID with Win32 code in Forks::Super::Util::isValidPid
+use constant FIRST_DEFERRED_ID => -500000;
+use constant QUEUE_PRIORITY_INCREMENT => 1.0E-6;
+use constant DEFAULT_QUEUE_MONITOR_FREQ => 30;
 
 our (@QUEUE, $QUEUE_MONITOR_PID, $QUEUE_MONITOR_PPID, $QUEUE_MONITOR_FREQ);
 our $QUEUE_DEBUG = $ENV{FORKS_SUPER_QUEUE_DEBUG} || 0;
-our $QUEUE_MONITOR_LIFESPAN = 14400;
+our $QUEUE_MONITOR_LIFESPAN = 14400;   # 14400s == 4 hours
 our $DEFAULT_QUEUE_PRIORITY = 0;
 our $INHIBIT_QUEUE_MONITOR = 1;
-our $NEXT_DEFERRED_ID = -500000;
+my $NEXT_DEFERRED_ID = FIRST_DEFERRED_ID;
 our $OLD_QINTERRUPT_SIG;
 our ($MAIN_PID,$_LOCK) = ($$,0);
 
@@ -39,24 +44,24 @@ our $CHECK_FOR_REAP = 1;
 
 sub get_default_priority {
   my $q = $DEFAULT_QUEUE_PRIORITY;
-  $DEFAULT_QUEUE_PRIORITY -= 1.0E-6;
+  $DEFAULT_QUEUE_PRIORITY -= &QUEUE_PRIORITY_INCREMENT;
   return $q;
 }
 
 sub init {
-  tie $QUEUE_MONITOR_FREQ, 
-    'Forks::Super::Queue::QueueMonitorFreq', 30;
+    tie $QUEUE_MONITOR_FREQ, 
+        'Forks::Super::Queue::QueueMonitorFreq', &DEFAULT_QUEUE_MONITOR_FREQ;
 
-  tie $INHIBIT_QUEUE_MONITOR, 
-    'Forks::Super::Queue::InhibitQueueMonitor', &IS_WIN32;
+    tie $INHIBIT_QUEUE_MONITOR, 
+        'Forks::Super::Queue::InhibitQueueMonitor', &IS_WIN32;
     # !Forks::Super::Util::_has_POSIX_signal_framework();
 
-  tie $Forks::Super::QUEUE_INTERRUPT, 
-    'Forks::Super::Queue::QueueInterrupt', ('', keys %SIG);
-  if (grep {/USR1/} keys %SIG) {
-    $Forks::Super::QUEUE_INTERRUPT = 'USR1';
-  }
-  return;
+    tie $Forks::Super::QUEUE_INTERRUPT, 
+        'Forks::Super::Queue::QueueInterrupt', ('', keys %SIG);
+    if (grep {/USR1/} keys %SIG) {
+	$Forks::Super::QUEUE_INTERRUPT = 'USR1';
+    }
+    return;
 }
 
 sub init_child {
@@ -85,11 +90,11 @@ sub init_child {
 #
 sub _launch_queue_monitor {
   if (!$Forks::Super::SysInfo::CONFIG{'SIGUSR1'}) {
-    debug("_lqm returning: no SIGUSR1") if $QUEUE_DEBUG;
+    debug('_lqm returning: no SIGUSR1') if $QUEUE_DEBUG;
     return;
   }
   if (defined $QUEUE_MONITOR_PID) {
-    debug("_lqm returning: \$QUEUE_MONITOR_PID defined") if $QUEUE_DEBUG;
+    debug('_lqm returning: $QUEUE_MONITOR_PID defined') if $QUEUE_DEBUG;
     return;
   }
 
@@ -121,65 +126,76 @@ sub _launch_queue_monitor_setitimer {
 
 sub _launch_queue_monitor_fork {
 
-  if (!(defined($Forks::Super::QUEUE_INTERRUPT)
-	&& $Forks::Super::QUEUE_INTERRUPT)) {
-    debug("_lqm returning: \$Forks::Super::QUEUE_INTERRUPT not set")
-      if $QUEUE_DEBUG;
-    return;
-  }
+    if (!$Forks::Super::QUEUE_INTERRUPT) {
+	debug('_lqm returning: $Forks::Super::QUEUE_INTERRUPT not set')
+	    if $QUEUE_DEBUG;
+	return;
+    }
 
-  $OLD_QINTERRUPT_SIG = $SIG{$Forks::Super::QUEUE_INTERRUPT};
-  $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::Queue::check_queue;
-  $QUEUE_MONITOR_PPID = $$;
-  $QUEUE_MONITOR_PID = CORE::fork();
-  if (not defined $QUEUE_MONITOR_PID) {
-    warn "Forks::Super: ",
-      "queue monitoring sub process could not be launched: $!\n";
-    undef $QUEUE_MONITOR_PPID;
+    $OLD_QINTERRUPT_SIG = $SIG{$Forks::Super::QUEUE_INTERRUPT};
+    $SIG{$Forks::Super::QUEUE_INTERRUPT} = \&Forks::Super::Queue::check_queue;
+    $QUEUE_MONITOR_PPID = $$;
+    $QUEUE_MONITOR_PID = CORE::fork();
+    if (not defined $QUEUE_MONITOR_PID) {
+	warn 'Forks::Super: ',
+		"queue monitoring sub process could not be launched: $!\n";
+	undef $QUEUE_MONITOR_PPID;
+	return;
+    }
+    if ($QUEUE_MONITOR_PID == 0) {
+
+	_launch_queue_monitor_fork_child();
+	exit 0;
+
+    }
     return;
-  }
-  if ($QUEUE_MONITOR_PID == 0) {
+}
+
+sub _launch_queue_monitor_fork_child {
+    # a detached child 
     $0 = "QMon:$QUEUE_MONITOR_PPID";
     if ($DEBUG || $QUEUE_DEBUG) {
-      debug("Launching queue monitor process $$ ",
-	    "SIG $Forks::Super::QUEUE_INTERRUPT ",
-	    "PPID $QUEUE_MONITOR_PPID ",
-	    "FREQ $QUEUE_MONITOR_FREQ ");
+	debug("Launching queue monitor process $$ ",
+	      "SIG $Forks::Super::QUEUE_INTERRUPT ",
+	      "PPID $QUEUE_MONITOR_PPID ",
+	      "FREQ $QUEUE_MONITOR_FREQ ");
     }
 
     if (defined &Forks::Super::init_child) {
-      Forks::Super::init_child();
+	Forks::Super::init_child();
     } else {
-      init_child();
+	init_child();
     }
+
     close STDIN;
     close STDOUT;
-    close STDERR unless $DEBUG || $QUEUE_DEBUG;
+    close STDERR if ! $DEBUG && ! $QUEUE_DEBUG;
+    # XXX - closed fd's 4 ... 2999?
+    umask 0;
+    chdir '/';
     $SIG{'TERM'} = 'DEFAULT';
 
     # three (normal) ways the queue monitor can die:
     #  1. (preferred) killed by the calling process (_kill_queue_monitor)
-    #  2. fails to signal calling process 10 straight times
+    #  2. fails to signal calling process 10 consecutive times
     #  3. exit after $QUEUE_MONITOR_LIFESPAN seconds
 
     my $expire = time + $QUEUE_MONITOR_LIFESPAN;
     my $consecutive_failures = 0;
     while (time < $expire && $consecutive_failures < 10) {
-      sleep $QUEUE_MONITOR_FREQ;
+	sleep $QUEUE_MONITOR_FREQ;
 
-      if ($DEBUG || $QUEUE_DEBUG) {
-	debug("queue monitor $$ passing signal to $QUEUE_MONITOR_PPID");
-      }
-      if (CORE::kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID) {
-	$consecutive_failures = 0;
-      } else {
-	$consecutive_failures++;
-      }
-      last if time > $expire;
+	if ($DEBUG || $QUEUE_DEBUG) {
+	    debug("queue monitor $$ passing signal to $QUEUE_MONITOR_PPID");
+	}
+	if (CORE::kill $Forks::Super::QUEUE_INTERRUPT, $QUEUE_MONITOR_PPID) {
+	    $consecutive_failures = 0;
+	} else {
+	    $consecutive_failures++;
+	}
+	last if time > $expire;
     }
-    exit 0;
-  }
-  return;
+    return;
 }
 
 sub _kill_queue_monitor {
@@ -240,7 +256,7 @@ sub queue_job {
     $job->{pid} = $NEXT_DEFERRED_ID--;
     $Forks::Super::ALL_JOBS{$job->{pid}} = $job;
     if ($DEBUG || $QUEUE_DEBUG) {
-      debug("queueing job ", $job->toString());
+      debug('queueing job ', $job->toString());
     }
   }
 
@@ -257,7 +273,7 @@ sub queue_job {
 sub _check_for_reap {
   if ($CHECK_FOR_REAP && $Forks::Super::Sigchld::REAP > 0) {
     if ($DEBUG || $QUEUE_DEBUG) {
-      debug("reap during queue examination -- restart");
+      debug('reap during queue examination -- restart');
     }
     return 1;
   }
@@ -297,7 +313,7 @@ sub run_queue {
   #   go through the list and attempt to launch each job in order.
 
   debug('run_queue(): examining deferred jobs') if $DEBUG || $QUEUE_DEBUG;
-  1 while _attempt_to_launch_deferred_jobs();
+  while (_attempt_to_launch_deferred_jobs()) { 1 }
   $_LOCK--;
   return;
 }
@@ -338,18 +354,18 @@ sub _attempt_to_launch_deferred_jobs {
 		if (defined($job->{sub}) || defined($job->{cmd})
 		    || defined($job->{exec})) {
 		    $_LOCK--;
-		    croak "Forks::Super::run_queue(): ",
-		        "fork on deferred job unexpectedly returned ",
+		    croak 'Forks::Super::run_queue(): ',
+		        'fork on deferred job unexpectedly returned ',
 		        "a process id of 0!\n";
 		}
 		$_LOCK--;
-		croak "Forks::Super::run_queue(): ",
-		    "deferred job must have a ",
+		croak 'Forks::Super::run_queue(): ',
+		    'deferred job must have a ',
 		    "'sub', 'cmd', or 'exec' option!\n";
 	    }
 	    return 1;
 	} elsif ($job->{debug}) {
-	    debug("Still must wait to launch job ", $job->toShortString());
+	    debug('Still must wait to launch job ', $job->toShortString());
 	}
     }        # next deferred job
     return 0;
@@ -376,11 +392,11 @@ sub suspend_resume_jobs {
     if ($action < 0 && ! $job_is_suspended) {
 	$job->suspend;
 	debug("suspend_resume_jobs: suspend callback value $action for ",
-	      "job ", $job->{pid}, " ... suspending") if $job->{debug};
+	      'job ', $job->{pid}, ' ... suspending') if $job->{debug};
     } elsif ($action > 0 && $job_is_suspended) {
 	$job->resume;
 	debug("suspend_resume_jobs: suspend callback value $action for ",
-	      "job ", $job->{pid}, " ... resuming") if $job->{debug};
+	      'job ', $job->{pid}, ' ... resuming') if $job->{debug};
     }
   }
 
@@ -415,9 +431,9 @@ sub Forks::Super::Queue::QueueMonitorFreq::TIESCALAR {
   if ($value == 0) {
     $value = 1;
   } elsif ($value < 0) {
-    $value = 30;
+    $value = &DEFAULT_QUEUE_MONITOR_FREQ; # 30 seconds
   }
-  debug("new F::S::Q::QueueMonitorFreq obj") if $QUEUE_DEBUG;
+  debug('new F::S::Q::QueueMonitorFreq obj') if $QUEUE_DEBUG;
   return bless \$value, $class;
 }
 
@@ -428,21 +444,25 @@ sub Forks::Super::Queue::QueueMonitorFreq::FETCH {
 }
 
 sub Forks::Super::Queue::QueueMonitorFreq::STORE {
-  my ($self,$new_value) = @_;
-  $new_value = int($new_value) || 1;
-  $new_value = 30 if $new_value < 0;
-  if ($new_value == $$self) {
-    debug("F::S::Q::QueueMonitorFreq::STORE noop $$self") if $QUEUE_DEBUG;
-    return $$self;
-  }
-  if ($QUEUE_DEBUG) {
-    debug("F::S::Q::QueueMonitorFreq::STORE $$self <== $new_value");
-  }
-  $$self = $new_value;
-  _kill_queue_monitor();
-  check_queue();
-  _launch_queue_monitor() if @QUEUE > 0;
-  return;
+    my ($self,$new_value) = @_;
+    $new_value = int($new_value) || 1;
+    if ($new_value < 0) {
+	$new_value = &DEFAULT_QUEUE_MONITOR_FREQ;
+    }
+    if ($new_value == $$self) {
+	debug("F::S::Q::QueueMonitorFreq::STORE noop $$self") if $QUEUE_DEBUG;
+	return $$self;
+    }
+    if ($QUEUE_DEBUG) {
+	debug("F::S::Q::QueueMonitorFreq::STORE $$self <== $new_value");
+    }
+    $$self = $new_value;
+    _kill_queue_monitor();
+    check_queue();
+    if (@QUEUE > 0) {
+	_launch_queue_monitor();
+    }
+    return;
 }
 
 #############################################################################
@@ -462,17 +482,17 @@ sub Forks::Super::Queue::InhibitQueueMonitor::FETCH {
 }
 
 sub Forks::Super::Queue::InhibitQueueMonitor::STORE {
-  my ($self, $new_value) = @_;
-  $new_value = 0+!!$new_value;
-  if ($$self != $new_value) {
-    if ($new_value) {
-      _kill_queue_monitor();
-    } else {
-      queue_job();
+    my ($self, $new_value) = @_;
+    $new_value = 0+!!$new_value;
+    if ($$self != $new_value) {
+	if ($new_value) {
+	    _kill_queue_monitor();
+	} else {
+	    queue_job();
+	}
     }
-  }
-  $$self = $new_value;
-  return $$self;
+    $$self = $new_value;
+    return $$self;
 }
 
 #############################################################################
@@ -490,19 +510,107 @@ sub Forks::Super::Queue::InhibitQueueMonitor::STORE {
 }
 
 sub Forks::Super::Queue::QueueInterrupt::STORE {
-  my ($self, $new_value) = @_;
-  if (uc $new_value eq uc Forks::Super::Tie::Enum::_get_value($self)) {
-    return; # no change
-  }
-  if (!Forks::Super::Tie::Enum::_has_attr($self,$new_value)) {
-    return; # invalid assignment
-  }
-  _kill_queue_monitor();
-  $Forks::Super::Tie::Enum::VALUE{$self} = $new_value;
-  _launch_queue_monitor() if @QUEUE > 0;
-  return;
+    my ($self, $new_value) = @_;
+    if (uc $new_value eq uc Forks::Super::Tie::Enum::_get_value($self)) {
+	return; # no change
+    }
+    if (!Forks::Super::Tie::Enum::_has_attr($self,$new_value)) {
+	return; # invalid assignment
+    }
+    _kill_queue_monitor();
+    $Forks::Super::Tie::Enum::VALUE{$self} = $new_value;
+    if (@QUEUE > 0) {
+	_launch_queue_monitor();
+    }
+    return;
 }
 
 #############################################################################
 
 1;
+
+=head1 NAME
+
+Forks::Super::Queue
+
+=head1 VERSION
+
+0.54
+
+=head1 DESCRIPTION
+
+C<Forks::Super::Queue> is part of the L<Forks::Super|Forks::Super> distribution.
+The function and variables in this module manage the queue
+of L<"deferred processes"|Forks::Super/"Deferred processes"> --
+background tasks that have been specified but that can not or 
+should not be run until some time in the future.
+
+There should not be much reason for a L<Forks::Super|Forks::Super> user to
+call functions or manipulate variables in this module directly.
+
+=head1 FUNCTIONS
+
+=over 4
+
+=item Forks::Super::Queue::check_queue
+
+Examines the queue of background tasks. Launches the tasks that
+are eligible to start.
+
+This function is called automatically from your program during
+C<wait> and C<waitpid> calls, when the C<SIGCHLD> handler runs, 
+or during any "productive pause" (see L<Forks::Super::Util/"pause">)
+in your code.
+
+=back
+
+=head1 VARIABLES
+
+=over 4
+
+=item $Forks::Super::Queue::QUEUE_MONITOR_FREQ
+
+When jobs are in the queue, a separate thread will signal the
+program and cause the queue to be examined every C<$QUEUE_MONITOR_FREQ>
+seconds. 
+
+For programs with lots of quick jobs, this variable can be set to a
+small value to make sure the queue is examined frequently.
+
+For programs with CPU-intensive, long running jobs, this variable
+can be set to a large value so that not too many processing resources
+are wasted examining the queue.
+
+=back
+
+=over 4
+
+=item $Forks::Super::Queue::QUEUE_DEBUG
+
+If set to a true value, the C<Forks::Super::Queue> module will publish
+additional messages to the debugging output handle (see 
+L<Forks::Super::Debug/"$DEBUG_FH">) about what the module is doing.
+These messages may or may not be interesting.
+
+This variable will be set at run-time if the environment variable
+C<FORKS_SUPER_QUEUE_DEBUG> is set.
+
+=back
+
+=cut 
+
+=head1 AUTHOR
+
+Marty O'Brien, E<lt>mob@cpan.orgE<gt>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2009-2011, Marty O'Brien.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
+
+=cut

@@ -21,44 +21,45 @@ if (${^TAINT}) {
 }
 
 SKIP: {
-  if ($^O eq "MSWin32" && !Forks::Super::Config::CONFIG("Win32::API")) {
-    skip "kill is unsafe on MSWin32 without Win32::API", 5;
-  }
+    if ($^O eq "MSWin32" && !Forks::Super::Config::CONFIG("Win32::API")) {
+	skip "kill is unsafe on MSWin32 without Win32::API", 5;
+    }
 
 
-  # kill on <xxx>deferred jobs</xxx>
+    # kill on <xxx>deferred jobs</xxx>
 
-  my $pid1 = fork { sub => sub { sleep 5 } };
-  my $pid2 = fork { sub => sub { sleep 5 } };
-  my $pid3 = fork { sub => sub { sleep 5 }, depend_on => $pid1 };
-  my $j1 = Forks::Super::Job::get($pid1);
-  sleep 1;
+    my $pid1 = fork { sub => sub { sleep 5 } };
+    my $pid2 = fork { sub => sub { sleep 5 } };
+    my $pid3 = fork { sub => sub { sleep 5 }, depend_on => $pid1 };
+    my $j1 = Forks::Super::Job::get($pid1);
+    sleep 1;
 
-  #my $zero = Forks::Super::kill('ZERO', $pid1, $pid2, $pid3);
-  my $zero = 4*!!Forks::Super::kill('ZERO',$pid1)
-     + 2*!!Forks::Super::kill('ZERO',$pid2)
-     + !!Forks::Super::kill('ZERO',$pid3);
-  ok($zero==7, "SIGZERO successfully sent to 2 active and 1 deferred proc")
-  or diag("result was $zero, expected 4(a)+2(a)+1(d)");
+    #my $zero = Forks::Super::kill('ZERO', $pid1, $pid2, $pid3);
+    my $zero = 4*!!Forks::Super::kill('ZERO',$pid1)
+	+ 2*!!Forks::Super::kill('ZERO',$pid2)
+	+ !!Forks::Super::kill('ZERO',$pid3);
+    ok($zero==7, "SIGZERO successfully sent to 2 active and 1 deferred proc")
+	or diag("result was $zero, expected 4(a)+2(a)+1(d)");
 
-  # failure point on MSWin32 - terminates the script
-  if ($^O eq 'MSWin32') {
-      diag("Sending SIGINT to $pid1");
-  }
-  my $y = Forks::Super::kill('INT', $pid1);
-  sleep 2;
-  Forks::Super::Queue::run_queue();
-  ok($y == 1, "sent INT to $y==1 proc active job");
+    # failure point on MSWin32 - terminates the script
+    if ($^O eq 'MSWin32') {
+	diag("Sending SIGINT to $pid1");
+    }
+    my $y = Forks::Super::kill('INT', $pid1);
+    sleep 2;
+    Forks::Super::Queue::run_queue();
+    ok($y == 1, "sent INT to $y==1 proc active job");
 
-  $zero = Forks::Super::kill('ZERO', $pid1, $pid2, $pid3);
-  ok($zero==2, "SIGZERO successfully sent to 2 processes");
+    $zero = Forks::Super::kill('ZERO', $pid1, $pid2, $pid3);
+    ok($zero==2, "SIGZERO successfully sent to 2 processes")
+	or diag("sent to $zero procs, expected 2");
 
-  # (fails under forked_harness, but passes as standalone?)
-  ok($j1->is_complete, 
-     "killed active job is complete " . $j1->{state}); ### 7 ###
-  waitall;
+    # (fails under forked_harness, but passes as standalone?)
+    ok($j1->is_complete, 
+       "killed active job is complete " . $j1->{state}); ### 7 ###
+    waitall;
 
-  $y = Forks::Super::kill('INT', $pid1, $pid2, $pid3);
-  ok($y == 0, "kill to complete jobs returns 0");
+    $y = Forks::Super::kill('INT', $pid1, $pid2, $pid3);
+    ok($y == 0, "kill to complete jobs returns 0");
 
 }

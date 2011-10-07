@@ -8,9 +8,10 @@ use base qw(DynaLoader);
 ## no critic (DotMatch,LineBoundary,Sigils,Punctuation,Quotes,Magic,Checked)
 ## no critic (NamingConventions::Capitalization,BracedFileHandle)
 
-our $VERSION = '1.01';
+our $VERSION = '1.04';
 our $DEBUG = $ENV{DEBUG} || 0;
-eval { bootstrap Sys::CpuAffinity $VERSION };
+our $XS_LOADED = 0;
+eval { bootstrap Sys::CpuAffinity $VERSION; $XS_LOADED = 1 };
 
 sub import {
 }
@@ -133,22 +134,25 @@ sub getNumCpus {
   }
   return $_NUM_CPUS_CACHED =
        _getNumCpus_from_Win32API()                  # XXX - broken
-    || _getNumCpus_from_Win32API_System_Info()
     || _getNumCpus_from_xs_Win32API_System_Info()
     || _getNumCpus_from_xs_cpusetGetCPUCount()
     || _getNumCpus_from_proc_cpuinfo()
     || _getNumCpus_from_proc_stat()
     || _getNumCpus_from_bindprocessor()
+    ## cpan test 1062dc56-75df-11e0-a49b-9797e3ecc90b:
+    ##    sysctl more reliable than dmesg_bsd for OpenBSD?
+    || _getNumCpus_from_sysctl()
     || _getNumCpus_from_dmesg_bsd()
     || _getNumCpus_from_dmesg_solaris()
-    || _getNumCpus_from_sysctl()
     || _getNumCpus_from_psrinfo()
     || _getNumCpus_from_hinv()
     || _getNumCpus_from_hwprefs()
     || _getNumCpus_from_system_profiler()
     || _getNumCpus_from_prtconf()
+    || _getNumCpus_from_Win32API_System_Info()
     || _getNumCpus_from_Test_Smoke_SysInfo()
     || _getNumCpus_from_ENV()
+    || _getNumCpus_from_taskset()
     || -1;
 }
 
@@ -181,17 +185,50 @@ sub _getNumCpus_from_Win32API {
 
 our %WIN32_SYSTEM_INFO = ();
 our %WIN32API = ();
+
+sub __is_wow64 {
+    # determines whether this (Windows) program is running the WOW64 emulator
+    # (to let 32-bit apps run on 64-bit architecture)
+
+    # used in _getNumCpus_from_Win32API_System_Info to decide whether to use
+    # GetSystemInfo  or  GetNativeSystemInfo  in the Windows API.
+
+    return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
+    return 0 if !_configModule('Win32::API');
+    return $Sys::CpuAffinity::IS_WOW64
+	if $Sys::CpuAffinity::IS_WOW64_INITIALIZED++;
+
+    my $hmodule = _win32api('GetModuleHandle', 'kernel32');
+    return 0 if $hmodule == 0;
+
+    my $proc = _win32api('GetProcAddress', $hmodule, 'IsWow64Process');
+    return 0 if $proc == 0;
+
+    my $current = _win32api('GetCurrentProcess');
+    return 0 if $current == 0;  # carp ...
+
+    my $bool = 0;
+    my $result = _win32api('IsWow64Process', $current, $bool);
+    if ($result != 0) {
+	$Sys::CpuAffinity::IS_WOW64 = $bool;
+    }
+    $Sys::CpuAffinity::IS_WOW64_INITIALIZED++;
+    return $Sys::CpuAffinity::IS_WOW64;
+}
+
 sub _getNumCpus_from_Win32API_System_Info {
   return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
   return 0 if !_configModule('Win32::API');
 
   if (0 == scalar keys %WIN32_SYSTEM_INFO) {
     if (!defined $WIN32API{'GetSystemInfo'}) {
-      my $is_wow64 = 0;
+      my $is_wow64 = __is_wow64();
       my $lpsysinfo_type_avail = Win32::API::Type::is_known('LPSYSTEM_INFO');
+
       my $proto = sprintf 'BOOL %s(%s i)',
         $is_wow64 ? 'GetNativeSystemInfo' : 'GetSystemInfo',
         $lpsysinfo_type_avail ? 'LPSYSTEM_INFO' : 'PCHAR';
+
       $WIN32API{'GetSystemInfo'} = Win32::API->new('kernel32', $proto);
     }
 
@@ -214,7 +251,7 @@ sub _getNumCpus_from_Win32API_System_Info {
 
 
 sub _getNumCpus_from_xs_cpusetGetCPUCount { # NOT TESTED irix
-  if (defined &xs_cpusetGetCPUCount) {
+  if ($XS_LOADED && defined &xs_cpusetGetCPUCount) {
     return xs_cpusetGetCPUCount();
   } else {
     return 0;
@@ -313,12 +350,18 @@ sub _getNumCpus_from_dmesg_bsd {
     my @d = grep { /Multiprocessor System Detected:/i } @dmesg;
     my $ncpus;
     if (@d > 0) {
-      ($ncpus) = $d[0] =~ /Detected: (\d+) CPUs/i;
+	_debug("dmesg_bsd contains:\n@d");
+	($ncpus) = $d[0] =~ /Detected: (\d+) CPUs/i;
     }
 
     # try NetBSD format. This will also probably work for OpenBSD.
     if (!$ncpus) {
-      $ncpus = grep { /^cpu\d+ at / } @dmesg;
+	@d = grep { /^cpu\d+ at / } @dmesg;
+	_debug("dmesg_bsd[2] contains:\n",@d);
+	$ncpus = scalar @d;
+    }
+    if (@dmesg < 50) {
+	_debug("full dmesg log:\n", @dmesg);
     }
     return $ncpus || 0;
 }
@@ -347,6 +390,13 @@ sub _getNumCpus_from_dmesg_solaris {
 	  }
         }
     }
+
+    # this doesn't always work (www.cpantesters.org/cpan/report/35d7685a-70b0-11e0-9552-4df9775ebe45)
+    # what else should we check for in  @dmesg ?
+    if ($ncpus == 0) {
+      # ...
+    }
+
     return $ncpus;
 }
 
@@ -356,14 +406,19 @@ sub _getNumCpus_from_sysctl {
     my $cmd = _configExternalProgram('sysctl');
     my @sysctl = qx($cmd -a 2> /dev/null);
     my @results = grep { /^hw.ncpu\s*[:=]/ } @sysctl;
+    _debug("sysctl output:\n@results");
     return 0 if @results == 0;
     my ($ncpus) = $results[0] =~ /[:=]\s*(\d+)/;
 
     if ($ncpus == 0) {
-      $ncpus = 0 + qx($cmd -n hw.ncpu 2> /dev/null);
+	my $result = qx($cmd -n hw.ncpu 2> /dev/null);
+	_debug("sysctl[2] result: $result");
+	$ncpus = 0 + $result;
     }
     if ($ncpus == 0) {
-      $ncpus = 0 + qx($cmd -n hw.ncpufound 2> /dev/null);
+	my $result = qx($cmd -n hw.ncpufound 2> /dev/null);
+	_debug("sysctl[3] result: $result");
+	$ncpus = 0 + $result;
     }
 
 
@@ -384,7 +439,7 @@ sub _getNumCpus_from_hinv {   # NOT TESTED irix
   return 0 if !_configExternalProgram('hinv');
   my $cmd = _configExternalProgram('hinv');
 
-  # 1.01: debug
+  # 1.01-1.04: debug
   if ($Sys::CpuAffinity::IS_TEST && !$Sys::CpuAffinity::HINV_CALLED++) {
     print STDERR "$cmd output:\n";
     print STDERR qx($cmd);
@@ -411,7 +466,7 @@ sub _getNumCpus_from_hinv {   # NOT TESTED irix
 }
 
 
-sub _getNumCpus_from_hwprefs {   # NOT TESTED darwin
+sub _getNumCpus_from_hwprefs {
   return 0 if $^O !~ /darwin/i && $^O !~ /MacOS/i;
   return 0 if !_configExternalProgram('hwprefs');
   my $cmd = _configExternalProgram('hwprefs');
@@ -458,9 +513,47 @@ sub _getNumCpus_from_Test_Smoke_SysInfo {   # NOT TESTED
   return 0 if !_configModule('Test::Smoke::SysInfo');
   my $sysinfo = Test::Smoke::SysInfo->new();
   if (defined $sysinfo && defined $sysinfo->{_ncpu}) {
-    return $sysinfo->{_ncpu};
+      # darwin: result might have format  "1 [2 cores]", see
+      # www.cpantesters.org/cpan/report/db6067c4-9a66-11e0-91fb-39e97f60f2f7
+      $sysinfo->{_ncpu} =~ s/\d+ \[(\d+) cores\]/$1/;
+      return $sysinfo->{_ncpu};
   }
   return;
+}
+
+sub _getNumCpus_from_taskset {
+    return 0 if $^O !~ /linux/i;
+    my $taskset = _configExternalProgram('taskset');
+    return 0 unless $taskset;
+
+    # neither of these approaches are foolproof
+    # 1. read affinity mask of PID 1
+    # 2. try different affinity settings until it fails
+
+    my $result = qx($taskset -p 1 2> /dev/null);
+    my ($mask) = $result =~ /:\s+(\w+)/;
+    if ($mask) {
+	my $n = 1+hex($mask);
+	return int(0.5+log($n)/log(2));
+    }
+
+    my $n = 0;
+    do {
+	my $cmd = sprintf '%s -p %x $$', $taskset, 1<<$n;
+	my $result = qx($cmd >/dev/null 2>/dev/null);
+	$n++;
+    } while ($?==0 && $n < 64);
+
+    if ($n > 1) {      # n==1 could be a false positive
+	return $n;
+    }
+
+    $n = 0;
+    while ( do { qx($taskset -pc $n $$ >/dev/null 2>/dev/null); $?==0 } ) {
+	$n++;
+	last if $n >= 256;
+    }
+    return 0;
 }
 
 ######################################################################
@@ -534,9 +627,9 @@ sub _getThreadAffinity_with_Win32API {
   # process affinity, so get process affinity.
 
   # XXX - this function only works for threads that are contained
-  #       by the current process, and that should cover the vast
-  #       majority of use cases of this module. But how would you
-  #       get the process id of an arbitrary Win32 thread?
+  #       by the current process, and that should cover most use
+  #       cases of this module. But how would you get the process 
+  #       id of an arbitrary Win32 thread?
   my $cpid = _win32api('GetCurrentProcessId');
 
   my $processHandle
@@ -653,7 +746,7 @@ sub _getAffinity_with_taskset {
 sub _getAffinity_with_xs_sched_getaffinity {
   my $pid = shift;
   return 0 if !defined &xs_sched_getaffinity_get_affinity;
-  return xs_sched_getaffinity_get_affinity($pid);
+  return xs_sched_getaffinity_get_affinity($pid,0);
 }
 
 sub _getAffinity_with_xs_DEBUG_sched_getaffinity {
@@ -665,8 +758,8 @@ sub _getAffinity_with_xs_DEBUG_sched_getaffinity {
   # out what might be going wrong.
 
   my $pid = shift;
-  return 0 if !defined &xs_sched_getaffinity_get_affinity_debug;
-  return xs_sched_getaffinity_get_affinity_debug($pid);
+  return 0 if !defined &xs_sched_getaffinity_get_affinity;
+  return xs_sched_getaffinity_get_affinity($pid,1);
 }
 
 sub _getAffinity_with_pbind {
@@ -1270,12 +1363,17 @@ our %WIN32_API_SPECS
      'GetCurrentThreadId' => [ 'kernel32',
                 'int GetCurrentThreadId()' ],
      'GetLastError' => [ 'kernel32', 'DWORD GetLastError()' ],
+     'GetModuleHandle' => [ 'kernel32', 'HMODULE GetModuleHandle(LPCTSTR n)' ],
      'GetPriorityClass' => [ 'kernel32',
                 'DWORD GetPriorityClass(HANDLE h)' ],
+     'GetProcAddress' => [ 'kernel32', 
+			   'DWORD GetProcAddress(HINSTANCE a,LPCTSTR b)' ],
+#			   'DWORD GetProcAddress(HINSTANCE a,LPCWSTR b)' ],
      'GetProcessAffinityMask' => [ 'kernel32',
                 'BOOL GetProcessAffinityMask(HANDLE h,PDWORD a,PDWORD b)' ],
      'GetThreadPriority' => [ 'kernel32',
                 'int GetThreadPriority(HANDLE h)' ],
+     'IsWow64Process' => [ 'kernel32', 'BOOL IsWow64Process(HANDLE h,PBOOL b)' ],
      'OpenProcess' => [ 'kernel32',
                 'HANDLE OpenProcess(DWORD a,BOOL b,DWORD c)' ],
      'OpenThread' => [ 'kernel32',
@@ -1289,6 +1387,7 @@ our %WIN32_API_SPECS
      'TerminateThread' => [ 'kernel32',
                 'BOOL TerminateThread(HANDLE h,DWORD x)' ],
     );
+our %WIN32_API_SPECS_ = map { $_ => $WIN32_API_SPECS{$_}[1] } keys %WIN32_API_SPECS;
 
 sub _win32api {                 ## no critic (RequireArgUnpacking)
                                 ## (we want spooky action-at-a-distance)
@@ -1310,7 +1409,12 @@ sub __load_win32api_function {
   }
 
   local ($!, $^E) = (0, 0);
-  $WIN32API{$function} = Win32::API->new(@$spec);
+
+  #$WIN32API{$function} = Win32::API->new(@$spec);
+
+  my $spec_ = $WIN32_API_SPECS_{$function};
+  $WIN32API{$function} = Win32::API->new('kernel32',$spec_);
+
   if ($!) {
     carp 'Sys::CpuAffinity: ',
       "error initializing Win32::API function $function: $! / $^E\n";
@@ -1333,7 +1437,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-Version 1.01
+Version 1.04
 
 =head1 SYNOPSIS
 
@@ -1667,16 +1771,10 @@ by default.
 Some systems have a concept of the maximum number of processors that
 they can suppport.
 
-Currently (0.91-0.99), constant parameters to Win32 API functions are 
-hard coded, not extracted from the local header files. Microsoft is
-probably loathe to change these constants between different versions,
-but this still seems dodgy.
-
+Currently (0.91-1.04), constant parameters to Win32 API functions are 
+hard coded, not extracted from the local header files.
 
 ##########################################
-
-Cygwin: if Win32::API is not installed and setCpuAffinity doesn't work,
-recommend Win32::API
 
 As of 0.99 - occasional failures
 
@@ -1693,5 +1791,22 @@ Most pressing issues 1.00:
   2. Test crashes on linux:
          during xs_sched_getaffinity
 
+Failures in 1.01
+
+  1. Linux crash during xs_sched_getaffinity (x3)
+  2. Irix crash during xs_cpusetGetCPUCount (no C compiler)
+  3. OpenBSD dmesg_bsd, sysctl disagree on CPU count (4 vs 2)
+
+Issues in 1.02-1.04
+
+  1. darwin:  hwprefs  and  sysctl  give different results?
+    www.cpantesters.org/cpan/report/3982d2fa-9c2a-11e0-a04e-9d9517dc0771
+  2. openbsd: dmesg_bsd  and  sysctl  give different results?
+    www.cpantesters.org/cpan/report/84d41dda-9942-11e0-a324-58f41aecacb6
+    www.cpantesters.org/cpan/report/0c6e981c-a2dd-11e0-a324-58f41aecacb6
+  3. linux: /usr/bin/taskset available but still cannot count CPUs? (x16)
+      /www.cpantesters.org/cpan/report/92ab9df8-a6fc-11e0-829d-5250641c9bbe
+     xs_sched_getaffinity keeps segfaulting (x4)
+  4. getNumCpus_from_Win32API_System_Info: garbage result on WOW64 systems
 
 

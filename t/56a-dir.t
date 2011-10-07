@@ -11,11 +11,17 @@ mkdir "t/dir2-$$/dir3" or die;
 
 my $PERL = $Config{perlpath};  # in case $^X is a relative path ...
 
-my $pid0 = fork { dir => "t/dir2-$$" };   # ok: $$ is parent pid, not new child pid
+if (${^TAINT}) {
+    $ENV{PATH} = '';
+}
+
+my $pid0 = fork { dir => get_path("t/dir2-$$") };
+   # ok: $$ is parent pid, not new child pid
+
 if ($pid0 == 0) {
-  open BAR, '>', 'www';
-  print BAR 'Prey for whirled peas';
-  close BAR;
+  open my $BAR, '>', 'www';
+  print $BAR 'Prey for whirled peas';
+  close $BAR;
   exit;
 }
 ok(isValidPid($pid0), "natural child launched with dir option");
@@ -28,8 +34,8 @@ unlink "www", "t/dir2-$$/www";
 
 
 my $pid1 = fork { 
-  dir => "t/dir1-$$",
-  sub => sub { open FOO, '>>', 'xxx'; print FOO "Hello world"; close FOO }
+  dir => get_path("t/dir1-$$"),
+  sub => sub { open my $FOO, '>>', 'xxx'; print $FOO "Hello world"; close $FOO }
 };
 ok(isValidPid($pid1), "sub child launched with dir option");
 wait;
@@ -39,7 +45,7 @@ ok($pid1->status == 0, "child completed normally");
 unlink "xxx", "t/dir1-$$/xxx";
 
 my $pid2 = fork {
-  chdir => "t/dir2-$$/dir3",
+  chdir => get_path("t/dir2-$$/dir3"),
   exec => [$PERL, "../../external-command.pl", "-o=yyy", "-e=message"]
 };
 ok(isValidPid($pid2), "exec child launched with chdir option");
@@ -50,7 +56,7 @@ ok($pid2->status == 0, "child completed normally");
 unlink "t/dir2-$$/dir3/yyy", "yyy";
 
 my $pid3 = fork {
-  dir => "t/dir56789",
+  dir => get_path("t/dir56789"),
   cmd => [ $PERL, "../external-command.pl", "-o=zzz", "-e=message" ]
 };
 ok(isValidPid($pid3), "cmd child launched with invalid dir option");
@@ -58,12 +64,21 @@ wait;
 ok(! -d "t/dir56789", "child target dir not created");
 ok($pid3->status != 0, "child failed with invalid target dir");
 
+sub get_path {
+    my $path = shift;
+    if (${^TAINT}) {
+	$path = Forks::Super::Util::abs_path($path);
+	($path) = $path =~ /(.*)/;
+    }
+    return $path;
+}
+
 END {
     unlink "t/dir2-$$/dir3/*";
     rmdir "t/dir2-$$/dir3";
-    unlink "t/dir2-$$/*";
+    unlink glob("t/dir2-$$/*");
     rmdir "t/dir2-$$";
-    unlink "t/dir1-$$/*";
+    unlink glob("t/dir1-$$/*");
     rmdir "t/dir1-$$";
 }
 

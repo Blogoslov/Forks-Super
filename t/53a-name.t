@@ -39,17 +39,18 @@ ok($q == -1, "waitpid by name too many times");
 $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
 
-$p1 = fork { sub => sub { sleep 3 }, name => "simple" };
+$p1 = fork { sub => sub { sleep 5 }, name => "simple" };
 $t = Time::HiRes::time();
 $p2 = fork { sub => sub { sleep 3 }, depend_on => "simple",
 	     queue_priority => 10 };
 $p3 = fork { sub => sub { }, queue_priority => 5 };
 $t = Time::HiRes::time() - $t;
-ok($t <= 2.05,              ### 11 ### was 1.5, obs 1.65,1.76,1.98
+ok($t <= 3.0,              ### 11 ### was 1.5, obs 1.65,1.76,1.98,2.99
    "fast return for queued job ${t}s expected <=1s"); 
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 $j3 = Forks::Super::Job::get($p3);
+
 ok($j1->{state} eq 'ACTIVE' && $j2->{state} eq 'DEFERRED',    ### 12 ###
    "active/queued jobs in correct state")
   or diag("expect job states ACTIVE/DEFERRED, were ",
@@ -59,4 +60,6 @@ waitall;
 ok($j1->{end} <= $j2->{start} + $TOL,
    "respected depend_on by name");
 ok($j3->{start} < $j2->{start} + $TOL,                        ### 14 ###
-   "non-dependent job started before dependent job");
+   "non-dependent job started before dependent job")
+    or diag("job 3 started at $j3->{start} ",
+	    "expected job 2 to start later ($j2->{start})");

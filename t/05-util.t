@@ -1,7 +1,7 @@
 # exercise Forks::Super::Util package
 
 use Forks::Super::Util;
-use Test::More tests => 27;
+use Test::More tests => 30;
 use strict;
 use warnings;
 
@@ -11,19 +11,23 @@ ok(Forks::Super::Util::is_number("14.56"), 'is_number #3');
 ok(!Forks::Super::Util::is_number("14.56ff"), 'is_number #4');
 ok(!Forks::Super::Util::is_number("blech"), 'is_number #5');
 ok(Forks::Super::Util::is_number("-4.3E-0003"), 'is_number #6');
+ok(Forks::Super::Util::is_number("0"), 'is_number #7');
+ok(Forks::Super::Util::is_number("0E0"), 'is_number #8');
+ok(!Forks::Super::Util::is_number("0 but true"), 'is_number #9');
 
 my $THR_avail = $Forks::Super::Util::Time_HiRes_avail;
 my $T = Time::HiRes::time();
 ok($T > $^T, "Util::Time() $T vs $^T");
-# I hope it doesn't take 10s to get here
-ok($T < $^T + 10.0, "Util::Time() $T vs $^T");
+# I hope it doesn't take 15s to get here
+ok($T < $^T + 15.0, "Util::Time() $T vs $^T");           ### 11 ###
 
 ok(Forks::Super::Util::isValidPid("5000"), 'isValidPid #1');
 ok(!Forks::Super::Util::isValidPid("-1"), 'isValidPid #2');
 ok(!Forks::Super::Util::isValidPid("0"), 'isValidPid #3');
 ok(!Forks::Super::Util::isValidPid("word"), 'isValidPid #4');
 ok(!Forks::Super::Util::isValidPid("-999999"), 'isValidPid #5');
-ok(Forks::Super::Util::isValidPid("-404") ^ ($^O ne 'MSWin32'), 'isValidPid #6');
+ok(Forks::Super::Util::isValidPid("-404") ^ ($^O ne 'MSWin32'), 
+   'isValidPid #6');
 
 my $Ct = Forks::Super::Util::Ctime();
 ok(length($Ct) == 2+2+2+3+3+2, "Ctime: $Ct");
@@ -68,3 +72,4 @@ $w = 4;
 Forks::Super::Util::set_other_productive_pause_code { $w = 0 };
 Forks::Super::Util::pause(0.25);
 ok($w == 0 && $x > 1, 'set_other_productive_pause_code');
+

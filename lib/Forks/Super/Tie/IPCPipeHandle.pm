@@ -14,7 +14,7 @@
 
 package Forks::Super::Tie::IPCPipeHandle;
 use Forks::Super::Tie::IPCFileHandle;
-use Forks::Super::Debug;
+use Forks::Super::Debug ':all';
 
 use Exporter;
 use strict;
@@ -22,19 +22,43 @@ use warnings;
 use Carp;
 use IO::Pipe;
 use IO::Handle;
+
 our @ISA = qw(IO::Pipe IO::Handle);
+our $VERSION = '0.54';
 
 sub TIEHANDLE {
   my ($class, $real_pipe, $glob) = @_;
   $$glob->{DELEGATE} = $real_pipe;
   eval {
     bless $glob, 'Forks::Super::Tie::IPCPipeHandle::Delegator';
-  } or carp "Forks::Super::Tie::IPCPipeHandle: ",
+  } or carp 'Forks::Super::Tie::IPCPipeHandle: ',
 	  "failed to bless tied obj as a Delegator\n";
 
   # any attributes that the real pipe had should be passed
   # on to the glob.
-  $$glob->{$_} = $$real_pipe->{$_} foreach keys %$$real_pipe;
+  foreach my $attr (keys %$$real_pipe) {
+      $$glob->{$attr} = $$real_pipe->{$attr};
+  }
+
+  # apply PerlIO layers to the real pipe here
+  my $job = $$glob->{job} || Forks::Super::Job->this;
+  if (defined($job) && $job->{fh_config}{layers}) {
+      my @io_layers = @{$job->{fh_config}{layers}};
+      if ($$real_pipe->{is_read}) {
+	  @io_layers = reverse @io_layers;
+      }
+      foreach my $layer (@io_layers) {
+	  local $! = 0;
+	  if (binmode $real_pipe, $layer) {
+	      if ($job->{debug}) {
+		  debug("applied PerlIO layer $layer to pipe $real_pipe");
+	      }
+	  } else {
+	      carp 'Forks::Super::Tie::IPCPipeHandle: ',
+	          "failed to apply PerlIO layer $layer to $real_pipe: $!";
+	  }
+      }
+  }
 
   my $self = { PIPE => $real_pipe, GLOB => $glob };
   $self->{_FILENO} = CORE::fileno($real_pipe);
@@ -52,7 +76,7 @@ sub OPEN {
 sub BINMODE {
   my ($self, $layer) = @_;
   $self->{BINMODE}++;
-  return binmode $self->{PIPE}, $layer || ":raw";
+  return binmode $self->{PIPE}, $layer || ':raw';
 }
 
 sub GETC {
@@ -115,27 +139,26 @@ sub READLINE {
 }
 
 sub TELL {
-  my $self = shift;
-  $self->{TELL}++;
-  return tell $self->{PIPE};
+    my $self = shift;
+    $self->{TELL}++;
+    return tell $self->{PIPE};
 }
 
 sub EOF {
-  my $self = shift;
-  return eof $self->{PIPE};
+    my $self = shift;
+    return eof $self->{PIPE};
 }
 
 sub READ {
-  my ($self, undef, $length, $offset) = @_;
-  $self->{READ}++;
+    my ($self, undef, $length, $offset) = @_;
+    $self->{READ}++;
 
-  # XXX - blocking ? timeout ?
+    # XXX - blocking ? timeout ?
 
 
-  # we will almost always use select4 before reading, so
-  # we need to use sysread, sysseek
-  my $z = sysread $self->{PIPE}, $_[1], $length, $offset || 0;
-  return $z;
+    # we will almost always use select4 before reading, so
+    # we need to use sysread, sysseek
+    return sysread $self->{PIPE}, $_[1], $length, $offset || 0;
 }
 
 sub SEEK {
@@ -149,41 +172,42 @@ sub is_pipe {
 }
 
 sub opened {
-  my $self = shift;
-  return $self->{PIPE}->opened;
+    my $self = shift;
+    return $self->{PIPE}->opened;
 }
 
 sub CLOSE {
-  my $self = shift;
-  if ($Forks::Super::Job::INSIDE_END_QUEUE) {
-    untie *{$self->{GLOB}};
-    if ($self->{PIPE}) {
-      close $self->{PIPE};
+    my $self = shift;
+    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
+	untie *{$self->{GLOB}};
+	if ($self->{PIPE}) {
+	    close $self->{PIPE};
+	}
+	close *{$self->{GLOB}};
     }
-    close *{$self->{GLOB}};
-  }
     
-  unless ($self->{CLOSE}++) {
-    ${$self->{GLOB}}->{closed}++;
-    return close delete $self->{PIPE};
-  }
-  return;
+    if (!$self->{CLOSE}++) {
+	${$self->{GLOB}}->{closed}++;
+	return close delete $self->{PIPE};
+    }
+    return;
 }
 
 sub DESTROY {
-  my $self = shift;
-  $self = {};
-  return;
+    my $self = shift;
+    $self = {};
+    return;
 }
 
 sub ___UNTIE {
     my ($self, $existing_inner_references) = @_;
     if ($existing_inner_references > 1) {
 	if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
-	    warn "untie attempted while ", $existing_inner_references,
-	    	" still exist";
+	    warn 'untie attempted while ', $existing_inner_references,
+	    	' still exist';
 	}
     }
+    return;
 }
 
 #
@@ -196,8 +220,10 @@ sub Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD {
   my $method = $Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD;
   $method =~ s/.*:://;
   my $delegator = shift;
+  return if !$delegator;
+
   my $delegate = $$delegator->{DELEGATE};
-  return unless $delegator && $delegate;
+  return if !$delegate;
 
   ## no critic (StringyEval)
   if (wantarray) {

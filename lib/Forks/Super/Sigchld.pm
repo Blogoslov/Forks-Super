@@ -14,6 +14,7 @@ use warnings;
 our ($_SIGCHLD, $_SIGCHLD_CNT, $REAP) = (0,0,0);
 our (@CHLD_HANDLE_HISTORY, @SIGCHLD_CAUGHT) = (0);
 our $SIG_DEBUG = $ENV{SIG_DEBUG};
+our $VERSION = '0.54';
 my %bastards;
 
 #
@@ -25,88 +26,101 @@ my %bastards;
 # were not handled correctly.
 #
 sub handle_CHLD {
-  local $!;
-  $SIGCHLD_CAUGHT[0]++;
-  my $sig = shift;
-  $_SIGCHLD_CNT++;
+    local $! = 0;
+    $SIGCHLD_CAUGHT[0]++;
+    my $sig = shift;
+    $_SIGCHLD_CNT++;
 
-  # poor man's synchronization
-  $_SIGCHLD++;
-  if ($_SIGCHLD > 1) {
+    # poor man's synchronization
+    $_SIGCHLD++;
+    if ($_SIGCHLD > 1) {
+	if ($SIG_DEBUG) {
+	    my $z = Time::HiRes::time() - $^T;
+	    push @CHLD_HANDLE_HISTORY,
+	            "synch $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
+	}
+	$_SIGCHLD--;
+	return;
+    }
+
     if ($SIG_DEBUG) {
-      my $z = Time::HiRes::time() - $^T;
-      push @CHLD_HANDLE_HISTORY, "synch $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
+	my $z = Time::HiRes::time() - $^T;
+	push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
+    }
+    if ($sig ne '-1' && $DEBUG) {
+	debug("handle_CHLD(): $sig received");
+    }
+
+    my $nhandled = 0;
+
+    while (1) {
+	my $pid = -1;
+	my $old_status = $?;
+	my $status = $old_status;
+	for my $tries (1 .. 3) {
+	    $pid = CORE::waitpid -1, WNOHANG;
+	    $status = $?;
+	    last if isValidPid($pid);
+	}
+	$? = $old_status;
+	last if !isValidPid($pid);
+
+	$nhandled++;
+
+	if (defined $Forks::Super::ALL_JOBS{$pid}) {
+	    _preliminary_reap($pid, $status);
+	} else {
+	    # There are (at least) two reasons we reach this code branch:
+	    #
+	    # 1. A child process completes so quickly that it is reaped in 
+	    #    this subroutine *before* the parent process has finished 
+	    #    initializing its state.
+	    #    Treat this as a bastard pid. We'll check later if the 
+	    #    parent process knows about this process.
+	    # 2. This is a child process with $CHILD_FORK_OK>0, reaping process
+	    #    started with a system fork (system or exec or maybe even qx?),
+	    #    not a F::S::fork call from within the child process.
+
+	    debug('handle_CHLD(): got CHLD signal ',
+		  "but can't find child to reap; pid=$pid") if $DEBUG;
+
+	    $bastards{$pid} = [ scalar Time::HiRes::time(), $status ];
+	}
+	$REAP = 1;
+    }
+    if ($SIG_DEBUG) {
+	my $z = Time::HiRes::time() - $^T;
+	push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
     }
     $_SIGCHLD--;
+    if ($nhandled > 0) {
+	Forks::Super::Queue::check_queue();
+    }
     return;
-  }
-
-  if ($SIG_DEBUG) {
-    my $z = Time::HiRes::time() - $^T;
-    push @CHLD_HANDLE_HISTORY, "start $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
-  }
-  if ($sig ne "-1" && $DEBUG) {
-    debug("handle_CHLD(): $sig received");
-  }
-
-  my $nhandled = 0;
-
-  for (;;) {
-    my $pid = -1;
-    my $old_status = $?;
-    my $status = $old_status;
-    for (my $tries=1; !isValidPid($pid) && $tries <= 3; $tries++) {
-      $pid = CORE::waitpid -1, WNOHANG;
-      $status = $?;
-    }
-    $? = $old_status;
-    last if !isValidPid($pid);
-
-    $nhandled++;
-
-    if (defined $Forks::Super::ALL_JOBS{$pid}) {
-      $REAP = 1;
-      debug("handle_CHLD(): ",
-	    "preliminary reap for $pid status=$status") if $DEBUG;
-      if ($SIG_DEBUG) {
-	my $z = Time::HiRes::time() - $^T;
-	push @CHLD_HANDLE_HISTORY, 
-	  "reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
-      }
-
-      $REAP = 1;
-      my $j = $Forks::Super::ALL_JOBS{$pid};
-      if (!$j->{daemon}) {
-	  $j->{status} = $status;
-	  $j->_mark_complete;
-      }
-    } else {
-      # There are (at least) two reasons we reach this code branch:
-      #
-      # 1. A child process completes so quickly that it is reaped in 
-      #    this subroutine *before* the parent process has finished 
-      #    initializing its state.
-      #    Treat this as a bastard pid. We'll check later if the 
-      #    parent process knows about this process.
-      # 2. This is a child process with $CHILD_FORK_OK>0, reaping a process
-      #    started with a system fork (system or exec or maybe even qx?), not 
-      #    a F::S::fork call from within the child process.
-
-      debug("handle_CHLD(): got CHLD signal ",
-	    "but can't find child to reap; pid=$pid") if $DEBUG;
-
-      $bastards{$pid} = [ scalar Time::HiRes::time(), $status ];
-    }
-    $REAP = 1;
-  }
-  if ($SIG_DEBUG) {
-    my $z = Time::HiRes::time() - $^T;
-    push @CHLD_HANDLE_HISTORY, "end $$ $_SIGCHLD $_SIGCHLD_CNT $sig $z\n";
-  }
-  $_SIGCHLD--;
-  Forks::Super::Queue::check_queue() if $nhandled > 0;
-  return;
 }
+
+sub _preliminary_reap {
+    my ($pid,$status) = @_;
+    $REAP = 1;
+    if ($DEBUG) {
+	debug('handle_CHLD(): preliminary reap for ',
+	      "$pid status=$status");
+    }
+    if ($SIG_DEBUG) {
+	my $z = Time::HiRes::time() - $^T;
+	push @CHLD_HANDLE_HISTORY,
+		"reap $$ $_SIGCHLD $_SIGCHLD_CNT <$pid> $status $z\n";
+    }
+
+    $REAP = 1;
+    my $j = $Forks::Super::ALL_JOBS{$pid};
+    if (!$j->{daemon}) {
+	$j->{status} = $status;
+	$j->_mark_complete;
+    }
+    return;
+}
+
 
 #
 # bastards arise when a child finishes quickly and has been
@@ -121,7 +135,7 @@ sub handle_bastards {
     foreach my $pid (@pids) {
 	my $job = $Forks::Super::Job::ALL_JOBS{$pid};
 	if (defined $job && defined $bastards{$pid}) {
-	    warn "Forks::Super: ",
+	    warn 'Forks::Super: ',
 	        "Job $pid reaped before parent initialization.\n";
 	    if ($job->{daemon}) {
 		delete $bastards{$pid};

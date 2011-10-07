@@ -6,7 +6,7 @@
 
 package Forks::Super::Job;
 use Forks::Super::Debug qw(debug);
-use Forks::Super::Util qw(is_number qualify_sub_name IS_WIN32 is_pipe);
+use Forks::Super::Util qw(is_number qualify_sub_name IS_CYGWIN IS_WIN32 is_pipe);
 use Forks::Super::Config qw(:all);
 use Forks::Super::Job::Ipc;   # does windows prefer to load Ipc before Timeout?
 use Forks::Super::Job::Timeout;
@@ -24,12 +24,16 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 
 our (@ALL_JOBS, %ALL_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
 our $INSIDE_END_QUEUE = 0;
 our $_RETRY_PAUSE;
+
+# a reference to the Job that launched a process.
+# should only by set in the _child_ process created by a Job
+my $this;
 
 my $use_overload = $ENV{FORKS_SUPER_JOB_OVERLOAD};
 if (!defined($use_overload)) {
@@ -43,11 +47,11 @@ if ($use_overload) {
 }
 
 #############################################################################
-# Object methods (meant to be called as $job->xxx(@args))
+# Object methods (meant to be called as $job->method_name(@args))
 
 sub new {
   my ($class, $opts) = @_;
-  my $this = {};
+  my $self = {};
   if (ref $opts eq 'HASH') {
       if (0 && $opts->{untaint}) {
 	  if ($opts->{env} && ref($opts->{env}) eq 'HASH') {
@@ -57,46 +61,46 @@ sub new {
 	  }
       }
 
-
       foreach (keys %$opts) {
-	  $this->{$_} = $opts->{$_} ;
+	  $self->{$_} = $opts->{$_} ;
       }
   }
 
-  $this->{__opts__} = $opts;
+  $self->{__opts__} = $opts;
 
-  $this->{created} = Time::HiRes::time();
-  $this->{state} = 'NEW';
-  $this->{ppid} = $$;
-  if (!defined $this->{_is_bg}) {
-      $this->{_is_bg} = 0;
+  $self->{created} = Time::HiRes::time();
+  $self->{state} = 'NEW';
+  $self->{ppid} = $$;
+  if (!defined $self->{_is_bg}) {
+      $self->{_is_bg} = 0;
   }
-  if (!defined $this->{debug}) {
-      $this->{debug} = $Forks::Super::Debug::DEBUG;
+  if (!defined $self->{debug}) {
+      $self->{debug} = $Forks::Super::Debug::DEBUG;
   }
   # 0.41: fix overload bug here by putting  bless  before  push @ALL_JOBS
-  bless $this, 'Forks::Super::Job';
-  push @ALL_JOBS, $this;
-  if ($this->{debug}) {
-      debug("New job created: ", $this->toString());
+  bless $self, 'Forks::Super::Job';
+  push @ALL_JOBS, $self;
+  if ($self->{debug}) {
+      debug('New job created: ', $self->toString());
   }
-  return $this;
+  return $self;
 }
 
 sub reuse {
-  my ($job, $opts) = @_;
-  if (ref $opts ne 'HASH') {
-    $opts = { @_[1..$#_] };
-  }
-  my %opts;
-  if (defined $job->{__opts__}) {
-    %opts = %{$job->{__opts__}};
-  }
-  for (keys %$opts) {
-    $opts{$_} = $opts->{$_};
-  }
+    my ($job, @opts) = @_;
+    my $opts = @opts > 1 ? { @opts } : $opts[0];
+    #if (ref $opts ne 'HASH') {
+    #  $opts = { @_[1..$#_] };
+    #}
+    my %opts;
+    if (defined $job->{__opts__}) {
+	%opts = %{$job->{__opts__}};
+    }
+    for (keys %$opts) {
+	$opts{$_} = $opts->{$_};
+    }
 
-  return Forks::Super::fork( \%opts ) ;
+    return Forks::Super::fork( \%opts ) ;
 }
 
 sub is_complete {
@@ -195,14 +199,19 @@ sub exit_status {
 sub toString {
   my $job = shift;
   my @to_display = qw(pid state create);
-  foreach my $attr (qw(real_pid style cmd exec sub args dir start end reaped
-		       status closure pgid child_fh queue_priority
-		       timeout expiration)) {
-    push @to_display, $attr if defined $job->{$attr};
-  }
+  push @to_display, 
+  	grep { defined $job->{$_} } qw(real_pid style cmd exec sub args dir 
+                                       start end reaped status closure child_fh
+                                       pgid queue_priority timeout expiration);
+  
+#  foreach my $attr (qw(real_pid style cmd exec sub args dir start end reaped
+#		       status closure pgid child_fh queue_priority
+#		       timeout expiration)) {
+#    push @to_display, $attr if defined $job->{$attr};
+#  }
   my @output = ();
   foreach my $attr (@to_display) {
-    next unless defined $job->{$attr};
+    next if ! defined $job->{$attr};
     if (ref $job->{$attr} eq 'ARRAY') {
       push @output, "$attr=[" . join(q{,},@{$job->{$attr}}) . ']';
     } else {
@@ -213,41 +222,41 @@ sub toString {
 }
 
 sub toFullString {
-  my $job = shift;
-  my @output = ();
-  foreach my $attr (sort keys %$job) {
-    next unless defined $job->{$attr};
-    if (ref $job->{$attr} eq 'ARRAY') {
-      push @output, "$attr=[" . join(',', @{$job->{$attr}}) . ']';
-    } elsif (ref $job->{$attr} eq 'HASH') {
-      push @output, "$attr={", 
-	join(',', map {"$_=>$job->{$attr}{$_}"
-		     } sort keys %{$job->{$attr}}), '}';
-    } else {
-      push @output, "$attr=$job->{$attr}";
+    my $job = shift;
+    my @output = ();
+    foreach my $attr (sort keys %$job) {
+	next if ! defined $job->{$attr};
+	if (ref $job->{$attr} eq 'ARRAY') {
+	    push @output, "$attr=[" . join(',', @{$job->{$attr}}) . ']';
+	} elsif (ref $job->{$attr} eq 'HASH') {
+	    push @output, "$attr={", 
+	    join(',', map { "$_=>$job->{$attr}{$_}"
+		      } sort keys %{$job->{$attr}}), '}';
+	} else {
+	    push @output, "$attr=$job->{$attr}";
+	}
     }
-  }
-  return '{' . join(';', @output), '}';
+    return '{' . join(';', @output), '}';
 }
 
 sub toShortString {
-  my $job = shift;
-  if (defined $job->{short_string}) {
-    return $job->{short_string};
-  }
-  my @to_display = ();
-  foreach my $attr (qw(pid state cmd exec sub args closure real_pid)) {
-    push @to_display, $attr if defined $job->{$attr};
-  }
-  my @output;
-  foreach my $attr (@to_display) {
-    if (ref $job->{$attr} eq 'ARRAY') {
-      push @output, "$attr=[" . join(",", @{$job->{$attr}}) . "]";
-    } else {
-      push @output, "$attr=" . $job->{$attr};
+    my $job = shift;
+    if (defined $job->{short_string}) {
+	return $job->{short_string};
     }
-  }
-  return $job->{short_string} = "{" . join(";",@output) . "}";
+    my @to_display = grep { 
+	defined $job->{$_} 
+    }  qw(pid state cmd exec sub args closure real_pid);
+
+    my @output;
+    foreach my $attr (@to_display) {
+	if (ref $job->{$attr} eq 'ARRAY') {
+	    push @output, "$attr=[" . join(',', @{$job->{$attr}}) . ']';
+	} else {
+	    push @output, "$attr=" . $job->{$attr};
+	}
+    }
+    return $job->{short_string} = '{' . join(';',@output) . '}';
 }
 
 sub _mark_complete {
@@ -274,20 +283,20 @@ sub _mark_reaped {
 # determine whether a job is eligible to start
 #
 sub can_launch {
-  no strict 'refs';
+    no strict 'refs';
 
-  my $job = shift;
-  $job->{last_check} = Time::HiRes::time();
-  if (defined $job->{can_launch}) {
-    if (ref $job->{can_launch} eq 'CODE') {
-      return $job->{can_launch}->($job);
-    } elsif (ref $job->{can_launch} eq '') {
-      my $can_launch_sub = $job->{can_launch};
-      return $can_launch_sub->($job);
+    my $job = shift;
+    $job->{last_check} = Time::HiRes::time();
+    if (defined $job->{can_launch}) {
+	if (ref $job->{can_launch} eq 'CODE') {
+	    return $job->{can_launch}->($job);
+	} elsif (ref $job->{can_launch} eq '') {
+	    my $can_launch_sub = $job->{can_launch};
+	    return $can_launch_sub->($job);
+	}
+    } else {
+	return $job->_can_launch;
     }
-  } else {
-    return $job->_can_launch;
-  }
 }
 
 sub _can_launch_delayed_start_check {
@@ -302,7 +311,9 @@ sub _can_launch_delayed_start_check {
   #  delay + fail   is pretty dumb
   #  delay + block  is like sleep + fork
 
-  $job->{_on_busy} = 'QUEUE' if not defined $job->{on_busy};
+  if (! defined $job->{on_busy}) {
+      $job->{_on_busy} = 'QUEUE';
+  }
   return 0;
 }
 
@@ -314,12 +325,12 @@ sub _can_launch_dependency_check {
   foreach my $dj (@dep_on) {
     my $j = $ALL_JOBS{$dj};
     if (not defined $j) {
-      carp "Forks::Super::Job: ",
+      carp 'Forks::Super::Job: ',
 	"dependency $dj for job $job->{pid} is invalid. Ignoring.\n";
       next;
     }
-    unless ($j->is_complete) {
-      debug("_can_launch(): ",
+    if (!$j->is_complete) {
+      debug('_can_launch(): ',
 	    "job waiting for job $j->{pid} to finish. launch fail.")
 	if $j->{debug};
       return 0;
@@ -329,11 +340,11 @@ sub _can_launch_dependency_check {
   foreach my $dj (@dep_start) {
     my $j = $ALL_JOBS{$dj};
     if (not defined $j) {
-      carp "Forks::Super::Job ",
+      carp 'Forks::Super::Job ',
 	"start dependency $dj for job $job->{pid} is invalid. Ignoring.\n";
       next;
     }
-    unless ($j->is_started) {
+    if (!$j->is_started) {
       debug('_can_launch(): ',
 	"job waiting for job $j->{pid} to start. launch fail.")
 	if $j->{debug};
@@ -341,6 +352,16 @@ sub _can_launch_dependency_check {
     }
   }
   return 1;
+}
+
+sub _max_proc {
+    my $j = shift;
+    return defined($j->{max_proc}) ? $j->{max_proc} : $Forks::Super::MAX_PROC;
+}
+
+sub _max_load {
+    my $j = shift;
+    return defined($j->{max_load}) ? $j->{max_load} : $Forks::Super::MAX_LOAD;
 }
 
 #
@@ -355,6 +376,8 @@ sub _can_launch {
     ? $job->{max_proc} : $Forks::Super::MAX_PROC;
   my $max_load = defined($job->{max_load})
     ? $job->{max_load} : $Forks::Super::MAX_LOAD;
+#  my $max_proc = $job->_max_proc;
+#  my $max_load = $job->_max_load;
   my $force = defined($job->{max_load}) && $job->{force};
 
   if ($force) {
@@ -400,155 +423,183 @@ sub _CORE_fork { return CORE::fork }
 # in the parent and the child processes
 #
 sub launch {
-  my $job = shift;
-  if ($job->is_started) {
-    Carp::confess "Forks::Super::Job::launch() ",
-	"called on a job in state $job->{state}!\n";
-  }
+    my $job = shift;
+    if ($job->is_started) {
+	Carp::confess 'Forks::Super::Job::launch() ',
+	    "called on a job in state $job->{state}!\n";
+    }
 
-  if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK > 0) {
-    $Forks::Super::MAIN_PID = $$;
-    $Forks::Super::CHILD_FORK_OK--;
-  }
+    if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK > 0) {
+	$Forks::Super::MAIN_PID = $$;
+	$Forks::Super::CHILD_FORK_OK--;
+    }
 
-  if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK <= 0) {
-    return _launch_from_child($job);
-  }
-  $job->_preconfig_fh;
-  $job->_preconfig2;
-  $job->{cwd} = &Cwd::getcwd;
-
-  my $retries = $job->{retries} || 0;
+    if ($$ != $Forks::Super::MAIN_PID && $Forks::Super::CHILD_FORK_OK <= 0) {
+	return _launch_from_child($job);
+    }
+    $job->_preconfig_fh;
+    $job->_preconfig2;
+    $job->{cwd} = &Cwd::getcwd;
 
 
 
 
-  ######################################################################
-  # the other 11,000 lines in this module are just a wrapper for this:
-  
-  my $pid = _CORE_fork();
-  while (!defined($pid) && $retries-- > 0) {
-    warn "Forks::Super::launch: ",
-      "system fork call returned undef. Retrying ...\n";
-    $_RETRY_PAUSE ||= 1.0;
-    my $delay = 1.0 + $_RETRY_PAUSE * (($job->{retries} || 1) - $retries);
-    Forks::Super::Util::pause($delay);
-    $pid = _CORE_fork();
-  }
-
-  # :-)
-  #####################################################################
+    my $pid = _robust_fork($job);
 
 
 
 
+    if (!defined $pid) {
+	debug('launch(): CORE::fork() returned undefined!')
+	    if $job->{debug};
+	return;
+    }
 
 
-  if (!defined $pid) {
-    debug('launch(): CORE::fork() returned undefined!')
-      if $job->{debug};
-    return;
-  }
+    if (Forks::Super::Util::isValidPid($pid)) {
 
+	# parent
+	return _postlaunch_parent($pid, $job);
 
-  if (Forks::Super::Util::isValidPid($pid)) {
+    } 
+    if ($pid == 0) {
 
-    # parent
-    return _postlaunch_parent($pid, $job);
+	if ($job->{daemon}) {
+	    if (&IS_WIN32) {
+		$job->_postlaunch_daemon_child_Win32;
+		return 0;
+	    }
+	    $job->_postlaunch_daemon_child;
+	}
+	_postlaunch_child($job);
+	return 0;
 
-  } elsif ($pid == 0) {
+    }  
 
-      if ($job->{daemon}) {
-	  if (&IS_WIN32) {
-	      $job->_postlaunch_daemon_Win32;
-	  } else {
-	      $job->_postlaunch_daemon;
-	  }
-      }
-      if ($job->{daemon}) {
-      }
-
-      _postlaunch_child($job);
-      return 0;
-
-  } else {
-
-    Carp::confess "Forks::Super::launch(): ",
+    Carp::confess 'Forks::Super::launch(): ',
 	"Somehow we got invalid pid=$pid from fork call.";
     return;
+}
 
-  }
+sub _robust_fork {
+    # the other 13,000 lines in this distro are just a wrapper around this:
+
+    my $job = shift;
+    my $retries = $job->{retries} || 0;
+    my $pid = _CORE_fork();
+    while (!defined($pid) && $retries-- > 0) {
+	warn 'Forks::Super::launch: ',
+	    "system fork call returned undef. Retrying ...\n";
+	$_RETRY_PAUSE ||= 1.0;
+	my $delay = 1.0 + $_RETRY_PAUSE * (($job->{retries} || 1) - $retries);
+	Forks::Super::Util::pause($delay);
+	$pid = _CORE_fork();
+    }
+    return $pid;
 }
 
 sub _postlaunch_parent {
-  my ($pid, $job) = @_;
+    my ($pid, $job) = @_;
 
-  $ALL_JOBS{$pid} = $job;
-  if (defined($job->{state}) &&
-      $job->{state} ne 'NEW' &&
-      $job->{state} ne 'LAUNCHING' &&
-      $job->{state} ne 'DEFERRED') {
-    warn "Forks::Super::Job::launch(): ",
-      "job $pid already has state: $job->{state}\n";
-  } else {
-    $job->{state} = 'ACTIVE';
+    $ALL_JOBS{$pid} = $job;
+    if (defined($job->{state}) &&
+	$job->{state} ne 'NEW' &&
+	$job->{state} ne 'LAUNCHING' &&
+	$job->{state} ne 'DEFERRED') {
+	warn 'Forks::Super::Job::launch(): ',
+	     "job $pid already has state: $job->{state}\n";
+    } else {
+	$job->{state} = 'ACTIVE';
 
-    #
-    # it is possible that this child exited quickly and has already
-    # been reaped in the SIGCHLD handler. In that case, the signal
-    # handler should have made an entry in %Forks::Super::Sigchld::BASTARD_DATA
-    # for this process.
-    #
-    Forks::Super::Sigchld::handle_bastards($pid);
-  }
-  if ($job->{daemon}) {
-      $job->{state} = 'DAEMON';
-      my $new_pid;
-      for (my $try=1; defined($job->{daemon_ipc}) && $try<=10; $try++) {
-	  if (-f $job->{daemon_ipc}) {
-	      open my $fh, '<', $job->{daemon_ipc};
-	      $new_pid = <$fh>;
-	      close $fh;
-	      unlink $job->{daemon_ipc};
-	      ($new_pid) = $new_pid =~ /([-\d]*)/;
-	      last;
-	  }
-	  Forks::Super::Util::pause(0.002*$try*$try*$try,$try<3);
-      }
-      if ($new_pid) {
-	  $job->{intermediate_pid} = $pid;
-	  delete $ALL_JOBS{$pid};
-	  $ALL_JOBS{$new_pid} = $job;
-	  $pid = $new_pid;
-      } elsif (!defined $new_pid) {
-	  carp "Forks::Super::fork: ",
-	      "unable to get process ID for new daemon process. ",
-	      "It is possible the daemon fork failed. ",
-	      "Signalling and other IPC with this process may be unreliable.";
-      }
-  }
+	#
+	# it is possible that this child exited quickly and has already
+	# been reaped in the SIGCHLD handler. In that case, the signal
+	# handler should have made an entry in 
+	# %Forks::Super::Sigchld::BASTARD_DATA  for this process.
+	#
+	Forks::Super::Sigchld::handle_bastards($pid);
+    }
+    if ($job->{daemon}) {
+	$pid = $job->_postlaunch_daemon_parent($pid);
+    }
+    $job->{real_pid} = $pid;
+    if (!defined $job->{pid}) {
+	$job->{pid} = $pid;
+    }
+    $job->{start} = Time::HiRes::time();
 
+    $job->_config_parent;
+    $job->run_callback('start');
 
-  $job->{real_pid} = $pid;
-  $job->{pid} = $pid unless defined $job->{pid};
-  $job->{start} = Time::HiRes::time();
+    Forks::Super::handle_CHLD(-1);
+    if ($$ != $Forks::Super::MAIN_PID) {
+	# Forks::Super::fork call from a child.
+	$XSIG{CHLD}[-1] ||= \&Forks::Super::handle_CHLD;
+    }
 
-  $job->_config_parent;
-  $job->run_callback('start');
-
-  Forks::Super::handle_CHLD(-1);
-  if ($$ != $Forks::Super::MAIN_PID) {
-      # Forks::Super::fork call from a child.
-      $XSIG{CHLD}[-1] ||= \&Forks::Super::handle_CHLD;
-  }
-
-  return $OVERLOAD_ENABLED ? $job : $pid;
+    return $OVERLOAD_ENABLED ? $job : $pid;
 }
 
-sub _postlaunch_daemon_Win32 {
+sub _postlaunch_daemon_parent {
+    my ($job, $pid) = @_;
+
+    # set the pid to the daemon (grandchild) process's id,
+    # not the intermediate (child) process
+    $job->{state} = 'DAEMON';
+    my $new_pid;
+    my $_t = Time::HiRes::time();
+
+    # TODO - develop a mechanism to communicate the daemon pid without file IPC
+    for (my $try=1; defined($job->{daemon_ipc}) && $try<=50; $try++) {
+	if (-f $job->{daemon_ipc} . '.ready') {
+	    if (open my $fh, '<', $job->{daemon_ipc}) {
+		$new_pid = <$fh>;
+		close $fh;
+		unlink $job->{daemon_ipc}, $job->{daemon_ipc} . '.ready';
+	    } else {
+		carp "Forks::Super: could not receive daemon pid: $!";
+		Forks::Super::Util::pause(0.002*$try*$try*$try,$try<3);
+		next;
+	    }
+
+	    if ($Forks::Super::Debug::DEBUG) {
+		debug("daemon job pid is $new_pid (try=$try) ",
+		      't=',Time::HiRes::time()-$_t,'s');
+	    }
+
+	    ($new_pid) = $new_pid =~ /([-\d]*)/;
+	    if ($try >= 10) {
+		carp 'Forks::Super::fork: ',
+		  	'managed to communicate with the daemon process ',
+		  	"on the $try-th try ...";
+	    }
+	    last;
+	} elsif ($try == 50) {
+	    carp 'Forks::Super::fork: ',
+	          'failed to communicate with new daemon process';
+	} else {
+	    Forks::Super::Util::pause(0.002*$try*$try*$try,$try<3);
+	}
+    }
+    if ($new_pid) {
+	$job->{intermediate_pid} = $pid;
+	delete $ALL_JOBS{$pid};
+	$ALL_JOBS{$new_pid} = $job;
+	$pid = $new_pid;
+    } elsif (!defined $new_pid) {
+	carp 'Forks::Super::fork: ',
+	      'unable to get process ID for new daemon process. ',
+	      'It is possible the daemon fork failed. ',
+	      'Signalling and other IPC with this process may be unreliable.';
+    }
+    return $pid;
+}
+
+sub _postlaunch_daemon_child_Win32 {
     my $job = shift;
-    debug("child $$ forking again to create daemon process")
-	if $Forks::Super::Debug::DEBUG;
+
+    # maybe we can just do  Win32::Process::Create
+    # with the  DETACHED_PROCESS  flag ?
 
     if ($job->{style} ne 'cmd' && $job->{style} ne 'exec') {
 	carp "Forks::Super::fork: 'daemon' option on MSWin32 ",
@@ -556,81 +607,188 @@ sub _postlaunch_daemon_Win32 {
 	return;
     }
 
-    use POSIX ();
-    umask 0;
+    if (!Forks::Super::Config::CONFIG('Win32::Process')) {
+	carp 'Forks::Super::daemon: ',
+	     'need Win32::Process to launch daemon in MSWin32';
+	return;
+    }
 
-    my $p = $$;
-    my $p2 = _CORE_fork();
+    if (defined &Forks::Super::init_child) {
+	Forks::Super::init_child();
+    }
+    $job->_config_child;
+    local $ENV{_FORK_PPID} = $$;
+    local $ENV{_FORK_PID} = $$;
 
-    if ($p == $$) {
-	# intermediate child
-	if (defined $p2) {
-	    no warnings 'io';
-	    my $f = $job->{daemon_ipc};
-	    open my $fh, '>', "$f.tmp";
+    # XXX - can we handle the usual suite of options with daemon+Win32?
+    #       os_priority, cpu_affinity  are set in  _config_child? (need test)
+    #       share? of course not (need to doc)
+    
+    my $procObj;
+    my @cmd = $job->{style} eq 'exec' ? @{$job->{exec}} : @{$job->{cmd}};
+
+    my $result = Win32::Process::Create(
+	$procObj, $cmd[0],  join (' ',@cmd),  0,
+	&Win32::Process::DETACHED_PROCESS,
+	defined $job->{dir} ? $job->{dir} : '/');
+
+    if (!$result) {
+	croak 'Forks::Super: failed to launch a detached Windows process: ',
+		Win32::Process::ErrorReport();
+    }
+    my $p2 = $procObj->GetProcessID();
+    $job->set_signal_pid($p2);
+
+    if (defined $job->{_timeout}) {
+	if ($job->{_timeout} > 0) {
+	    Forks::Super::Job::OS::Win32::totally_kludgy_process_monitor(
+		$p2,$job->{_timeout});
+	} else {
+	    # XXX - quick die
+	}
+    }
+
+    {
+	no warnings 'io';
+	my $f = $job->{daemon_ipc};
+	if (open my $fh, '>', "$f.tmp") {
 	    print $fh $p2;
 	    close $fh;
 	    rename "$f.tmp", $f;
-	    if ($Forks::Super::Debug::DEBUG) {
-		debug("daemon pid is $p2");
+	    if (open my $ready, '>>', "$f.ready") {
+		close $ready;
 	    }
 	} else {
-	    croak "Forks::Super::fork: ",
-	        "Unable to create daemon process because secondary fork failed";
+	    croak "Forks::Super::fork: daemon failed to communicate its PID $!";
 	}
-	exit;
     }
-    # orphaned grandchild - the new daemon process
-
-    # XXX - In MSWin32, close filehandles after second fork? Or not at all?
-    #  close $_ for *STDIN,*STDOUT,*STDERR;
-
-    if ($job->{name}) {
-	$0 = $job->{name};
-    }
-    chdir "/";
-    sleep 1;
+    exit;
 }
 
-sub _postlaunch_daemon {
+sub _postlaunch_daemon_child {
     my $job = shift;
     debug("child $$ forking again to create daemon process")
 	if $Forks::Super::Debug::DEBUG;
 
-    # XXX - brute force and ignorant way to close open fds
-    POSIX::close($_) for 0..999;
-    eval { POSIX::setsid };
+
+
+    # following Proc::Daemon's lead:
+    # 1. The script forks a child (already done)
+    # 2. The child changes the current working directory.
+    $job->_chdir_for_daemon($job->{dir});
+
+    # 3. The child clears the file creation mask
+    # if $job->{umask} is set, umask will be reset in _config_child
     umask 0;
 
-    my $p = $$;
-    my $p2 = _CORE_fork();
+    # 4. The child becomes a session leader
+    my $sid = eval { POSIX::setsid() };
+    if ($sid < 0) {
+	croak 'Forks::Super: failed to create daemon process ',
+		'because it could not make the new child process ',
+		"a session leader: $!";
+    }
 
-    if ($p == $$) {
-	# intermediate child
-	if (defined $p2) {
-	    no warnings 'io';
-	    my $f = $job->{daemon_ipc};
-	    open my $fh, '>', "$f.tmp";
+    # local $SIG{'HUP'} = 'IGNORE';
+
+    # 5. Fork another child process (the daemon process) to prevent
+    #    the potential of acquiring a controlling terminal.
+    my $p1 = $$;
+    my $p2 = _CORE_fork();
+    if ($p1 != $$) {
+	# the second child (daemon)
+	return $job->_postlaunch_daemon_grandchild;
+    }
+
+    if (!defined($p2)) {
+	croak 'Forks::Super::fork: ',
+		'Unable to create daemon process because secondary fork failed';
+    }
+
+    # 9. transfer pid of second child from first child to parent
+    {
+	no warnings 'io';
+	my $f = $job->{daemon_ipc};
+	if (open my $fh, '>', "$f.tmp") {
 	    print $fh $p2;
 	    close $fh;
 	    rename "$f.tmp", $f;
+	    if (open my $ready, '>>', "$f.ready") {
+		close $ready;
+	    }
 	} else {
-	    croak "Forks::Super::fork: ",
-	        "Unable to create daemon process because secondary fork failed";
+	    croak "Forks::Super::fork: daemon failed to communicate its PID: $!";
 	}
-	exit;
     }
-    # orphaned grandchild - the new daemon process
+    exit;
+}
+
+sub _postlaunch_daemon_grandchild {
+    # config for the actual daemon process
+
+    my $job = shift;
+    if (&IS_CYGWIN) {
+	$job->__adjust_cygwin_daemon_job;
+    }
+
+    # 6. close all open file descriptors
+    close STDIN;
+    close STDOUT;
+    close STDERR if ! defined $job->{'_daemon_dont_close_2'};
+    my $max_fh = $Forks::Super::SysInfo::MAX_OPEN_FH;
+    if ($max_fh < 256) {
+	$max_fh = 256;
+    }
+    for (3..$max_fh) {
+	POSIX::close $_ if ! defined $job->{"_daemon_dont_close_$_"};
+    }
+
+    # 7. open STDIN,STDOUT,STDERR to desired locations
+    # 8. return to calling script
+    #    --- this is handled in _postlaunch_child
+
     if ($job->{name}) {
 	$0 = $job->{name};
     }
-    chdir "/";
-    sleep 1;
+    return;
 }
+
+sub _chdir_for_daemon {
+    my ($job,$dir) = @_;
+    if (!defined($dir) || !chdir $dir) {
+	if (defined $dir) {
+	    carp '"Forks::Super::Job: failed to change daemon process ',
+	        "directory to \"$dir\":", $!;
+	}
+	chdir '/';
+    }
+    return;
+}
+
+sub __adjust_cygwin_daemon_job {
+    my ($job) = @_;
+
+    if (&IS_CYGWIN && defined($job->{cmd}) && !defined($job->{exec})) {
+	if (!defined($job->{timeout}) && !defined($job->{expiration})) {
+	    $job->{exec} = delete $job->{cmd};
+	    $job->{style} = 'exec';
+	} else {
+	    carp 'Forks::Super::fork: ',
+		    'warning: on Cygwin the combination of daemon, cmd, ',
+		    'and timeout options are probably incompatible with ',
+		    'the Forks::Super::Job::suspend, resume, ',
+		    'and terminate functions.';
+	}
+    }
+    return;
+}
+
 
 sub _postlaunch_child {
   my $job = shift;
-  Forks::Super::init_child() if defined &Forks::Super::init_child;
+  if (defined &Forks::Super::init_child()) {
+      Forks::Super::init_child();
+  }
   $job->_config_child;
 
   local $ENV{_FORK_PPID} = $$;
@@ -638,8 +796,8 @@ sub _postlaunch_child {
 
   if ($job->{style} eq 'cmd' || $job->{style} eq 'exec') {
 
-      if (defined($job->{fh_config}->{stdin})
-	  && defined($job->{fh_config}->{sockets})) {
+      if (defined($job->{fh_config}{stdin})
+	  && defined($job->{fh_config}{sockets})) {
 
 	  $job->_postlaunch_child_to_proc;
 
@@ -667,8 +825,8 @@ sub _postlaunch_child_to_exec {
 
     if (!&IS_WIN32) {
 	exec( @{$job->{exec}} )
-	    or croak "exec failed for ", $job->toString(), 
-	             " command ",@{$job->{exec}};
+	    or croak 'exec failed for ', $job->toString(), 
+	        ' command ',@{$job->{exec}};
     }
 
     # Windows needs special handling. An  exec  call from a Windows child
@@ -676,16 +834,15 @@ sub _postlaunch_child_to_exec {
     # pseudo-process) and its process id will be unavailable to both
     # the child and the parent process.
     #
+    # Furthermore, the  exec  is not a "true" exec. The old process will
+    # hang around and wait for the new process to finish, and then run
+    # the END{} blocks and exit with the 
+    #
     # system 1, ...  is a decent workaround
     # 
     $WIN32_PROC_PID = system 1, @{$job->{exec}};
 
     $job->set_signal_pid($WIN32_PROC_PID);
-    if (0 && $job->{daemon}) {
-	deinit_child();
-	exit 0;
-    }
-
     my $z = CORE::waitpid $WIN32_PROC_PID, 0;
     my $c1 = $?;
     if ($Forks::Super::Debug::DEBUG) {
@@ -700,7 +857,7 @@ sub _postlaunch_child_to_proc {
     my $proch = Forks::Super::Job::Ipc::_gensym();
     $job->{cmd} ||= $job->{exec};
     my $p1 = open $proch, '|-', @{$job->{cmd}};
-    print $proch $job->{fh_config}->{stdin};
+    print $proch $job->{fh_config}{stdin};
     close $proch;
     my $c1 = $?;
     debug("Exit code of $$ was $c1 ", $c1>>8) if $job->{debug};
@@ -715,31 +872,22 @@ sub _postlaunch_child_to_cmd {
     my $c1;
     if (&IS_WIN32) {
 
-	if (1) {
-	    $c1 = Forks::Super::Job::OS::Win32::system1_win32_process(
-				$job, @{$job->{cmd}});
-	} else {
-	    debug("using  system 1,... ") if $job->{debug};
-	    $WIN32_PROC_PID = system 1, @{$job->{cmd}};
-	    $job->set_signal_pid($WIN32_PROC_PID);
-	    $job->{exec_pid} = $WIN32_PROC_PID;
-	    debug("exec/signal pid is $WIN32_PROC_PID") if $job->{debug};
-	    debug("child is waiting on $WIN32_PROC_PID") if $job->{debug};
-	    my $z = CORE::waitpid $WIN32_PROC_PID, 0;
-	    $c1 = $?;
-	    debug("waitpid returned $z, exit status $c1") if $job->{debug};
-	}
+	$c1 = Forks::Super::Job::OS::Win32::system1_win32_process(
+	                      $job, @{$job->{cmd}});
 
     } else {
 
 	my $this_pid = $$;
 	my $exec_pid = _CORE_fork();
 	if ($$ != $this_pid) {
-	    exec( @{$job->{cmd}} );
-	    die "exec for cmd-style fork failed ";
+	    exec( @{$job->{cmd}} )
+		or Carp::confess 'exec for cmd-style fork failed ';
 	}
 	$job->set_signal_pid($exec_pid);
 	$job->{exec_pid} = $exec_pid;
+
+	$Forks::Super::Job::CHILD_EXEC_PID = $exec_pid; 
+	# XXX - do something with this in _cleanup_child
 
 	my $z = CORE::waitpid $exec_pid, 0;
 	$c1 = $?;
@@ -814,18 +962,22 @@ sub set_signal_pid {
 
     no warnings 'io';  # Win32 can open fd 0, trigger "reopen STDIN for output"
     if (defined $job->{signal_ipc}) {
-	open my $fh, '>', $job->{signal_ipc} . ".tmp";
-	print $fh $signal_pid;
-	close $fh;
-	rename $job->{signal_ipc} . ".tmp", $job->{signal_ipc};
-	if ($job->{debug}) {
-	    debug("Signal pid for $$ is $signal_pid");
+	if (open my $fh, '>', $job->{signal_ipc} . '.tmp') {
+	    print $fh $signal_pid;
+	    close $fh;
+	    rename $job->{signal_ipc} . '.tmp', $job->{signal_ipc};
+	    if ($job->{debug}) {
+		debug("Signal pid for $$ is $signal_pid");
+	    }
+	} else {
+	    carp 'Forks::Super::set_signal_pid: ',
+	        "child was unable to communicate its other PID to parent: $!";
 	}
     } elsif (0) {
 	no warnings 'uninitialized';
-	carp "Forks::Super::set_signal_pid: signal IPC file not specified ",
+	carp 'Forks::Super::set_signal_pid: signal IPC file not specified ',
 	    "for job $job->{pid} to deliver signal pid $signal_pid ",
-	    "to its parent";
+	    'to its parent';
     }
     return;
 }
@@ -841,8 +993,7 @@ sub signal_pids {
 	if ($Forks::Super::Debug::DEBUG) {
 	    debug("signal pids for $job are $signal_pid,", $job->{real_pid});
 	}
-#	return ($signal_pid, $job->{real_pid});
-	return ($job->{real_pid}, $signal_pid);
+	return ($signal_pid, $job->{real_pid});
     } else {
 	if ($Forks::Super::Debug::DEBUG) {
 	    debug("signal pids for $job is $signal_pid");
@@ -855,26 +1006,7 @@ sub signal_pid {
     my $job = shift;
 
     if ($job->{signal_ipc} && !defined $job->{signal_pid}) {
-	if (!defined $job->{signal_pid}) {
-	    for (my $try=1; $try<=5; $try++) {
-		last if -f $job->{signal_ipc};
-		Forks::Super::Util::pause(0.002*$try*$try*$try, $try<3);
-	    }
-	}
-	if (-f $job->{signal_ipc}) {
-	    open my $fh, '<', $job->{signal_ipc};
-	    my $signal_pid = <$fh>;
-	    close $fh;
-	    unlink $job->{signal_ipc};
-	    # delete $job->{signal_ipc};
-	    ($job->{signal_pid}) = $signal_pid =~ /([-\d]*)/;
-	    if ($Forks::Super::Debug::DEBUG) {
-		debug("parent forwarding signals for ", $job->{real_pid},
-		      " to ", $job->{signal_pid});
-	    }
-	} elsif ($job->{debug}) {
-	    debug("no ", $job->{signal_ipc}, " signal ipc file ...");
-	}
+	$job->_read_signal_pid;
     }
     if ($job->{debug} && defined $job->{signal_pid}) {
 	debug("job $job will send signal to ", $job->{signal_pid});
@@ -882,75 +1014,191 @@ sub signal_pid {
     return $job->{signal_pid} || $job->{real_pid};
 }
 
-sub suspend {
-  my $j = shift;
-  $j = Forks::Super::Job::get($j) if ref $j ne 'Forks::Super::Job';
-  #my $pid = $j->{real_pid};
-  my $pid = $j->signal_pid;
-  if ($j->{state} eq 'ACTIVE') {
-    local $! = 0;
-    my $kill_result = Forks::Super::kill('STOP', $j);
-    if ($kill_result > 0) {
-      $j->{state} = 'SUSPENDED';
-      return 1;
+sub _read_signal_pid {
+    my $job = shift;
+
+    if (!defined $job->{signal_pid}) {
+	for my $try (1 .. 5) {
+	    last if -f $job->{signal_ipc};
+	    Forks::Super::Util::pause(0.002*$try*$try*$try, $try<3);
+	}
     }
-    carp "'STOP' signal not received by $pid, job ", $j->toString(), "\n";
+    if (-f $job->{signal_ipc}) {
+	for my $try (1..2) {
+	    if (open my $fh, '<', $job->{signal_ipc}) {
+		my $signal_pid = <$fh>;
+		close $fh;
+		unlink $job->{signal_ipc};
+		# delete $job->{signal_ipc};
+		($job->{signal_pid}) = $signal_pid =~ /([-\d]*)/;
+		if ($Forks::Super::Debug::DEBUG) {
+		    debug('parent forwarding signals for ', 
+			  $job->{real_pid}, ' to ', $job->{signal_pid});
+		}
+		last;
+	    } else {
+		Forks::Super::pause(1.0);
+	    }
+	}
+    } elsif ($job->{debug}) {
+	debug('no ', $job->{signal_ipc}, ' signal ipc file ...');
+    }
     return;
-  }
-  if ($j->{state} =~ /DAEMON/ && $j->{state} ne 'DAEMON-COMPLETE') {
-      $j->{state} = 'SUSPENDED-DAEMON';
-      my $kill_result = Forks::Super::kill('STOP', $j);
-      return $kill_result;
-  }
-  if ($j->{state} eq 'DEFERRED') {
-    $j->{state} = 'SUSPENDED-DEFERRED';
-    return -1;
-  }
-  if ($j->is_complete) {
-    carp "Forks::Super::Job::suspend(): called on completed job ", 
-      $j->{pid}, "\n";
+}
+
+sub suspend {
+    my $j = shift;
+    $j = Forks::Super::Job::get($j);
+    if ($j->{state} eq 'ACTIVE') {
+	return $j->_suspend_active;
+    }
+
+    if ($j->{state} =~ /DAEMON/ && $j->{state} ne 'DAEMON-COMPLETE') {
+
+	return $j->_suspend_daemon;
+
+    }
+
+    if ($j->{state} eq 'DEFERRED') {
+	$j->{state} = 'SUSPENDED-DEFERRED';
+	return -1;
+    }
+
+    if ($j->is_complete) {
+	carp 'Forks::Super::Job::suspend(): called on completed job ', 
+		$j->{pid}, "\n";
+	return;
+    }
+    if ($j->{state} eq 'SUSPENDED') {
+	carp 'Forks::Super::Job: suspend called on suspended job ', $j->{pid};
+	return;
+    }
+    carp 'Forks::Super::Job: suspend called on job ', $j->toString(), "\n";
     return;
-  }
-  if ($j->{state} eq 'SUSPENDED') {
-    carp "Forks::Super::Job: suspend called on suspended job ", $j->{pid};
+}
+
+sub _suspend_active {
+    my $j = shift;
+
+    local $! = 0;
+    my $kill_result = 0;
+    if (&IS_CYGWIN) {
+	require Forks::Super::Job::OS::Cygwin;
+	my @pids = $j->signal_pids;
+	foreach my $pid (@pids) {
+	    $kill_result += !!Forks::Super::Job::OS::Cygwin::suspend($pid);
+	}
+    } else {
+	$kill_result = Forks::Super::kill('STOP', $j);
+    }
+    if ($kill_result > 0) {
+	$j->{state} = 'SUSPENDED';
+	return 1;
+    }
+    # carp "'STOP' signal not received by job ", $j->toString(), "\n";
     return;
-  }
-  carp "Forks::Super::Job: suspend called on job ", $j->toString(), "\n";
-  return;
+}
+
+sub _suspend_daemon {
+    my $j = shift;
+
+    local $! = 0;
+    my $kill_result = 0;
+    if (&IS_CYGWIN) {
+	require Forks::Super::Job::OS::Cygwin;
+	my @pids = $j->signal_pids;
+	foreach my $pid (@pids) {
+	    $kill_result += !!Forks::Super::Job::OS::Cygwin::suspend($pid);
+	}
+    } else {
+	$kill_result = Forks::Super::kill('STOP', $j);
+    }
+    if ($kill_result) {
+	$j->{state} = 'SUSPENDED-DAEMON';
+    }
+    return $kill_result;
 }
 
 sub resume {
-  my $j = shift;
-  $j = Forks::Super::Job::get($j) if ref $j ne 'Forks::Super::Job';
-  my $pid = $j->signal_pid;
-  #my $pid = $j->{real_pid};
-  if ($j->{state} eq 'SUSPENDED') {
-    local $! = 0;
-    my $kill_result = Forks::Super::kill('CONT', $j);
-    if ($kill_result > 0) {
-      $j->{state} = 'ACTIVE';
-      return 1;
+    my $j = shift;
+    $j = Forks::Super::Job::get($j);
+    if ($j->{state} eq 'SUSPENDED') {
+
+	return $j->_resume_active;
+
     }
-    carp "'CONT' signal not received by $pid, job ", $j->toString(), "\n";
+    if ($j->{state} eq 'SUSPENDED-DEFERRED') {
+	$j->{state} = 'DEFERRED';
+	return -1;
+    }
+    if ($j->is_complete) {
+	carp 'Forks::Super::Job::resume(): called on a completed job ', 
+		$j->{pid}, "\n";
+	return;
+    }
+    if ($j->{daemon} && $j->{state} !~ /COMPLETE/) {
+
+	return $j->_resume_daemon;
+
+    }
+    carp 'Forks::Super::Job::resume(): called on job in state ', 
+    	$j->{state}, "\n";
     return;
-  }
-  if ($j->{state} eq 'SUSPENDED-DEFERRED') {
-    $j->{state} = 'DEFERRED';
-    return -1;
-  }
-  if ($j->is_complete) {
-    carp "Forks::Super::Job::resume(): called on a completed job ", 
-      $j->{pid}, "\n";
+}
+
+sub _resume_active {
+    my $j = shift;
+
+    local $! = 0;
+    my $kill_result = 0;
+    if (&IS_CYGWIN) {
+	require Forks::Super::Job::OS::Cygwin;
+	for my $pid ($j->signal_pids) {
+	    $kill_result += !!Forks::Super::Job::OS::Cygwin::resume($pid);
+	}
+    } else {
+	$kill_result = Forks::Super::kill('CONT', $j);
+    }
+    if ($kill_result > 0) {
+	$j->{state} = 'ACTIVE';
+	return 1;
+    }
+    carp "'CONT' signal not received by job ", $j->toString(), "\n";
     return;
-  }
-  if ($j->{daemon} && $j->{state} !~ /COMPLETE/) {
-      my $kill_result = Forks::Super::kill('CONT', $j);
-      $j->{state} = 'DAEMON';
-      return $kill_result;
-  }
-  carp "Forks::Super::Job::resume(): called on job in state ", 
-    $j->{state}, "\n";
-  return;
+}
+
+sub _resume_daemon {
+    my $j = shift;
+
+    my $kill_result = 0;
+    if (&IS_CYGWIN) {
+	require Forks::Super::Job::OS::Cygwin;
+	foreach my $pid ($j->signal_pids) {
+	    $kill_result += !!Forks::Super::Job::OS::Cygwin::resume($pid);
+	}
+    } else {
+	$kill_result = Forks::Super::kill('CONT', $j);
+    }
+    if ($kill_result) {
+	$j->{state} = 'DAEMON';
+    }
+    return $kill_result;
+}
+
+sub terminate {
+    my $j = shift;
+    if (ref $j ne 'Forks::Super::Job') {
+	$j = Forks::Super::Job::get($j);
+    }
+    if (&IS_CYGWIN) {
+	require Forks::Super::Job::OS::Cygwin;
+	for my $pid ($j->signal_pids) {
+	    Forks::Super::Job::OS::Cygwin::terminate($pid);
+	}
+    } else {
+	Forks::Super::kill('KILL', $j);
+    }
+    return;
 }
 
 #
@@ -982,16 +1230,15 @@ sub _preconfig2 {
 	    Forks::Super::Job::Ipc::_choose_fh_filename(
 		'.daemon', purpose => 'daemon ipc');
 	if ($Forks::Super::Debug::DEBUG) {
-	    debug("Job will use ", $job->{daemon_ipc}, " to get daemon pid.");
+	    debug('Job will use ', $job->{daemon_ipc}, ' to get daemon pid.');
 	}
     }
-    if ($job->{style} eq 'cmd' ||
-	(&IS_WIN32 && $job->{style} eq 'exec')) {
+    if ($job->{style} eq 'cmd' || (&IS_WIN32 && $job->{style} eq 'exec')) {
 	$job->{signal_ipc} =
 	    Forks::Super::Job::Ipc::_choose_fh_filename(
-		'.signal', purpose => 'signal ipc');
+		'.signal', purpose => 'signal ipc', job => $job);
 	if ($Forks::Super::Debug::DEBUG) {
-	    debug("Job will use ", $job->{signal_ipc}, " to get signal pid.");
+	    debug('Job will use ', $job->{signal_ipc}, ' to get signal pid.');
 	}
     }
     return;
@@ -1142,31 +1389,30 @@ sub _preconfig_dependencies {
 
 # convert job names in an array to job ids, if necessary
 sub _resolve_names {
-  my $job = shift;
-  my @in = @{$_[0]};
-  my @out = ();
-  foreach my $id (@in) {
-    if (ref $id eq 'Forks::Super::Job') {
-      push @out, $id;
-    } elsif (is_number($id) && defined($ALL_JOBS{$id})) {
-      push @out, $id;
-    } else {
-      my @j = Forks::Super::Job::getByName($id);
-      if (@j > 0) {
-	foreach my $j (@j) {
-	  next if \$j eq \$job; 
-	  # $j eq $job was not sufficient when $job is overloaded
-	  # and $job->{pid} has not been set.
+    my ($job, $id_list) = @_;
+    my @out = ();
+    foreach my $id (@{$id_list}) {
+	if (ref $id eq 'Forks::Super::Job') {
+	    push @out, $id;
+	} elsif (is_number($id) && defined($ALL_JOBS{$id})) {
+	    push @out, $id;
+	} else {
+	    my @j = Forks::Super::Job::getByName($id);
+	    if (@j > 0) {
+		foreach my $j (@j) {
+		    next if \$j eq \$job; 
+		    # $j eq $job was not sufficient when $job is overloaded
+		    # and $job->{pid} has not been set.
 
-	  push @out, $j->{pid};
+		    push @out, $j->{pid};
+		}
+	    } else {
+		carp 'Forks::Super: Job ',
+		    "dependency identifier \"$id\" is invaild. Ignoring\n";
+	    }
 	}
-      } else {
-	carp "Forks::Super: Job ",
-	  "dependency identifier \"$id\" is invaild. Ignoring\n";
-      }
     }
-  }
-  return [ @out ];
+    return \@out;
 }
 
 #
@@ -1174,35 +1420,44 @@ sub _resolve_names {
 # child is successfully launched.
 #
 sub _config_parent {
-  my $job = shift;
-  $job->_config_fh_parent;
-  $job->_config_timeout_parent;
-  if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    # when  timeout =>   or   expiration =>  is used,
-    # PGID of child will be set to child PID
-    if (defined($job->{timeout}) || defined($job->{expiration})) {
-      $job->{pgid} = $job->{real_pid};
-    } else {
-      if (not eval { $job->{pgid} = getpgrp($job->{real_pid}) }) {
-	$Forks::Super::SysInfo::CONFIG{'getpgrp'} = 0;
-	$job->{pgid} = $job->{real_pid};
-      }
+    my $job = shift;
+    $job->_config_fh_parent;
+    $job->_config_timeout_parent;
+    if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+	# when  timeout =>   or   expiration =>  is used,
+	# PGID of child will be set to child PID
+	if (defined($job->{timeout}) || defined($job->{expiration})) {
+	    $job->{pgid} = $job->{real_pid};
+	} else {
+	    if (not eval { $job->{pgid} = getpgrp($job->{real_pid}) }) {
+		$Forks::Super::SysInfo::CONFIG{'getpgrp'} = 0;
+		$job->{pgid} = $job->{real_pid};
+	    }
+	}
     }
-  }
-  return;
+    return;
+}
+
+# only meaningful from a child process
+sub this {
+    return $this;
 }
 
 sub _config_child {
-  my $job = shift;
-  $Forks::Super::Job::self = $job;
-  $job->_config_env_child;
-  $job->_config_callback_child;
-  $job->_config_debug_child;
-  $job->_config_timeout_child;
-  $job->_config_os_child;
-  $job->_config_fh_child;
-  $job->_config_dir;
-  return;
+    my $job = shift;
+
+    # $Forks::Super::Job::self  is deprecated
+    $Forks::Super::Job::self = $job;
+    $this = $job;
+
+    $job->_config_env_child;
+    $job->_config_callback_child;
+    $job->_config_debug_child;
+    $job->_config_timeout_child;
+    $job->_config_os_child;
+    $job->_config_fh_child;
+    $job->_config_dir;
+    return;
 }
 
 sub _config_env_child {
@@ -1232,7 +1487,7 @@ sub _config_dir {
   $job->{dir} ||= $job->{chdir};
   if (defined $job->{dir}) {
       if (!chdir $job->{dir}) {
-	  croak "Forks::Super::Job::launch(): ",
+	  croak 'Forks::Super::Job::launch(): ',
 	  "Invalid \"dir\" option: \"$job->{dir}\" $!\n";
       }
   }
@@ -1249,17 +1504,25 @@ END {
 	# test exits with non-zero exit status (e.g., t/42d-filehandles.t)
 
 	untie %SIG;
-	unless (eval { delete $SIG{CHLD}; 1 }) {
+	eval {
+	    no warnings;                    ## no critic (NoWarnings)
+	    $SIG{CHLD} = undef;
+	    1;
+	} or do {
 	    $SIG{CHLD} = 'IGNORE';
-	}
+	};
 
 	Forks::Super::Queue::_cleanup();
 	Forks::Super::Job::Ipc::_cleanup();
     } else {
-	if (defined($Forks::Super::Job::self)
-	    && defined($Forks::Super::Job::self->{_cleanup_code})) {
+#	if (defined($Forks::Super::Job::self)
+#	    && defined($Forks::Super::Job::self->{_cleanup_code})) {
+#	    no strict 'refs';
+#	    $Forks::Super::Job::self->{_cleanup_code}->();
+#	}
+	if (defined($this) && defined($this->{_cleanup_code})) {
 	    no strict 'refs';
-	    $Forks::Super::Job::self->{_cleanup_code}->();
+	    $this->{_cleanup_code}->();
 	}
 	Forks::Super::Job::Timeout::_cleanup_child();
     }
@@ -1273,6 +1536,7 @@ sub enable_overload {
     $OVERLOAD_ENABLED = 1;
 
     if (!eval {
+      # in most contexts a Forks::Super::Job object behaves like its process id
       use overload
 	'""' => sub { $_[0]->{pid} },
 	'+' => sub { $_[0]->{pid} + $_[1] },
@@ -1307,80 +1571,112 @@ sub enable_overload {
         'int'  => sub { int $_[0]->{pid} },
         'abs'  => sub { abs $_[0]->{pid} },
         'atan2' => sub { $_[2] ? atan2($_[1],$_[0]->{pid}) 
-			       : atan2($_[0]->{pid},$_[1]) };
+			       : atan2($_[0]->{pid},$_[1]) },
+#       '<>' => sub { $_[0]->read_stdout() },
+	    ;
 
-      # XXX - why doesn't it work when I include
-      #       '<>' => sub { ... }
-      #    in the  use overload  block?
+      # '<>' => sub { $_[0]->read_stdout() }
+      #
+      # doesn't work -- it gives us "Not a GLOB reference ..."
+      # errors when we try to use it. XXX - Why?
+      #
+      # Here's the workaround:
+
       no strict 'refs';
-      *{'Forks::Super::Job::(<>'} = sub {
-	return $_[0]->read_stdout();
-      };
+      *{__PACKAGE__ . '::(<>'} = sub { $_[0]->read_stdout() };
+
+
       1 }            # end eval { use overload ... }
 	) {
       carp "Error enabling overloading on Forks::Super::Job objects: $@\n";
     } elsif ($Forks::Super::Debug::DEBUG) {
-        debug("Enabled overloading on Forks::Super::Job objects");
+        debug('Enabled overloading on Forks::Super::Job objects');
     }
   }
   return;
 }
 
 sub disable_overload {
-  if ($OVERLOAD_ENABLED) {
-    $OVERLOAD_ENABLED = 0;
-    eval { no overload values %overload::ops; 1 }
-        or Forks::Super::Debug::carp_once "Forks::Super::Job ",
-    		"disable overload failed: $@";
-  }
-  return;
+    if ($OVERLOAD_ENABLED) {
+	$OVERLOAD_ENABLED = 0;
+	eval { no overload values %overload::ops; 1 }
+        or Forks::Super::Debug::carp_once 'Forks::Super::Job ',
+	        "disable overload failed: $@";
+    }
+    return;
 }
 
 # returns a Forks::Super::Job object with the given identifier
 sub get {
-  my $id = shift;
-  if (!defined $id) {
-    Carp::cluck "undef value passed to Forks::Super::Job::get()";
-  }
-  if (ref $id eq 'Forks::Super::Job') {
-    return $id;
-  }
-  if (defined $ALL_JOBS{$id}) {
-    return $ALL_JOBS{$id};
-  }
-  return getByPid($id) || getByName($id);
+    my $id = shift;
+    if (!defined $id) {
+	Carp::cluck 'undef value passed to Forks::Super::Job::get()';
+    }
+    if (ref $id eq 'Forks::Super::Job') {
+	return $id;
+    }
+    if (defined $ALL_JOBS{$id}) {
+	return $ALL_JOBS{$id};
+    }
+    return getByPid($id) || getByName($id);
 }
 
 sub getByPid {
-  my $id = shift;
-  if (is_number($id)) {
-    my @j = grep { (defined($_->{pid}) && $_->{pid} == $id) ||
+    my $id = shift;
+    if (is_number($id)) {
+	my @j = grep { (defined($_->{pid}) && $_->{pid} == $id) ||
 		   (defined($_->{real_pid}) && $_->{real_pid} == $id)
 		 } @ALL_JOBS;
-    return $j[0] if @j > 0;
-  }
-  return;
+	return $j[0] if @j > 0;
+    }
+    return;
 }
 
 sub getByName {
-  my $id = shift;
-  my @j = grep { defined($_->{name}) && $_->{name} eq $id } @ALL_JOBS;
-  if (@j > 0) {
-    return wantarray ? @j : $j[0];
-  }
-  return;
+    my $id = shift;
+    my @j = grep { defined($_->{name}) && $_->{name} eq $id } @ALL_JOBS;
+    if (@j > 0) {
+	return wantarray ? @j : $j[0];
+    }
+    return;
+}
+
+sub getOrMock {
+    my $id = shift;
+    return get($id) ||
+	$Forks::Super::Job::Foreign::FOREIGN_JOBS{$id} ||
+        Forks::Super::Job::Foreign->new($id);
+}
+
+{
+    # bare bones partial emulation of Forks::Super::Job to represent
+    # processes that were not initiated by Forks::Super. 
+    # Used in Forks::Super::kill.
+
+    # XXX - best practice to move this block to its own file
+    package Forks::Super::Job::Foreign;          ## yes critic
+    our %FOREIGN_JOBS = ();
+    sub new {
+	my ($class,$id) = @_;
+	my $self = { pid => $id, real_pid => $id, state => 'FOREIGN' };
+	$FOREIGN_JOBS{$id} = $self;
+	return bless $self, $class;
+    }
+    sub is_deferred { return 0 }
+    sub is_complete { return 0 }
+    sub signal_pids { my $self = shift; return $self->{pid} }
 }
 
 # retrieve a job object for a pid or job name, if necessary
 sub _resolve {
-  if (ref $_[0] ne 'Forks::Super::Job') {
-    my $job = get($_[0]);
-    if (defined $job) {
-      return $_[0] = $job;
+    if (ref $_[0] ne 'Forks::Super::Job') {
+	my $job = get($_[0]);
+	if (defined $job) {
+	    return $_[0] = $job;
+	}
+	return $job;
     }
-    return $job;
-  }
-  return $_[0];
+    return $_[0];
 }
 
 #
@@ -1449,9 +1745,9 @@ sub count_processes {
 
   if ($Forks::Super::Debug::DEBUG) {
     debug("count_processes(): @n");
-    debug("count_processes(): Filtered active: ",
+    debug('count_processes(): Filtered active: ',
 	  $filtered_active[0]->toString()) if $n[0];
-    debug("count_processes(): Alive: ", $alive[0]->toShortString()) if $n[1];
+    debug('count_processes(): Alive: ', $alive[0]->toShortString()) if $n[1];
     debug("count_processes(): Active: @active") if $n[2];
   }
 
@@ -1477,41 +1773,46 @@ sub get_cpu_load {
 }
 
 sub dispose {
-  foreach my $job (@_) {
+    my @jobs = @_;
+    foreach my $job (@jobs) {
 
-    my $pid = $job->{pid};
-    my $real_pid = $job->{real_pid} || $pid;
+	my $pid = $job->{pid};
+	my $real_pid = $job->{real_pid} || $pid;
 
-    $job->close_fh('all');
-    delete $Forks::Super::CHILD_STDIN{$pid};
-    delete $Forks::Super::CHILD_STDIN{$real_pid};
-    delete $Forks::Super::CHILD_STDOUT{$pid};
-    delete $Forks::Super::CHILD_STDOUT{$real_pid};
-    delete $Forks::Super::CHILD_STDERR{$pid};
-    delete $Forks::Super::CHILD_STDERR{$real_pid};
+	$job->close_fh('all');
+	delete $Forks::Super::CHILD_STDIN{$pid};
+	delete $Forks::Super::CHILD_STDIN{$real_pid};
+	delete $Forks::Super::CHILD_STDOUT{$pid};
+	delete $Forks::Super::CHILD_STDOUT{$real_pid};
+	delete $Forks::Super::CHILD_STDERR{$pid};
+	delete $Forks::Super::CHILD_STDERR{$real_pid};
 
-    foreach my $attr ('f_in','f_out','f_err') {
-      my $file = $job->{fh_config} && $job->{fh_config}->{$attr};
-      if (defined($file) && -f $file) {
-	$! = 0;
-	if (unlink $file) {
-	  delete $Forks::Super::Job::Ipc::IPC_FILES{$file};
-	} elsif ($INSIDE_END_QUEUE) {
-	  warn "unlink failed for \"$file\": $! $^E\n";
-	  warn "@{$Forks::Super::Job::Ipc::IPC_FILES{$file}}\n";
+	foreach my $attr ('f_in','f_out','f_err') {
+	    my $file = $job->{fh_config} && $job->{fh_config}{$attr};
+	    if (defined($file) && -f $file) {
+		$! = 0;
+		if (unlink $file) {
+		    delete $Forks::Super::Job::Ipc::IPC_FILES{$file};
+		} elsif ($INSIDE_END_QUEUE) {
+		    warn "unlink failed for \"$file\": $! $^E\n";
+		    warn "@{$Forks::Super::Job::Ipc::IPC_FILES{$file}}\n";
+		}
+	    }
 	}
-      }
+
+	# XXX - disposed jobs should go to %ARCHIVED_JOBS, @ARCHIVED_JOBS
+	my @k = grep { $ALL_JOBS{$_} eq $job } keys %ALL_JOBS;
+	for my $j (@k) {
+	    delete $ALL_JOBS{$j};
+	}
+
+	foreach my $attr (keys %$job) {
+	    delete $job->{$attr};
+	}
+	$job->{disposed} ||= time;
     }
-
-    # XXX - disposed jobs should go to %ARCHIVED_JOBS, @ARCHIVED_JOBS
-    my @k = grep { $ALL_JOBS{$_} eq $job } keys %ALL_JOBS;
-    delete $ALL_JOBS{$_} for @k;
-
-    delete $job->{$_} for keys %$job;
-    $job->{disposed} ||= time;
-  }
-  @ALL_JOBS = grep { !$_->{disposed} } @ALL_JOBS;
-  return;
+    @ALL_JOBS = grep { !$_->{disposed} } @ALL_JOBS;
+    return;
 }
 
 #
@@ -1543,7 +1844,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.53
+0.54
 
 =head1 SYNOPSIS
 
@@ -1867,6 +2168,7 @@ See L<Forks::Super::kill|Forks::Super/"kill">.
 
 When called on an active job, suspends the background process with 
 C<SIGSTOP> or other mechanism appropriate for the operating system.
+Returns a true value if it thinks it succeeded.
 
 =back
 
@@ -1878,7 +2180,19 @@ C<SIGSTOP> or other mechanism appropriate for the operating system.
 
 When called on a suspended job (see L<< suspend|"$job->suspend" >>,
 above), resumes the background process with C<SIGCONT> or other mechanism 
-appropriate for the operating system.
+appropriate for the operating system. Returns a true value if it thinks
+it succeeded.
+
+=back
+
+=head3 terminate
+
+=over 4
+
+=item C<< $job->terminate >>
+
+Terminates the job with signals or other mechanism appropriate
+for the operating system. This method does not return a value.
 
 =back
 
@@ -2115,6 +2429,19 @@ This method will
 
 =back
 
+=cut
+
+_head3 this
+
+_over 4
+
+Within a child process created by L<Forks::Super|Forks::Super>, 
+the method C<< Forks::Super::Job->this >> or C<< Forks::Super::Job::this >>
+will return the C<Forks::Super::Job> object that was used to create
+the child process.
+
+_back
+
 =head1 VARIABLES
 
 =head2 @ALL_JOBS, %ALL_JOBS
@@ -2144,7 +2471,7 @@ from C<@ALL_JOBS> and C<%ALL_JOBS>.
 
 =head1 OVERLOADING
 
-An available feature in the L<Forks::Super> module is to make
+An available feature in the L<Forks::Super|Forks::Super> module is to make
 it more convenient to access the functionality of 
 C<Forks::Super::Job>. When this feature is enabled, the 
 return value from a call to C<Forks::Super::fork()> is an
@@ -2209,7 +2536,7 @@ still returns a simple scalar value of 0 to the child process
 
 =head1 SEE ALSO
 
-L<Forks::Super>.
+L<Forks::Super|Forks::Super>.
 
 =head1 AUTHOR
 

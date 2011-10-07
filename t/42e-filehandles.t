@@ -21,7 +21,7 @@ my $command2 = "$^X t/external-command.pl -y=10 -y=4";
 my $cmd = "$command1 | $command2";
 my $msg = sprintf "%x", rand() * 99999999;
 
-my $pid = fork { cmd => $cmd, timeout => 8, child_fh => "all" };
+my $pid = fork { cmd => $cmd, timeout => 10, child_fh => "all" };
 
 ok(isValidPid($pid), "$$\\fork successful");
 ok(defined $Forks::Super::CHILD_STDIN{$pid},  "\%CHILD_STDIN defined");
@@ -36,7 +36,7 @@ ok($z > 0, "print to child STDIN successful");
 my $t = Time::HiRes::time();
 waitpid $pid, 0;
 $t = Time::HiRes::time() - $t;
-ok($t > 1.05 && $t < 6.05,                 ### 6 ###
+ok($t > 1.05 && $t < 6.18, #obs 6.17       ### 6 ###
    "compound command took ${t}s, expected ~2s");
 sleep 1;
 

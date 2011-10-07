@@ -76,16 +76,23 @@ SKIP: {
       ok($k, "SIGZERO on daemon successful");
       ok($pid->{intermediate_pid}, "intermediate pid set on job");
 
-      sleep 2;
-      $pid->suspend;
-      sleep 3;
-      my $s1 = -s $output;
-      sleep 2;
-      my $s2 = -s $output;
-      $pid->resume;
-      ok($s1 && $s1 == $s2, "suspend/resume on daemon ok")
-	  or diag("$s1/$s2");
-      sleep 1;
+      if (Forks::Super::Util::IS_WIN32ish &&
+	  !Forks::Super::Config::CONFIG_module('Win32::API')) {
+
+ 	  ok(1, "# suspend/resume daemon unavailable on $^O w/o Win32::API");
+     } else {
+
+	  sleep 2;
+	  $pid->suspend;
+	  sleep 3;
+	  my $s1 = -s $output;
+	  sleep 2;
+	  my $s2 = -s $output;
+	  $pid->resume;
+	  ok($s1 && $s1 == $s2, "suspend/resume on daemon ok")
+	      or diag("$s1/$s2");
+	  sleep 1;
+      }
 
       my $k1 = Forks::Super::kill 'TERM', $pid;
       sleep 3;

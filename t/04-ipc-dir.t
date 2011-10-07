@@ -9,6 +9,11 @@ ok(tied $Forks::Super::IPC_DIR, "\$IPC_DIR is tied");
 ok(!defined($Forks::Super::IPC_DIR), "\$IPC_DIR is not defined")
   or diag("IPC_DIR is $Forks::Super::IPC_DIR, should be undef");
 
+if (${^TAINT}) {
+    ($ENV{IPC_DIR}) = $ENV{IPC_DIR} =~ /(.*)/
+	if defined $ENV{IPC_DIR};
+}
+
 if ($ENV{IPC_DIR} eq 'undef') {
    SKIP: {
        skip "file IPC disabled by environment var", 14;
@@ -16,7 +21,7 @@ if ($ENV{IPC_DIR} eq 'undef') {
    exit;
 }
 
-$Forks::Super::IPC_DIR = "t/out/ipc.$$";
+$Forks::Super::IPC_DIR = path("t/out/ipc.$$");
 
 ok($Forks::Super::IPC_DIR =~ m:t/out/ipc.$$/.fhfork\S+:,
    "IPC directory set to .../.fhfork<nnn>");
@@ -41,7 +46,7 @@ ok(rmdir("t/out/ipc.$$"),
 # test a non-existent but createable directory
 
 my $old = $Forks::Super::IPC_DIR;
-$Forks::Super::IPC_DIR = "t/out/new-ipc.$$";
+$Forks::Super::IPC_DIR = path("t/out/new-ipc.$$");
 
 ok($old ne $Forks::Super::IPC_DIR, "\$Forks::Super::IPC_DIR changed");
 ok($Forks::Super::IPC_DIR =~ m!t/out/new-ipc.$$/.fhfork\S+!,
@@ -56,7 +61,16 @@ ok(rmdir("t/out/new-ipc.$$"), "can delete base dir after create temp IPC dir");
 # test a non-existent and non-createable directory
 
 $old = $Forks::Super::IPC_DIR;
-$Forks::Super::IPC_DIR = "t/out/ipc.1$$/ipc.2$$/ipc.3/ipc.4/ipc5";
+$Forks::Super::IPC_DIR = path("t/out/ipc.1$$/ipc.2$$/ipc.3/ipc.4/ipc5");
 ok($old eq $Forks::Super::IPC_DIR,
    "set \$IPC_DIR failed with invalid directory");
+
+sub path {
+    my $path = shift;
+    if (${^TAINT}) {
+	$path = Forks::Super::Util::abs_path($path);
+	($path) = $path =~ /(.*)/;
+    }
+    return $path;
+}
 

@@ -1,6 +1,6 @@
 use lib qw(blib/lib blib/arch);
 use Sys::CpuAffinity;
-use Test::More tests => 1;
+use Test::More tests => 2;
 use strict qw(vars subs);
 use warnings;
 $| = 1;
@@ -87,7 +87,13 @@ sleep 1;
 ok(1);
 
 
+# call all of the getAffinity_with_XXX methods
+# method is successful if
+#    at least one method returns > 0
+#    all methods that return > 0 return the same value
 sub EXERCISE_GET_AFFINITY {
+
+    my $ok = 0;
 
     print "===============================================\n";
 
@@ -100,37 +106,82 @@ sub EXERCISE_GET_AFFINITY {
 	my $z = eval { $sub->($pid) };
 	printf "%d\n", $z || 0;
 	$success += ($z||0) > 0;
+
+	if ($z > 0) {
+	    if ($ok == 0) {
+		$ok = $z;
+	    } elsif ($ok != $z) {
+		$ok = -1;
+	    }
+	}
     }
 
     if ($success == 0) {
       recommend($^O, 'getAffinity');
     }
     print "\n\n";
+    ok($ok > 0, "at least one _getAffinity_XXX method works and "
+                . "all other methods are consistent");
 }
 
+#
+# call all of the _getNumCpus_from_XXX functions.
+# Passes if
+#    at least one methods returns > 0
+#    all methods that return > 0 return the same value
+#
 sub EXERCISE_COUNT_NCPUS {
+
+    local $Sys::CpuAffinity::DEBUG = $ENV{DEBUG} || 0;
+    if ($^O =~ /openbsd/i || $^O =~ /darwin/i) {
+        $Sys::CpuAffinity::DEBUG = 1;
+    }
 
     print "=================================================\n";
 
     print "Num processors =\n";
 
+    my $ok = 0;
+
     for my $technique (inventory::getNumCpus()) {
 	my $s = 'Sys::CpuAffinity::_getNumCpus_from_' . $technique;
+
 	printf "    %-30s ", $technique;
-	printf "- %d -\n", eval { $s->() } || 0;
+	my $ncpus = eval { $s->() } || 0;
+	printf "- %s -\n", $ncpus;
+
+	if ($ncpus > 0) {
+	    if ($ok eq 0) {
+		$ok = $ncpus;
+	    } elsif ($ok ne $ncpus) {
+		$ok = -1;
+	    }
+	}
     }
 
     print "\n\n";
-
+#    ok($ok > 0, "at least one _getNumCpus_XXX method works and "
+#                . "all other methods are consistent");
 }
 
+#
+# call each of the _setAffinity_with_XXX methods.
+# passes if at least one method works
+#
 sub EXERCISE_SET_AFFINITY {
 
     print "==================================================\n";
 
 
     my $np = Sys::CpuAffinity::getNumCpus();
-    return 0 if $np <= 1;
+    if ($np <= 1) {
+      SKIP: {
+#	  skip "skip set affinity test on single-processor sys", 1;
+	  1;
+	}
+	return 0;
+    }
+    my $ok = 0;
 
     my ($TARGET,$LAST_TARGET) = (0,0);
     my @mask = ();
@@ -174,6 +225,7 @@ sub EXERCISE_SET_AFFINITY {
     }
 
     print "\n\n";
+#    ok($success != 0, "at least one _setAffinity_XXX method works");
 }
 
 sub recommend {
@@ -211,7 +263,8 @@ sub recommend {
     if ($> != 0) {
       push @recommendations, "run as super-user";
       push @recommendations, 
-	"\t(the available methods for manipulating CPU affinities on NetBSD only work for super-user)";
+	"\t(the available methods for manipulating CPU affinities "
+	. "on NetBSD only work for super-user)";
     }
 
   } elsif ($sys =~ /freebsd/i) {
@@ -248,5 +301,3 @@ sub recommend {
 
   print "\n\n==========================================\n\n\n";
 }
-
-

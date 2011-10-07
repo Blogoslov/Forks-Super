@@ -8,69 +8,69 @@ use warnings;
 # force Forks::Super to use sockets/pipes exclusively
 
 sub _read_socket {
-  my $handle = shift;
+    my $handle = shift;
 
-  if ($Forks::Super::Job::Ipc::USE_TIE_SH) {
-    return <$handle>;
-  } else {
-    return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
-  }
+    if ($Forks::Super::Job::Ipc::USE_TIE_SH) {
+	return <$handle>;
+    } else {
+	return Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+    }
 }
 
 sub repeater {
-  Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
+    Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
 
-  my ($n, $e) = @_;
-  my $end_at = time + 6;
-  my ($input_found, $input) = 1;
-  local $!;
+    my ($n, $e) = @_;
+    my $end_at = time + 6;
+    my ($input_found, $input) = 1;
+    local $!;
 
-  Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
-  while (time < $end_at) {
-    while ( do { 
-      if (Forks::Super::Util::is_socket(*STDIN)) {
-	$_ = _read_socket(*STDIN);
-      } else {
-	$_ = <STDIN>;
-      }
-    } ) {
-      if ($Forks::Super::DEBUG) {
-	$input = substr($_,0,-1);
-	$input_found = 1;
-	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
-			    fileno(STDIN));
-      }
-      if ($e) {
-        print STDERR $_;
-	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
-			      fileno(STDERR), "/", *STDERR->{dup_glob});
+    Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
+    while (time < $end_at) {
+	while ( do { 
+	    if (Forks::Super::Util::is_socket(*STDIN)) {
+		$_ = _read_socket(*STDIN);
+	    } else {
+		$_ = <STDIN>;
+	    }
+		} ) {
+	    if ($Forks::Super::DEBUG) {
+		$input = substr($_,0,-1);
+		$input_found = 1;
+		Forks::Super::debug("repeater: read \"$input\" on STDIN/",
+				    fileno(STDIN));
+	    }
+	    if ($e) {
+		print STDERR $_;
+		if ($Forks::Super::DEBUG) {
+		    Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
+					fileno(STDERR), "/", *STDERR->{dup_glob});
+		}
+	    }
+	    for (my $i = 0; $i < $n; $i++) {
+		print STDOUT "$i:$_";
+		if ($Forks::Super::DEBUG) {
+		    Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
+					fileno(STDOUT), "/", *STDOUT->{dup_glob});
+		}
+	    }
 	}
-      }
-      for (my $i = 0; $i < $n; $i++) {
-        print STDOUT "$i:$_";
-	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
-			      fileno(STDOUT), "/", *STDOUT->{dup_glob});
+	if ($Forks::Super::DEBUG && $input_found) {
+	    $input_found = 0;
+	    Forks::Super::debug("repeater: no input");
 	}
-      }
+	Forks::Super::pause();
+	if (!is_socket(*STDIN)) {
+	    seek STDIN, 0, 1;
+	}
     }
-    if ($Forks::Super::DEBUG && $input_found) {
-      $input_found = 0;
-      Forks::Super::debug("repeater: no input");
-    }
-    Forks::Super::pause();
-    if (!is_socket(*STDIN)) {
-      seek STDIN, 0, 1;
-    }
-  }
 }
 
 #######################################################
 
 $Forks::Super::Config::CONFIG{"filehandles"} = 0;
 
-my $pid = fork { sub => \&repeater, timeout => 10, args => [ 3, 1 ], 
+my $pid = fork { sub => \&repeater, timeout => 12, args => [ 3, 1 ], 
 		   child_fh => "all" };
 
 ok(defined($Forks::Super::CHILD_STDIN{$pid})
@@ -93,13 +93,13 @@ my $t = time;
 my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
 my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
-while (time < $t+10) {
-  push @out, Forks::Super::read_stdout($pid);
-  push @err, Forks::Super::read_stderr($pid);
-  sleep 1;
+while (time < $t+15) {
+    push @out, Forks::Super::read_stdout($pid);
+    push @err, Forks::Super::read_stderr($pid);
+    sleep 1;
 }
 
-ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
+ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");    ### 6 ###
 
 @err = grep { !/alarm\(\) not available/ } @err; # exclude warn to child STDERR
 ok(@err == 1, scalar @err . " == 1 line from STDERR\n" . join $/,@err);

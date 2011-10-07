@@ -41,9 +41,10 @@ SKIP: {
   ok(isValidPid($pid1) && isValidPid($pid2) && isValidPid($pid3),
      "launched $pid1,$pid2,$pid3 fork to sub");
 
-  sleep 1;
+  sleep 2;
   my $zero = Forks::Super::kill ('ZERO', $pid1, $pid2, $pid3);
-  ok($zero == 3, "kill SIGZERO sent to the 3 bg jobs we launched");
+  ok($zero == 3, "kill SIGZERO sent to the 3 bg jobs we launched")
+      or diag("signal was sent to $zero/3 jobs");
 
 
   my $y = Forks::Super::kill('QUIT', $j1);

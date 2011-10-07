@@ -10,24 +10,13 @@ Possible TODOs:
 	    IPC::Open3 supports MSWin32/os2 with the <system 1, @_>
 	    construction. Don't think that is appropriate for this module.
 
-    ___ Make Forks::Super safe(r) for unsafe signals (pre 5.7.3, see perlipc).
-	Can test with  PERL_SIGNALS=unsafe make test .
-	___ cygwin 5.10: occassionally failure, IPC litter
-	___ linux: make test can hang
-        _X_ don't know specifically what I did, but 
-            PERL_SIGNALS=unsafe make test/fasttest are usually successful now,
-	    at least for v0.49
-	    
-
-    _O_ Make Forks::Super usable with v5.6.
-	My 5.6 test environments are getting difficult to maintain.
-
     ___ There's enough stuff in here now that performance is affected,
 	especially when there are lots of short tasks. What can be done
 	to tighten up performance? What can be done to reduce overhead
 	when there are many short tasks?
-	___ disable $FSJ::Ipc::USE_TIE_?H
+	___ disable $FSJ::Ipc::USE_TIE_?H? need to benchmark
 	_X_ tightened some delays in file-based IPC
+        ___ shorten $Forks::Super::Queue::QUEUE_MONITOR_FREQ
 
     ___ fork { run => [ \@cmd, ... ] }
 	to invoke or emulate IPC::Run's rich feature set
@@ -36,16 +25,15 @@ Possible TODOs:
     ___ What other key-value pairs should FSJ::read_stdxxx handle?
 	_X_ warn => 0|1
 	_X_ timeout => max number of seconds to wait for input
-	___ I/O layers? :gz? :crlf?
+        ___ log => 0|1|*handle|\@list?
 
-    ___ The IPC module creates a temporary directory that will
-        be deleted when the program ends. Is there another module that
-        has solved this problem better than I did?
-	_O_ File::Temp? Does this work on MSWin32?
-	:-( File::Temp not robust enough when child procs outlive the parent.
-	    Probably has NFS issues, too.
+    _x_ I/O layers in ? :gz? :crlf?
+    	_X_ put IO layers in the  child_fh  spec
+	    _x_ will this work for sockets? [Yeah, sort of, for some layers]
+
     ___ No complaints yet, but is there a smarter way to
         set the IPC directory?
+    ___ Refactor how we create and remove the temp IPC directory.
 
     ___ Runtime IPC cleanup routine for long running programs. For long
 	completed jobs: close the open filehandles that have slipped
@@ -61,6 +49,7 @@ Possible TODOs:
         _x_ manipulate CPU affinities
         ___ dependencies
         ___ interactive client/server example of IPC
+        ___ run a server using Forks::Super
         _x_ see t/forked_harness.pl
         ___ load management
             ___ block while system is busy
@@ -74,7 +63,7 @@ Possible TODOs:
         ___ tuning Forks::Super for fast jobs, slow jobs,
 	    memory intensive jobs, cpu intensive jobs,
 	    I/O bound jobs
-        ___ scheduler app, running for days at a time
+        ___ scheduler app that can run for days at a time
 	___ reuse
 	___ share
 	___ daemon
@@ -91,11 +80,11 @@ Possible TODOs:
 	See the Wikipedia daemon article to see all the requirements.
 	    _x_ Or can it? If {daemon} is true, pass grandchild pid back
                 to parent and parent can reset {real_id}?
-	___ how to test it?
+	_X_ how to test it?
 	___ Will blanket close ruin sockethandles in the parent?
-	___ Set the os_priority, cpu_affinity
-	___ timeout, expiration?
-	___ A daemonized job cannot be signalled with Forks::Super::kill(job)
+	_x_ Set the os_priority, cpu_affinity
+	_x_ timeout, expiration?
+	_x_ A daemonized job cannot be signalled with Forks::Super::kill(job)
 	    _X_ Then again, couldn't a daemon use most of the options to fork(),
 	        including timeout, setting {real_pid}, etc.? Suppose that at 
 	        the time a daemonized job is created, we create a small pipe
@@ -105,53 +94,13 @@ Possible TODOs:
 	    use socket/pipe IPC 
         _O_ Use Proc::Daemon if available? Any::Daemon
         ___ May not work for Win32
-	    ___ Win32 with cmd, exec: need to use Win32::CreateProcess,
+	    _X_ Win32 with cmd, exec: need to use Win32::CreateProcess,
 	        not fork()+system, fork()+exec, or fork()+Win32::CreateProcess
+            ___ system 1,... creates new process but does not allow the 
+                parent program to exit until that new process completes.
+                maybe we want to create a wrapper program to use with
+                Win32 (and maybe other) processes ... see below
 	_X_ daemon processes do not count against your $FS::MAX_PROC limit
-
-    ___ how to daemonize
-        _x_ look for $job->{daemon} setting
-	_x_ preconfig: choose $job->{daemon_ipc} file
-	_x_ after fork (child):
-	    _x_ do daemon stuff
-	        _x_ close all open file descriptors
-		_x_ umask, chdir
-	    _x_ fork again
-	        in grandchild: continue
-	    _x_ report child, grandchild pids to $job->{daemon_ipc}
-	_x_ after fork (parent)
-	    _x_ wait for $job->{daemon_ipc} channel to be ready
-	    _x_ update $job->{real_pid}
-	    _x_ caller should never need to know about intermediate pid?
-	_x_ Sigchld::handle_SIGCHLD should not freak out when the
-	    intermediate daemon process exits
-	_x_ Wait::waitpid method should ignore daemon pids
-        _x_ what should suspend/resume do with daemon?
-	_x_ finish callback not allowed for daemon
-	_x_ FS::status, FSJ::status should fail with daemon [may work OOTB]
-	_x_ FS::state, FSJ::state should be special with daemon
-	    _x_ FSJ::is_xxx are different
-	_x_ socket/pipe IPC not allowed with daemon
-	_x_ kill should work out-of-the-box, but take a closer look
-	_x_ not all END{} blocks should run from daemon 
-	_x_ LazyEval cannot work with daemon
-
-    ___ make SysInfo.pm.PL capable of managing config for multiple $^O,$]?
-	Or more generally, what if the installed SysInfo.pm is set up for
-	a different sys/version than the one that is actually being used?
-	___ Some things are cheap to determine $SYSTEM/$VERSION/
-	    $NUM_PROCESSORS(?)/all of %CONFIG; Others are expensive 
-	    $MAX_FORK/$MAX_OPEN_FH/$SOCKET_CAPACITY/$PIPE_CAPACITY,
-	    even $SLEEP_ALARM_COMPAT is not a cost you want to pay every
-	    time the module is loaded.
-	_o_ Can we detect all the versions of Perl that will use a module
-	    installed a specific location? And run SysInfo.pm.PL for all
-	    of them? I doubt it.
-
-    _o_ Fails t/20 t/21 on OpenBSD run as make test, but succeed as
-	standalone? What's up with that? process groups?
-	Intermittent failures -- probably max background process
-	restrictions on my OpenBSD host.
 
     _X_ Forks::Super::Job can overload "<>" (iteration) operator,
 	invoking $job->read_stdout(). Beware of overload bug, though:
@@ -161,52 +110,16 @@ Possible TODOs:
             version of Forks::Super::Job::(<> except with some
 	    crazy machinations.
 
-    ___ test suspend/resume cycles where child has SIGSTOP/CONT handlers
-
-    _x_ "Don't exit from child sub with socket IPC" -- can we address this?
-	A child-specific END{} block in Forks/Super/Job.pm ?
-
-    _X_ Forks::Super::Sigchld notes in a comment that dates back to v0.16
-        that Cygwin might not clean up deferred jobs correctly. Is this
-	still an issue? Doesn't look like it ...
-
-    _X_ 40d problem on solaris
-	___ will we ever use setitimer for timeout/expiration?
+    _X_ test suspend/resume cycles where child has SIGSTOP handlers
+        it should not be possible to trap these signals.
+        (It turns out SIGCONT can be trapped)
 
     ___ Understand why Windows hack needed for socket write (see 
 	FSJ::Ipc::write_stdin, FST::IPCSocketHandle::trivial_pause).
 	Is there a better solution?
 
     _X_ Upgrade bundles Sys::CpuAffinity to 1.01.
-    ___ 1.02?
-
-    _X_ dir => directory  option to run the child process from
-	a particular directory.
-	Child dies if not able to change to the specificed directory.
-
-    _X_ umask => 0123 option?
-
-    _X_ allow cpu_affinity => [ @list ] style
-
-    ___ 0.51 test failures. I don't think any of these are
-        reliably reproducible
-	_x_ timeout takes 10000s in FreeBSD
-	    suppress return from SIGALRM handler
-	_x_ 25#15-17 on loaded Linux 5.14.0
-	    wait longer for child feedback
-	_o_ 40i#2 problem on Linux (x3)
-	    was elapsed time too high (>7s) or too low (<4s)? Can't tell.
-	_x_ 42g#17-18 on loaded Linux 5.14.0
-	    wait longer to receive STDOUT
-	___ 43d exit 13 on Linux (SIGPIPE)
-	_o_ 44a#7-12 on MSWin32
-	___ 24 exit 2 on MSWin32 (SIGINT),
-	    47 exit 15 on MSWin32 (SIGTERM),
-	    48 exit 23 on MSWin32 (SIGSTOP)
-	___ 49#4 on Linux
-	___ 49#5,8 on MSWin32
-	_o_ 54#10 on Linux
-	___ break 49 up?
+    _x_ <XXX>1.02? 1.03?</XXX> 1.04
 
     ___ Does anything bad happen when you set $SIG{CHLD} = 'IGNORE' ?
         'DEFAULT'? sub {} ? undef ?
@@ -220,6 +133,12 @@ Possible TODOs:
             is just checking  defined $SIG{CHLD}  instead of whether
 	    an actual signal handler is registered to decide whether
 	    to interrupt sleep.
+
+        ___ Yes again. When $SIG{CHLD}='IGNORE', calling wait or waitpid
+	    NEVER returns a pid; it's always either 0 or -1. See
+	    t/drop-in-replacement.pl (actually, this is platform dependent).
+ 	    ___ Should  Forks::Super  check the value of $SIG{CHLD}
+	        and emulate this behavior?
 
         ___ Actually, this would be part of a good XSIG framework workout.
             Some scripts with natural forks and wait/waitpid calls
@@ -237,15 +156,8 @@ Possible TODOs:
 	_X_ use of uninit value in numeric ge (>=)  2084 [uninitialized]
         _X_ use of uninit value in bitwise and (&)  2087 [uninitialized]
 
-    _X_ $F::S::CHILD_FORK_OK>0 -- not tested ...
-        _X_ -1: fork from "child" fails
-	_X_ +1: fork from child exactly once
-	_X_ +0.5: FSfork from child, CORE fork from grandchildren
-	_X_ +2: FSfork from child and grandchild only
-	_X_ +1.5: FSfork from child,grandchild CORE fork after that
-	_X_ +3: FSfork from 3 generations
-
-    ___ Implement, test respect block/timeout in IPCPipeHandle
+    _x_ Implement, test respect block/timeout in IPCPipeHandle
+        _X_ works, though maybe could be refactored
 
     ___ Track down, solve 'untie attempted while ... inner references'
         mystery with FST::IPCFileHandle
@@ -254,15 +166,8 @@ Possible TODOs:
     ___ Forks::Super::Tie::BackgroundScalar is no longer used with 'tie'
         (since v0.43). Change the name? 
 
-    _X_ fork { env => \%hash }  to set the environment of the child
-        process when the job is launched.
-	_X_ test
-
     ___ test for -MForks::Super=cleanse, -MForks::Super=cleanse,dir
-
-    ___ 0.52 test failures:
-        ___ MSWin32 24#2; 47#15; 48#23; 49#5,8
-	___ FreeBSD child still fails to timeout
+    ___ test normal and abnormal IPC cleanup
 
     ___ INET sockets as well as UNIX sockets, if you can commit to a port
         before fork'ing and not bind to it until after fork'ing.
@@ -285,18 +190,13 @@ Possible TODOs:
 
     ___ is it feasible to fork to a "process pool" (cf. FastCGI)?
         There could be significant improvement for use cases with
-        lots of short jobs.
+        lots of short jobs. Leave this for 1.0?
 
     ___ TASKKILL, TASKLIST are strongly recommended utilities to have
         for MSWin32. Should we try harder to find them in the PATH?
 
     ___ We test for job state eq 'DAEMON-COMPLETE', but we don't actually
         set it anywhere yet
-
-    ___ When $SIG{CHLD}='IGNORE', calling  wait  or  waitpid  NEVER returns
-        a pid, it's always either 0 or -1. See t/drop-in-replacement.pl
-        Should  Forks::Super  check the value of $SIG{CHLD} and emulate
-	this behavior?
 
     _X_ http://stackoverflow.com/questions/6574722/. Implement
 
@@ -306,11 +206,82 @@ Possible TODOs:
 	the child is finished.
 
     ___ Test file just for Forks::Super::Job
-        ___ and for Forks::Super::Queue, Forks::Super::Wait
+        ___ and for Forks::Super::Wait
+	_X_ Forks::Super::Util
+        _X_ Forks::Super::Queue
 
-    ___ Forks::Super::kill to accept arbitrary process ids
+    _X_ Forks::Super::kill to accept arbitrary process ids, not just pids
+        that Forks::Super is keeping explicit track of
 
-    _x_ Signalling on Windows. Can we make the Unix-y signal emulation
-        in Forks::Super::kill more faithful? 
+    ___ Currently, 'kill' to a fork-to-cmd or fork-to-exec might signal
+        two separate processes. Can we coerce kill to return 1 in this
+	case instead of 2? Currently it is a big incompatibility between
+	this module and core use.
 
-    ___ Currently, 'kill' to a fork-to
+    ___ a "wrapper" script that executes an arbitrary command in a
+        separate process, but as if it had come from a fork call within
+        a program using Forks::Super. The purpose is to make sure that
+        a program runs in a detached process. The wrapper will set up
+        all the (almost surely file based) IPC and then run the desired
+        program.
+
+    ___ backport to 5.6
+        _x_ Signals/XSIG needs work
+        _x_ Cwd 2.04 not effective in Forks::Super::Util::abs_path?
+            No, it's just Cwd::abs_path that's not effective.
+        ___ unsafe signals leave zombies, make trouble
+        ___ any pipe code causes SIGSEGV
+        _X_ :utf8 layer not available for IO layers test
+	    skip those tests
+        _X_ even the :crlf layer behaves differently on 56
+            skip/adjust those tests
+
+    ___ share MAX_PROC across processes, or have a SHARED_MAX_PROC
+        attribute to limit the number of processes across a group
+	of parent processes using Forks::Super.
+ 	___ defer to 1.0?
+	___ and the dual of this problem -- manage multiple 
+	    processes on separate remote hosts from a single
+	    process (i.e., use Forks::Super to manage a grid?)
+
+    ___ are %CHILD_STDxxx variables obsolete? How to deprecate?
+
+    ___ setuid =>  option to fork
+
+    ___ test needs: daemon+os_priority, cpu_affinity
+        daemon+name? daemon+delay, daemon+depend
+
+    ___ Make forked_harness.pl an application that gets installed
+        with Forks::Super
+        _X_ put pod in t/forked_harness.pl
+
+    _X_ suspend / resume broken on Cygwin?
+        _X_ maybe we should use the Win32 api functions instead of builtin kill
+
+    ___ daemon support depends on file-based IPC?
+        make a socket-based alternative. Let $job->{signal_ipc}, {daemon_ipc}
+	be sockets?
+
+    ___ FSJ::OS::Win32::signal_procs: is process group applied inconsistently?
+
+    ___ Use FSJ::OS::totally_kludgy_process_monitor as a workaround to
+        timeout + exec  incompatibility
+
+    ___ pause use -- in some cases, we would wan't pause() to return
+        if a child completes in the middle of the pause statement.
+	This applies especially to the pause() calls in Forks::Super::Wait.
+	If we could do that, then we wouldn't have to be afraid to set
+	$Forks::Super::Util::DEFAULT_PAUSE to a high value for problems
+	with long running jobs.
+
+	For pause() calls inside FSJ::Ipc::_readline_XXX, the length of
+	the pause should be tuned to the output frequency of the child,
+	which will be different from the expected runtime of the child.
+
+    ___ change expressions like  if (ref($obj) eq 'Forks::Super::Job')
+        to something more portable -- if ($obj->isa('Forks::Super::Job') ? 
+        The latter is more flexible and lets  Forks::Super::Job  be subclassed
+	by us and others without breaking anything.
+
+    ___ Test::More::ok variant that can be made more lenient, for "timing"
+        tests that aren't that important under stress testing.

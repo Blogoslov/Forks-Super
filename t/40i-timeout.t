@@ -22,7 +22,7 @@ SKIP: {
   $pid = fork { timeout => "in 10 seconds", 
 		child_fh => "out",
 		sub => sub { 
-		  my $e = $Forks::Super::Job::self->{_expiration};
+		  my $e = Forks::Super::Job->this->{_expiration};
 		  print STDOUT "$e\n";
 		  sleep 4;
 		} };
@@ -40,10 +40,10 @@ SKIP: {
   $pid = fork { expiration => "6 Mondays from now",
 		child_fh => "out",
 		sub => sub { 
-		  my $j = $Forks::Super::Job::self;
-		  my $d = $j->{_timeout};
-		  print STDOUT "$d\n";
-		  sleep 1;
+		    my $j = Forks::Super::Job->this;
+		    my $d = $j->{_timeout};
+		    print STDOUT "$d\n";
+		    sleep 1;
 		} };
   $job = Forks::Super::Job::get($pid);
   my $d = $job->read_stdout(block => 1);
@@ -54,7 +54,7 @@ SKIP: {
   $pid = fork { timeout => "last week",
 		child_fh => "out",
 		sub => sub {
-		  print STDOUT "foo\n";
+		    print STDOUT "foo\n";
 		}
 	      };
   $job = Forks::Super::Job::get($pid);

@@ -17,7 +17,7 @@ my $elapsed = $job->{start} - $t;
 
 ok(!isValidPid($pid,-1) && $pp == $pid || $pp == $job->{real_pid}, 
    "created task with natural language delay");
-ok($elapsed >= 4 && $elapsed <= 6, "natural language delay was respected")
+ok($elapsed >= 4 && $elapsed <= 6.2, "natural language delay was respected")
     or diag("took ${elapsed}s, expected 4-6");
 
 my $future = "in 6 seconds";
@@ -25,7 +25,7 @@ $t = Time::HiRes::time();
 $pid = fork { start_after => $future,
 		child_fh => "out",
 		sub => sub { 
-		  my $e = $Forks::Super::Job::self->{start_after};
+		  my $e = Forks::Super::Job->this->{start_after};
 		  print STDOUT "$e\n";
 		  sleep 4;
 		} };
