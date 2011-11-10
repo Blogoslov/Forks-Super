@@ -27,7 +27,7 @@ if (!&Forks::Super::Util::IS_WIN32ish) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 ##################################################################
@@ -44,9 +44,8 @@ our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 # a struct we need to enumerate all the threads of a process
 eval {
-
     require Win32::API;
-    
+
     Win32::API::Struct->typedef(
 	THREADENTRY32 => qw{
 	DWORD dwSize;
@@ -57,7 +56,7 @@ eval {
 	LONG tpDeltaPri;
 	DWORD dwFlags;
     });
-} or carp 'Win32::API module is highly highly recommended ';
+}; # or carp 'Win32::API module is highly highly recommended ';
 
 
 our %_WIN32_API_SPECS = (
@@ -383,7 +382,7 @@ sub terminate_process {
     my $procHandle = win32api('OpenProcess', 0x0001, 1, $pid);
     if ($procHandle) {
 	my $z = win32api('TerminateProcess',$procHandle,$exitCode || 0);
-	if ($z==0) {
+	if (!$z) {
 	    carp "Forks::Super::Win32: terminate_process: $^E\n";
 	}
 	return !!$z;
@@ -415,8 +414,17 @@ sub _enumerate_threads_for_process {
     }
     my $z = win32api('Thread32First', $snapshot, $thread_entry);
     if (!$z) {
-	carp $^E;
-	return;
+
+	if (1) {
+	    # try again, although the process may be dead or invalid
+	    $snapshot = win32api('CreateSnapshot', 0x0000000C, $process_id);
+	    return if !$snapshot;
+	    $z = win32api('Thread32First',$snapshot,$thread_entry);
+	    return if !$z;
+	} else {
+	    carp $^E;
+	    return;
+	}
     }
 
     my @threads_for_process = ();
@@ -532,8 +540,14 @@ sub sigzero_process {
     my $pid = shift;
     my $handle = get_process_handle($pid, 0);
     if ($handle != 0) {
-	my $xcode = pack('I',0);
+
+	my $xcode = pack('I',1);
+
+	# "numeric" input suppresses warnings in perl 5.8, Win32::API 0.58
+	$xcode = "0   ";
+
 	my $z = win32api('GetExitCodeProcess',$handle,$xcode);
+
 	if ($z && (unpack('I',$xcode))[0]==259) {
 	    return $pid;
 	}
@@ -547,6 +561,8 @@ sub sigzero_thread {
     return 0 if !$handle;
 
     my $xcode = pack('I', 0);
+    $xcode = "0   ";
+
     my $result = win32api('GetExitCodeThread',$handle,$xcode);
     $xcode = unpack('I', $xcode);
 
@@ -566,11 +582,12 @@ sub sigkill_process {
 	# By default they will terminate a process, but they can
 	# be handled by a %SIG entry more or less like in Unix.
 
-	debug("CORE::kill $signal => $pid");
+	debug("CORE::kill $signal => $pid") if $Forks::Super::DEBUG;
 	if (CORE::kill $signal, $pid) {
 	    $result = [$pid];
 	} else {
-	    debug("CORE::kill $signal,$pid  not successful");
+	    debug("CORE::kill $signal,$pid  not successful")
+		if $Forks::Super::DEBUG;
 	    if (sigkill_process_harder($signo, $pid)) {
 		$result = [$pid];
 	    }
@@ -757,7 +774,7 @@ sub set_os_priority_process {
 	 [$REAL,-3],[$REAL,-2],[$REAL,-1],[$REAL,0],
 	 [$REAL,1],[$REAL,2],[$REAL,3],[$REAL,4],
 	 [$REAL,5],[$REAL,6],[$REAL,15],)[$priority] || [$NORMAL,0];
-    
+
     local $! = 0;
     my $result = win32api('SetPriorityClass', $handle, $priorities->[0]);
     if ($result) {
@@ -917,6 +934,7 @@ sub system1_win32_process {
     return $c1;
 }
 
+=begin XXXXXX removed 0.55
 
 # called from Forks::Super::Job::_postlaunch_daemon_Win32
 #
@@ -926,7 +944,7 @@ sub system1_win32_process {
 # one way to do this is to launch a separate small program
 # that does nothing but enforce the timeout.
 #
-sub totally_kludgy_process_monitor {
+sub poor_mans_alarm {
     my ($pid, $timeout) = @_;
 
     # program to monitor a pid:
@@ -934,5 +952,9 @@ sub totally_kludgy_process_monitor {
     my $prog = "sleep 1,kill(0,$pid)||exit for 1..$timeout;kill -9,$pid";
     return system 1, qq[$^X -e "$prog"];
 }
+
+=end XXXXXX
+
+=cut
 
 1;

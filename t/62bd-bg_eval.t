@@ -18,10 +18,9 @@ $Forks::Super::Config::CONFIG{"YAML::Tiny"} = 0;
 $Forks::Super::Config::CONFIG{"JSON"} = 0;
 
 SKIP: {
+    if (!Forks::Super::Config::CONFIG_module("Data::Dumper")) {
+	skip "Data::Dumper not available, skipping bg_eval tests", 22;
+    }
 
-  if (!Forks::Super::Config::CONFIG_module("Data::Dumper")) {
-    skip "Data::Dumper not available, skipping bg_eval tests", 22;
-  }
-
-  require "./t/62b-bg_eval.tt";
+    require "./t/62b-bg_eval.tt";
 }

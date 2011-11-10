@@ -38,6 +38,6 @@ ok($j1->{start} - $j1->{created} >= 5 - $TOL,
    or diag("job start $j1->{start} should be at least ",
            "5 seconds after create time $j1->{created}");
 my $j2_diff = $j2->{start} - $j2->{created};
-ok($j2_diff + $TOL >= 8.95,                     ### 9 ###
+okl($j2_diff + $TOL >= 8.95,                     ### 9 ###
    "j2 took ${j2_diff}s between creation/start, expected 10s diff");
 

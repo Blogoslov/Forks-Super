@@ -11,11 +11,11 @@ use warnings;
 
 my $job_pid = fork();
 if (!defined $job_pid) {
-  die "fork() returned undefined value.\n";
+    die "fork() returned undefined value.\n";
 }
 if ($job_pid == 0) {
-  # child.
-  exit;
+    # child.
+    exit;
 }
 
 ok(ref $job_pid eq 'Forks::Super::Job', 
@@ -39,11 +39,11 @@ ok(($pid | 757) - (757 | $job_pid) == 0, "| operation");
 ok($job_pid =~ /-?\d+/, "regex operation ok");
 ok(($pid ^ 1254) - ($job_pid ^ 1254) == 0, "^ operation ok");
 SKIP: {
-  if ($job_pid < 0) {
-    skip "bit shift operation on negative job id", 2;
-  }
-  ok($job_pid << 4 == $pid * 16, "<< operation ok  $job_pid >> 4 == $pid*16");
-  ok($job_pid >> 3 == int($pid/8), ">> operation ok $job_pid << 3 == $pid/8");
+    if ($job_pid < 0) {
+	skip "bit shift operation on negative job id", 2;
+    }
+    ok($job_pid << 4 == $pid * 16, "<< operation ok  $job_pid >> 4 == $pid*16");
+    ok($job_pid >> 3 == int($pid/8), ">> operation ok $job_pid << 3 == $pid/8");
 }
 ok(abs($job_pid) == abs($pid), "abs operation ok");
 ok($pid == $job_pid, "== operation ok");
@@ -72,11 +72,11 @@ ok(cos($job_pid) == cos($pid), "cos operation");
 ok(sin($job_pid) == sin($pid), "sin operation");
 ok(exp($job_pid) eq exp($pid), "exp operation");
 if ($pid > 0) {
-  ok(log($job_pid) == log($pid), "log operation");
-  ok(sqrt($job_pid) == sqrt($pid), "sqrt operation");
+    ok(log($job_pid) == log($pid), "log operation");
+    ok(sqrt($job_pid) == sqrt($pid), "sqrt operation");
 } else {
-  ok(1, "skip log operation on negative pid");
-  ok(1, "skip sqrt operation on negative pid");
+    ok(1, "skip log operation on negative pid");
+    ok(1, "skip sqrt operation on negative pid");
 }
 ok(int($job_pid) == $pid, "int operation");
 

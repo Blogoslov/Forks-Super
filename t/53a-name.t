@@ -45,7 +45,7 @@ $p2 = fork { sub => sub { sleep 3 }, depend_on => "simple",
 	     queue_priority => 10 };
 $p3 = fork { sub => sub { }, queue_priority => 5 };
 $t = Time::HiRes::time() - $t;
-ok($t <= 3.0,              ### 11 ### was 1.5, obs 1.65,1.76,1.98,2.99
+okl($t <= 3.0,              ### 11 ### was 1.5, obs 1.65,1.76,1.98,2.99
    "fast return for queued job ${t}s expected <=1s"); 
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);

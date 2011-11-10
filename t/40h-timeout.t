@@ -10,9 +10,9 @@ use warnings;
 Forks::Super::Job::Timeout::warm_up();
 
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 #
@@ -23,36 +23,44 @@ if (${^TAINT}) {
 
 SKIP: {
 
-  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-    skip "alarm function unavailable on this system ($^O,$]), "
-      . "can't test timeout feature", 2;
-  }
-  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-    skip "alarm incompatible with sleep on this system ($^O,$]), "
-      . "can't test timeout feature", 2;
-  }
+=begin XXXXXX workaround in v0.55
+
+    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
+	skip "alarm function unavailable on this system ($^O,$]), "
+	    . "can't test timeout feature", 2;
+    }
+    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+	skip "alarm incompatible with sleep on this system ($^O,$]), "
+	    . "can't test timeout feature", 2;
+    }
+
+=end XXXXXX
+
+=cut
 
 ##########################################################
 
-my $t0 = Time::HiRes::time();
-my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=15" ], 
+    my $t0 = Time::HiRes::time();
+    my $pid = fork { cmd => [ $^X, "t/external-command.pl", "-s=15" ], 
 		   timeout => 2 };
-my $t = Time::HiRes::time();
-waitpid $pid, 0;
-my $t2 = Time::HiRes::time();
-($t0,$t) = ($t2-$t0,$t2-$t);
-ok($t <= 6.95,           ### 29 ### was 3.0 obs 3.10,3.82,4.36,6.63,9.32
-   "cmd-style respects timeout ${t}s ${t0}s "
-   ."expected ~2s"); 
+    my $t = Time::HiRes::time();
+    waitpid $pid, 0;
+    my $t2 = Time::HiRes::time();
+    ($t0,$t) = ($t2-$t0,$t2-$t);
+    okl($t <= 6.95,             ### 1 ### was 3.0 obs 3.10,3.82,4.36,6.63,9.32
+	"cmd-style respects timeout ${t}s ${t0}s "
+	."expected ~2s"); 
 
-$t0 = Time::HiRes::time();
-$pid = fork { exec => [ $^X, "t/external-command.pl", "-s=6" ], timeout => 2 };
-$t = Time::HiRes::time();
-waitpid $pid, 0;
-$t2 = Time::HiRes::time();
-($t0,$t) = ($t2-$t0,$t2-$t);
-ok($t0 >= 5.8 && $t > 4.95, 
-   "exec-style doesn't respect timeout ${t}s ${t0}s expected ~6s");
+    $t0 = Time::HiRes::time();
+    $pid = fork { exec => [ $^X, "t/external-command.pl", "-s=10" ], 
+		  timeout => 2 };
+    $t = Time::HiRes::time();
+    waitpid $pid, 0;
+    $t2 = Time::HiRes::time();
+    ($t0,$t) = ($t2-$t0,$t2-$t);
+    okl($t < 4.95 && $t0 < 5.8, ### 2 ### 
+	'exec-style DOES respect timeout (since v0.55) '
+	. "${t}s ${t0}s expected ~2s");
 
 ######################################################################
 

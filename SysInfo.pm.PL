@@ -12,9 +12,9 @@ use warnings;
 my $limits_file = "t/out/limits.$^O.$]";
 
 if (! -r $limits_file) {
-  print STDERR "$0: creating system-limits file.\n";
-  system($^X, "system-limits.PL", "$limits_file.tmp");
-  rename "$limits_file.tmp", $limits_file;
+    print STDERR "$0: creating system-limits file.\n";
+    system($^X, "system-limits.PL", "$limits_file.tmp");
+    rename "$limits_file.tmp", $limits_file;
 }
 
 my %info = load_limits_file($limits_file);
@@ -36,7 +36,7 @@ use warnings;
 
 ## no critic (ProhibitMagicNumbers)
 
-our \$VERSION = '0.54';
+our \$VERSION = '0.55';
 
 ____;
 
@@ -61,7 +61,7 @@ printF('IGNORE_WAITPID_RESULT', $info{ignore_waitpid_result}, '-1');
 printF('IGNORE_WAITPID_STATUS', $info{ignore_waitpid_status}, '-1');
 
 if (defined $info{ncpu}) {
-  printF('NUM_PROCESSORS', $info{ncpu}, '1');
+    printF('NUM_PROCESSORS', $info{ncpu}, '1');
 }
 
 # See what core and core module functionality is available
@@ -99,7 +99,7 @@ my %config = ( alarm => eval { alarm 0;1 } || 0,
 
 print F "\nour \%CONFIG = (\n";
 foreach my $key (sort keys %config) {
-  printf F "    %-14s => %d,\n", "'$key'", $config{$key};
+    printf F "    %-14s => %d,\n", "'$key'", $config{$key};
 }
 print F ");\n\n";
 
@@ -108,38 +108,39 @@ close F;
 
 
 sub printF {
-  my ($varName, $value, $defaultValue) = @_;
-  $value = $defaultValue if defined($value) && $value eq "''";
-  $value ||= $defaultValue;
-  $value = "0" if $value eq "000";
+    my ($varName, $value, $defaultValue) = @_;
+    $value = $defaultValue if defined($value) && $value eq "''";
+    $value ||= $defaultValue;
+    $value = "0" if $value eq "000";
 
-  print F "\n";
-  print F 'our $', $varName, " = $value;", "\n";
+    print F "\n";
+    print F 'our $', $varName, " = $value;", "\n";
 }
 
 sub load_limits_file {
-  my ($f) = @_;
-  my %info;
-  open L, '<', $f;
-  while (<L>) {
-    s/\s+$//;
-    my ($key, $value) = split /:/, $_, 2;
-    $info{$key} = $value;
-  }
-  close L;
-  return %info;
+    my ($f) = @_;
+    my %info;
+    open L, '<', $f;
+    while (<L>) {
+	s/\s+$//;
+	my ($key, $value) = split /:/, $_, 2;
+	$info{$key} = $value;
+    }
+    close L;
+    return %info;
 }
 
 sub sleep_alarm_compat {
-  # compute this every time. The value from load_limits_file can be unreliable.
-  my $compatible = -1;
-  eval {
-    local $SIG{ALRM} = sub { die "Timeout\n" };
-    alarm 1;
-    $compatible = 1;
-    sleep 2;
-    $compatible = "000";
-  };
-  return $compatible;
+    # compute this every time. 
+    # The value from load_limits_file can be unreliable.
+    my $compatible = -1;
+    eval {
+	local $SIG{ALRM} = sub { die "Timeout\n" };
+	alarm 1;
+	$compatible = 1;
+	sleep 2;
+	$compatible = "000";
+    };
+    return $compatible;
 }
 

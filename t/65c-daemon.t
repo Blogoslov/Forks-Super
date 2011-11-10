@@ -8,15 +8,15 @@ use warnings;
 
 my $CWD = Cwd::getcwd();
 if (${^TAINT}) {
-  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-  }
-  ($ipc_dir) = $ipc_dir =~ /(.*)/;
-  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
-  ($CWD) = $CWD =~ /(.*)/;
-  ($^X) = $^X =~ /(.*)/;
-  $ENV{PATH}='';
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+    ($CWD) = $CWD =~ /(.*)/;
+    ($^X) = $^X =~ /(.*)/;
+    $ENV{PATH}='';
 }
 
 ### to cmd
@@ -46,7 +46,7 @@ SKIP: {
     ok($k, "SIGZERO on daemon successful");
     ok($pid->{intermediate_pid}, "intermediate pid set on job");
     diag("intermediate pid was $pid->{intermediate_pid}");
-    
+
     if (Forks::Super::Util::IS_WIN32ish &&
 	!Forks::Super::Config::CONFIG_module('Win32::API')) {
 

@@ -25,7 +25,7 @@ my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1,
 		    queue_priority => 10 };
 my $pid3 = fork { sub => sub { }, queue_priority => 5 };
 $t = Time::HiRes::time() - $t;
-ok($t <= 1.95, "fast return ${t}s for queued job, expected <= 1s"); ### 1 ###
+okl($t <= 1.95, "fast return ${t}s for queued job, expected <= 1s"); ### 1 ###
 my $j1 = Forks::Super::Job::get($pid1);
 my $j2 = Forks::Super::Job::get($pid2);
 my $j3 = Forks::Super::Job::get($pid3);

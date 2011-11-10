@@ -22,14 +22,14 @@ ok($Forks::Super::LAST_JOB->{_is_bg} > 0,
    "\$Forks::Super::LAST_JOB marked bg");
 my $p = waitpid -1, 0;
 my $t3 = Time::HiRes::time() - $t;
-ok($p == -1 && $t3 <= 1.5,
+okl($p == -1 && $t3 <= 1.5,
    "waitpid doesn't catch bg_qx job, fast fail ${t3}s expect <=1s");
 ok($x eq "$z \n", "scalar bg_qx $x");
 my $h = Time::HiRes::time();
 ($t,$t2) = ($h-$t,$h-$t2);
 my $y = $x;
 ok($y == $z, "scalar bg_qx");
-ok($t2 >= 2.8 && $t <= 6.5,           ### 10 ### was 5.1 obs 5.23,5.57,6.31
+okl($t2 >= 2.8 && $t <= 6.5,           ### 10 ### was 5.1 obs 5.23,5.57,6.31
    "scalar bg_qx took ${t}s ${t2}s expected ~3s");
 $x = 19;
 ok($x == 19, "result is not read only");
@@ -37,10 +37,17 @@ ok($x == 19, "result is not read only");
 ### interrupted bg_qx, scalar context ###
 
 SKIP: {
+
+=begin XXXXXX workaround v0.55
+
     if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
 	skip "alarm/sleep incompatible on this system. "
 	    . "can't use bg_qx with timeout.", 5;
     }
+
+=end XXXXXX
+
+=cut
 
     my $j = $Forks::Super::LAST_JOB;
     $y = "";
@@ -53,7 +60,7 @@ SKIP: {
 	    or diag("\$y was $y, expected empty or undefined\n");
     ok($j ne $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB updated");
     $t = Time::HiRes::time() - $t;
-    ok($t <= 6.5,                        ### 14 ### was 4 obs 4.92,6.0,7.7!
+    okl($t <= 6.5,                        ### 14 ### was 4 obs 4.92,6.0,7.7!
        "scalar bg_qx respected timeout, took ${t}s expected ~2s");
 
 ### interrupted bg_qx, capture existing output ###
@@ -70,7 +77,7 @@ SKIP: {
 	print STDERR "(output was: $x; target was \"$z \")\n";
     }
     $t = Time::HiRes::time() - $t;
-    ok($t <= 7.5,                            ### 16 ### was 3 obs 3.62,5.88,7.34
+    okl($t <= 7.5,                          ### 16 ### was 3 obs 3.62,5.88,7.34
        "scalar bg_qx respected timeout, took ${t}s expected ~4s");
 }
 

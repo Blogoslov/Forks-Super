@@ -8,13 +8,13 @@ use warnings;
 
 our $CWD = &Cwd::getcwd;
 if (${^TAINT}) {
-  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-  }
-  ($ipc_dir) = $ipc_dir =~ /(.*)/;
-  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
-  ($CWD) = $CWD =~ /(.*)/;
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+    ($CWD) = $CWD =~ /(.*)/;
 }
 
 sub run_simple_daemon {

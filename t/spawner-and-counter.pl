@@ -17,9 +17,9 @@ print F "$$,t/out/spawn-counter.$$\n";
 close F;
 
 if ($spawn_count > 0 && fork() == 0) {
-  $spawn_count--;
-  exec($^X, $0, $pid_file, $spawn_count, $counter_count);
-  exit 1;
+    $spawn_count--;
+    exec($^X, $0, $pid_file, $spawn_count, $counter_count);
+    exit 1;
 }
 
 open(OUT, ">". "t/out/spawn-counter.$$");
@@ -27,9 +27,10 @@ select OUT;
 $| = 1;
 
 while ($counter_count >= 0) {
-  print "$counter_count\n";
-  $counter_count--;
-  sleep 1;
-  # sleep 1 if $counter_count < 7; # give heavily loaded systems a better chance to pass
+    print "$counter_count\n";
+    $counter_count--;
+    sleep 1;
+    # give heavily loaded systems a better chance to pass
+    # sleep 1 if $counter_count < 7; 
 }
 close OUT;

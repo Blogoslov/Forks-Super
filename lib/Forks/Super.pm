@@ -17,6 +17,17 @@ use Signals::XSIG;   # replaces Forks::Super::Sighandler
 use strict;
 use warnings;
 
+BEGIN {
+    if ($ENV{FORKS_MOCK_NOALARM}) {
+	*CORE::GLOBAL::alarm = sub { 
+	    die "alarm is not implemented on this system" 
+	};
+	*CORE::GLOBAL::sleep = sub { eval{CORE::alarm 0}; CORE::sleep $_[0] };
+	$Forks::Super::SysInfo::CONFIG{'alarm'} = 0;
+	$Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE = 0;
+    }
+}
+
 use Exporter;
 our @ISA = qw(Exporter);
 
@@ -31,13 +42,13 @@ my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
 my @export_ok_vars = qw(%CHILD_STDOUT %CHILD_STDERR %CHILD_STDIN);
 our @EXPORT_OK = (@export_ok_func, @export_ok_vars);
 our %EXPORT_TAGS =
-  ( 'test'        => [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
-    'test_config' => [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
-    'test_CA'     => [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
-    'filehandles' => [ @export_ok_vars, @EXPORT ],
-    'vars'        => [ @export_ok_vars, @EXPORT ],
-    'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.54';
+    ( 'test'        => [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
+      'test_config' => [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
+      'test_CA'     => [ qw(isValidPid Time bg_eval bg_qx), @EXPORT ],
+      'filehandles' => [ @export_ok_vars, @EXPORT ],
+      'vars'        => [ @export_ok_vars, @EXPORT ],
+      'all'         => [ @EXPORT_OK, @EXPORT ] );
+our $VERSION = '0.55';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -92,6 +103,8 @@ sub import {
 		if ($args[$i] =~ /CA/) {
 		    Forks::Super::Debug::use_Carp_Always();
 		}
+		Forks::Super::Util->export_to_level(
+		    1, 'Forks::Super::Util', 'okl');
 	    }
 	}
     }
@@ -188,6 +201,8 @@ sub _init {
     # High values increase the average delay between the time one job
     # finishes and the next waiting job starts.
     $Forks::Super::Util::DEFAULT_PAUSE = 0.10; # seconds
+    $Forks::Super::Util::DEFAULT_PAUSE_IO = 0.05;
+
 
     *handle_CHLD = *Forks::Super::Sigchld::handle_CHLD;
 
@@ -208,12 +223,6 @@ sub _init {
     tie $IPC_DIR, 'Forks::Super::Job::Ipc::Tie';
 
     Forks::Super::Queue::init();
-
-    ### these settings caused issues with FreeBSD, t/11
-    #$Signals::XSIG::DEFAULT_BEHAVIOR{CHLD} = \&Forks::Super::handle_CHLD;
-    #$XSIG{CHLD}[-1] = 'DEFAULT';
-
-    #$Signals::XSIG::DEFAULT_BEHAVIOR{CHLD} = \&Forks::Super::handle_CHLD;
     $XSIG{CHLD}[-1] = \&Forks::Super::handle_CHLD;
     return;
 }
@@ -241,7 +250,7 @@ sub fork {
 	debug('fork(): ', $job->toString(), ' initialized.');
     }
 
-    while (! $job->can_launch) {
+    while (!$job->can_launch) {
 
 	if ($job->{debug}) {
 	    debug("fork(): job can not launch. Behavior=$job->{_on_busy}");
@@ -265,16 +274,22 @@ sub fork {
 		return $job->{pid};
 	    }
 	} else {
-	    # XXX - is $DEFAULT_PAUSE the right value here?
-	    # If the jobs we are waiting for take a long time to complete,
-	    # a long pause is reasonable. If the jobs are fast, a large
-	    # $DEFAULT_PAUSE will be tortue here.
 	    pause();
 	}
     }
 
     if ($job->{debug}) {
 	debug('fork: launch approved for job');
+    }
+
+    # on most systems, $SIG{CHLD}=undef means that the SIGCHLD handler
+    # we have set up (see Forks::Super::Sigchld) will not get called
+    # when this child exits. That would be bad, so check for that
+    # just in case the caller said 'delete $SIG{CHLD}' out of ignorance
+    # or malice.
+
+    if (!defined $SIG{CHLD}) {
+	$SIG{CHLD} = "\n";
     }
     return $job->launch;
 }
@@ -284,22 +299,22 @@ sub fork {
 # the child; removing all the global state that only the
 # parent process needs to know about.
 sub init_child {
-  if ($$ == $MAIN_PID) {
-    carp 'Forks::Super::init_child() ',
-      "method called from main process!\n";
+    if ($$ == $MAIN_PID) {
+	carp 'Forks::Super::init_child() ',
+	    "method called from main process!\n";
+	return;
+    }
+    Forks::Super::Queue::init_child();
+
+    @ALL_JOBS = ();
+
+    # XXX - if $F::S::CHILD_FORK_OK > 0, when do we reset $XSIG{CHLD} ?
+    $XSIG{CHLD} = [];
+    $SIG{CHLD} = 'DEFAULT';
+
+    Forks::Super::Config::init_child();
+    Forks::Super::Job::init_child();
     return;
-  }
-  Forks::Super::Queue::init_child();
-
-  @ALL_JOBS = ();
-
-  # XXX - if $F::S::CHILD_FORK_OK > 0, when do we reset $XSIG{CHLD} ?
-  $XSIG{CHLD} = [];
-  $SIG{CHLD} = 'DEFAULT';
-
-  Forks::Super::Config::init_child();
-  Forks::Super::Job::init_child();
-  return;
 }
 
 #
@@ -307,24 +322,26 @@ sub init_child {
 # return undef if we don't think the process is complete yet.
 #
 sub status {
-  my $job = shift;
-  if (ref $job ne 'Forks::Super::Job') {
-    $job = Forks::Super::Job::get($job) || return;
-  }
-  return $job->{status}; # might be undef
+    my $job = shift;
+    if (!ref($job) || !$job->isa('Forks::Super::Job')) {
+#   if (ref $job ne 'Forks::Super::Job') {
+	$job = Forks::Super::Job::get($job) || return;
+    }
+    return $job->{status}; # might be undef
 }
 
 sub state {
-  my $job = shift;
-  if (ref $job ne 'Forks::Super::Job') {
-    $job = Forks::Super::Job::get($job) || return;
-  }
-  return $job->{state};
+    my $job = shift;
+    if (!ref($job) || !$job->isa('Forks::Super::Job')) {
+#   if (ref $job ne 'Forks::Super::Job') {
+	$job = Forks::Super::Job::get($job) || return;
+    }
+    return $job->{state};
 }
 
 sub write_stdin {
-  my ($job, @msg) = @_;
-  return Forks::Super::Job::write_stdin($job, @msg);
+    my ($job, @msg) = @_;
+    return Forks::Super::Job::write_stdin($job, @msg);
 }
 
 #
@@ -343,14 +360,14 @@ sub write_stdin {
 # error condition and eof condition on handle
 #
 sub read_stdout {
-  return Forks::Super::Job::read_stdout(@_);
+    return Forks::Super::Job::read_stdout(@_);
 }
 
 #
 # like read_stdout() but for stderr.
 #
 sub read_stderr {
-  return Forks::Super::Job::read_stderr(@_);
+    return Forks::Super::Job::read_stderr(@_);
 }
 
 sub close_fh {
@@ -401,7 +418,15 @@ sub kill {
 	return;
     }
 
-    @jobs = _get_killable_jobs(@jobs);
+    if ($kill_proc_group) {
+	@jobs = _get_killable_jobs_in_process_groups(@jobs);
+	if (@jobs == 0) {
+	    # XXX
+	    return CORE::kill '-' . $signal, @_[1..$#_];
+	}
+    } else {
+	@jobs = _get_killable_jobs(@jobs);
+    }
     my @deferred_jobs = Forks::Super::Util::filter { $_->is_deferred } @jobs;
     if (@deferred_jobs > 0) {
 	push @signalled, _signal_deferred_jobs($signal, @deferred_jobs);
@@ -451,11 +476,13 @@ sub kill {
 }
 
 sub _get_killable_jobs {
-    my @jobs = @_;  # may be process ids or Forks::Super::Job objects
+    my (@jobs) = @_;
+    # may be process ids or Forks::Super::Job objects
 
     # coerce to Forks::Super::Job
     @jobs = map {
-	ref $_ eq 'Forks::Super::Job' 
+	ref($_) && $_->isa('Forks::Super::Job')
+#	ref $_ eq 'Forks::Super::Job' 
 	    ? $_
 	    : Forks::Super::Job::getOrMock($_)
     } @jobs;
@@ -464,8 +491,16 @@ sub _get_killable_jobs {
 	!$_->is_complete &&
 	    $_->{state} ne 'NEW' &&
 	    $_->{state} ne 'LAUNCHING'
-	    
     } @jobs;
+}
+
+sub _get_killable_jobs_in_process_groups {
+    my (@pgids) = @_;
+    my @jobs = map {
+	my $pgid = $_;
+	grep { $_->{pgid} == $pgid } @Forks::Super::ALL_JOBS
+    } @pgids;
+    return _get_killable_jobs(@jobs);
 }
 
 sub _signal_deferred_jobs {
@@ -525,60 +560,72 @@ sub _unreap {
 # convenience methods
 
 sub open2 {
-  my (@cmd) = @_;
-  my $options = {};
-  if (ref $cmd[-1] eq 'HASH') {
-    $options = pop @cmd;
-  }
-  $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
-  $options->{'child_fh'} = 'in,out';
-
-  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-    if (defined($options->{'timeout'}) || defined($options->{'expiration'})) {
-      croak 'Forks::Super::open2: ',
-	"can't use timeout/expiration option because sleep/alarm ",
-	"are incompatible on this system\n";
+    my (@cmd) = @_;
+    my $options = {};
+    if (ref $cmd[-1] eq 'HASH') {
+	$options = pop @cmd;
     }
-  }
+    $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
+    $options->{'child_fh'} = 'in,out';
 
-  my $pid = Forks::Super::fork( $options );
-  if (!defined $pid) {
-    return;
-  }
-  my $job = Forks::Super::Job::get($pid);
+=begin XXXXXX workaround 0.55
 
-  return ($job->{child_stdin},
-	  $job->{child_stdout},
-	  $pid, $job);
+    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+	if (defined($options->{'timeout'})||defined($options->{'expiration'})) {
+	    croak 'Forks::Super::open2: ',
+	    "can't use timeout/expiration option because sleep/alarm ",
+	    "are incompatible on this system\n";
+	}
+    }
+
+=end XXXXXX
+
+=cut
+
+    my $pid = Forks::Super::fork( $options );
+    if (!defined $pid) {
+	return;
+    }
+    my $job = Forks::Super::Job::get($pid);
+
+    return ($job->{child_stdin},
+	    $job->{child_stdout},
+	    $pid, $job);
 }
 
 sub open3 {
-  my (@cmd) = @_;
-  my $options = {};
-  if (ref $cmd[-1] eq 'HASH') {
-    $options = pop @cmd;
-  }
-  $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
-  $options->{'child_fh'} = 'in,out,err';
-
-  if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-    if (defined($options->{'timeout'}) || defined($options->{'expiration'})) {
-      croak 'Forks::Super::open2: ',
-	"can't use timeout/expiration option because sleep/alarm ",
-	"are incompatible on this system\n";
+    my (@cmd) = @_;
+    my $options = {};
+    if (ref $cmd[-1] eq 'HASH') {
+	$options = pop @cmd;
     }
-  }
+    $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
+    $options->{'child_fh'} = 'in,out,err';
 
-  my $pid = Forks::Super::fork( $options );
-  if (!defined $pid) {
-    return;
-  }
+=begin XXXXXX workaround 0.55
 
-  my $job = Forks::Super::Job::get($pid);
-  return ($job->{child_stdin},
-	  $job->{child_stdout},
-	  $job->{child_stderr},
-	  $pid, $job);
+    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
+	if (defined($options->{'timeout'})||defined($options->{'expiration'})) {
+	    croak 'Forks::Super::open2: ',
+	    "can't use timeout/expiration option because sleep/alarm ",
+	    "are incompatible on this system\n";
+	}
+    }
+
+=end XXXXXX
+
+=cut
+
+    my $pid = Forks::Super::fork( $options );
+    if (!defined $pid) {
+	return;
+    }
+
+    my $job = Forks::Super::Job::get($pid);
+    return ($job->{child_stdin},
+	    $job->{child_stdout},
+	    $job->{child_stderr},
+	    $pid, $job);
 }
 
 ###################################################################
@@ -595,7 +642,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.54
+Version 0.55
 
 =head1 SYNOPSIS
 
@@ -645,7 +692,7 @@ Version 0.54
     $pid = fork { child_fh => "in,out,err,:utf8" };
     if ($pid == 0) {      # child process
        sleep 1;
-       $x = <STDIN>; # read from parent's $Forks::Super::CHILD_STDIN{$pid}
+       $x = <STDIN>; # read from parent's $pid->{child_stdin} (output handle)
        print rand() > 0.5 ? "Yes\n" : "No\n" if $x eq "Clean your room\n";
        sleep 2;
        $i_can_haz_ice_cream = <STDIN>;
@@ -654,10 +701,12 @@ Version 0.54
        }
       exit 0;
     } # else parent process
-    $child_stdin = $Forks::Super::CHILD_STDIN{$pid};
+    $child_stdin = $pid->{child_stdin};
+    $child_stdin = $Forks::Super::CHILD_STDIN{$pid}; # alternate, deprecated
     print $child_stdin "Clean your room\n";
     sleep 2;
-    $child_stdout = $Forks::Super::CHILD_STDOUT{$pid};
+    $child_stdout = $pid->{child_stdout};
+    # -or- $child_stdout = $Forks::Super::CHILD_STDOUT{$pid}; # deprecated
     $child_response = <$child_stdout>; # -or-: Forks::Super::read_stdout($pid);
     if ($child_response eq "Yes\n") {
        print $child_stdin "Good boy. You can have ice cream.\n";
@@ -665,7 +714,8 @@ Version 0.54
        print $child_stdin "Bad boy. No ice cream for you.\n";
        sleep 2;
        $child_err = Forks::Super::read_stderr($pid);
-       # -or-  $child_err = readline($Forks::Super::CHILD_STDERR{$pid});
+       # -or-  $child_err = $pid->read_stderr();
+       # -or-  $child_err = readline($pid->{child_stderr});
        print $child_stdin "And no back talking!\n" if $child_err;
     }
 
@@ -841,11 +891,10 @@ Like the L<"cmd"> option, but the background process launches the
 shell command with L<exec|perlfunc/"exec"> instead of with
 L<system|perlfunc/"system_LIST__">.
 
-Using C<exec> instead of C<cmd> will spawn one fewer process,
-but note that the L<"timeout"> and
-L<"expiration"> options cannot
-be used with the C<exec> option (see
-L<"Options for simple job management">).
+Using C<exec> instead of C<cmd> will usually spawn one fewer process.
+Prior to v0.55, the L<"timeout"> and L<"expiration"> options
+(see L<"Options for simple job management">) could not be used
+with the C<exec> option, but that incompatibility has been fixed.
 
 =back
 
@@ -902,7 +951,7 @@ function) as the child process's deadline.
 
 If the L<setpgrp()|perlfunc/"setpgrp"> system call is implemented
 on your system, then this module will try to reset the process group
- ID of the child process. On timeout, the module will attempt to kill
+ID of the child process. On timeout, the module will attempt to kill
 off all subprocesses of the expiring child process.
 
 If the deadline is some time in the past (if the timeout is
@@ -914,10 +963,6 @@ call and installs its own handler for C<SIGALRM>. Do not use this
 feature with a child L<sub|"sub"> that also uses C<alarm> or that
 installs another C<SIGALRM> handler, or the results will be
 undefined.
-
-The C<timeout> and C<expiration> options cannot be used with the
-L<"exec"> option, since the child process will not be able to
-generate a C<SIGALRM> after an C<exec> call.
 
 If you have installed the 
 L<DateTime::Format::Natural|DateTime::Format::Natural> module,
@@ -1027,16 +1072,18 @@ L<DateTime::Format::Natural|DateTime::Format::Natural> module.
 
 =over 4
 
-=item C<< fork { child_fh => $fh_spec } >>
+=item C<< $pid = fork { child_fh => $fh_spec } >>
 
-=item C<< fork { child_fh => [ @fh_spec ] } >>
+=item C<< $pid = fork { child_fh => [ @fh_spec ] } >>
 
 Launches a child process and makes the child process's
 C<STDIN>, C<STDOUT>, and/or C<STDERR> filehandles available to
-the parent process in the scalar variables
+the parent process in the instance members
+C<< $pid->{child_stdin} >>, C<< $job->{child_stdout} >>, and
+C<< $pid->{child_stderr} >>, or in the package variables
 C<$Forks::Super::CHILD_STDIN{$pid}>,
 C<$Forks::Super::CHILD_STDOUT{$pid}>, and/or
-C<$Forks::Super::CHILD_STDERR{$pid}>, where C<$pid> is the PID
+C<$Forks::Super::CHILD_STDERR{$pid}>. C<$pid> is the
 return value from the fork call. This feature makes it possible,
 even convenient, for a parent process to communicate with a
 child, as this contrived example shows.
@@ -1044,15 +1091,20 @@ child, as this contrived example shows.
     $pid = fork { sub => \&pig_latinize, timeout => 10,
                   child_fh => "all" };
 
-    # in the parent, $Forks::Super::CHILD_STDIN{$pid} is an *output* filehandle
-    print {$Forks::Super::CHILD_STDIN{$pid}} "The blue jay flew away in May\n";
+    # in the parent, $Forks::Super::CHILD_STDIN{$pid} ($pid->{child_stdout})
+    # is an **output** filehandle
+
+    print {$pid->{child_stdin}} "The blue jay flew away in May\n";
 
     sleep 2; # give child time to start up and get ready for input
 
-    # and $Forks::Super::CHILD_STDOUT{$pid} is an *input* handle
-    $result = <{$Forks::Super::CHILD_STDOUT{$pid}}>;
+    # and $Forks::Super::CHILD_STDOUT{$pid} ($pid->{child_stdout}) and
+    # $Forks::Super::CHILD_STDERR{$pid} ($pid->{child_stderr}
+    # are **input** handles.
+
+    $result = < { $pid->{child_stdout} } >;
     print "Pig Latin translator says: $result\n"; # ==> eThay ueblay ayjay ewflay awayay inay ayMay\n
-    @errors = <{$Forks::Super::CHILD_STDERR{$pid}>;
+    @errors = readline( $pid->{child_stderr} );
     print "Pig Latin translator complains: @errors\n" if @errors > 0;
 
     sub pig_latinize {
@@ -1062,7 +1114,7 @@ child, as this contrived example shows.
             if ($word =~ /^qu/i) {
               print substr($word,2) . substr($word,0,2) . "ay";  # STDOUT
             } elsif ($word =~ /^([b-df-hj-np-tv-z][b-df-hj-np-tv-xz]*)/i) {
-              my $prefix = 1;
+              my $prefix = $1;
               $word =~ s/[b-df-hj-np-tv-z][b-df-hj-np-tv-xz]*//i;
 	      print $word . $prefix . "ay";
 	    } elsif ($word =~ /^[aeiou]/i) {
@@ -1118,6 +1170,8 @@ such as C<:crlf>, C<:utf8>, L<< C<:gzip>|PerlIO::gzip >>, etc.
 Some I/O layers may not work well with socket and pipe IPC.
 And of course they will not work well with Perl vE<lt>=5.6
 and its poorer support for I/O layers.
+
+See also: L<"write_stdin">, L<"read_stdout">, L<"read_stderr">.
 
 =cut
 
@@ -1217,7 +1271,7 @@ Forks::Super::Util::is_socket/is_pipe functions.
 IPC in this module is asynchronous. In general, you
 cannot tell whether the parent/child has written anything to
 be read in the child/parent. So getting C<undef> when reading
-from the C<$Forks::Super::CHILD_STDOUT{$pid}> handle does not
+from the C<< $pid->{child_stdout} >> handle does not
 necessarily mean that the child has finished (or even started!)
 writing to its STDOUT. Check out the C<seek HANDLE,0,1> trick
 in L<the perlfunc documentation for seek|perlfunc/seek>
@@ -1238,7 +1292,7 @@ Provides the data in C<$input> as the child process's standard input.
 Equivalent to, but a little more efficient than:
 
     $pid = fork { child_fh => "in", sub => sub { ... } };
-    print {$Forks::Super::CHILD_STDIN{$pid}} $input;
+    Forks::Super::write_stdin($pid, $input);
 
 C<$input> may either be a scalar, a reference to a scalar, or
 a reference to an array.
@@ -1260,7 +1314,7 @@ and standard error of the child process into the given scalar
 references. If you do not need to use the child's output while
 the child is running, it could be more convenient to use this
 construction than calling L<Forks::Super::read_stdout($pid)|/"read_stdout">
-(or C<< <{$Forks::Super::CHILD_STDOUT{$pid}}> >>) to obtain
+(or C<< readline($pid->{child_stdout}) >>) to obtain
 the child's output.
 
 =back
@@ -2596,6 +2650,8 @@ if the L<"debug"> or L<"undebug"> option is provided to C<fork>.
 
 =item C<%Forks::Super::CHILD_STDERR>
 
+B<Deprecated>. See B<Note>, below.
+
 In jobs that request access to the child process filehandles,
 these hash arrays contain filehandles to the standard input
 and output streams of the child. The filehandles for particular
@@ -2634,6 +2690,16 @@ can adjust their behavior based on the type of IPC channel
 (file, socket, or pipe) or other idiosyncracies of your operating
 system (#@$%^&*! Windows), B<so using those methods is preferred
 to using the filehandles directly>.
+
+B<Note that handles for background process IPC are also available
+through the> L<Forks::Super::Job> B<object> (the return value from
+C<Forks::Super::fork>), in
+
+    $pid->{child_stdin}
+    $pid->{child_stdout}
+    $pid->{child_stderr}
+
+This usage should be preferred to C<$CHILD_STDxxx{...}>.
 
 =back
 
@@ -2928,14 +2994,19 @@ but eventually it should be all right.
 
 Initialization of filehandles for a child process failed. The child process
 will continue, but it will be unable to receive input from the parent through
-the C<$Forks::Super::CHILD_STDIN{pid}> filehandle, or pass output to the
-parent through the filehandles C<$Forks::Super::CHILD_STDOUT{PID}>
-AND C<$Forks::Super::CHILD_STDERR{pid}>.
+the C<$Forks::Super::CHILD_STDIN{pid}> (C<pid->{child_stdin}>) filehandle, 
+or pass output to the parent through the filehandles 
+C<$Forks::Super::CHILD_STDOUT{pid}> and C<$Forks::Super::CHILD_STDERR{pid}>
+(C<pid->{child_stdout}> and C<pid->{child_stderr}>).
 
-=item C<exec option used, timeout option ignored>
+=cut
 
-A C<fork> call was made using the incompatible options
-L<"exec"> and L<"timeout">.
+#
+#=item C<exec option used, timeout option ignored>
+#
+#A C<fork> call was made using the incompatible options
+#L<"exec"> and L<"timeout">.
+#
 
 =back
 
@@ -2948,6 +3019,14 @@ though if L<you are used to setting|perlfunc/"fork">
     $SIG{CHLD} = 'IGNORE'
 
 in your code, you should still be OK.
+
+=cut
+
+# ------ 0.55 changes in FS::Wait might change this behavior.
+# ------ $SIG{CHLD}='IGNORE' may cause  wait/waitpid  to
+#        always return 0/-1
+
+=pod
 
 Some features of C<Forks::Super> use the
 L<alarm|perlfunc/"alarm"> function and custom

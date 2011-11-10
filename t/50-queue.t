@@ -62,16 +62,16 @@ ok($jo->{state} eq "REAPED" && $jm->{state} eq "REAPED" &&
    $ju->{state} eq "REAPED",
    "deferred jobs reaped after waitall");
 if (Forks::Super::Config::CONFIG_module("Time::HiRes")) {
-  ok($jo->{start} > $ju->{start}, 
-     "respect queue priority HR jm=" . ($jm->{start}-$^T)
-     . ",jo=" . ($jo->{start}-$^T) . ",ju=" . ($ju->{start}-$^T));
-  ok($jm->{start} > $jo->{start},
-     "respect queue priority start HR"); ### 15 HR ###
+    ok($jo->{start} > $ju->{start}, 
+       "respect queue priority HR jm=" . ($jm->{start}-$^T)
+       . ",jo=" . ($jo->{start}-$^T) . ",ju=" . ($ju->{start}-$^T));
+    ok($jm->{start} > $jo->{start},
+       "respect queue priority start HR"); ### 15 HR ###
 
-  # can't guarantee the order that the jobs will be reaped,
-  # so don't test whether the end times are in the expected order.
+    # can't guarantee the order that the jobs will be reaped,
+    # so don't test whether the end times are in the expected order.
 
 } else {
-  ok($jo->{start} >= $ju->{start}, "respect queue priority");
-  ok($jm->{start} >= $jo->{start}, "respect queue priority");
+    ok($jo->{start} >= $ju->{start}, "respect queue priority");
+    ok($jm->{start} >= $jo->{start}, "respect queue priority");
 }

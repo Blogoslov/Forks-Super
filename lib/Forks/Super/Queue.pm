@@ -17,7 +17,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 # must sync FIRST_DEFERRED_ID with Win32 code in Forks::Super::Util::isValidPid
 use constant FIRST_DEFERRED_ID => -500000;
@@ -43,9 +43,9 @@ our $CHECK_FOR_REAP = 1;
 # use var $Forks::Super::QUEUE_INTERRUPT, not lexical package var
 
 sub get_default_priority {
-  my $q = $DEFAULT_QUEUE_PRIORITY;
-  $DEFAULT_QUEUE_PRIORITY -= &QUEUE_PRIORITY_INCREMENT;
-  return $q;
+    my $q = $DEFAULT_QUEUE_PRIORITY;
+    $DEFAULT_QUEUE_PRIORITY -= &QUEUE_PRIORITY_INCREMENT;
+    return $q;
 }
 
 sub init {
@@ -65,13 +65,13 @@ sub init {
 }
 
 sub init_child {
-  @QUEUE = ();
-  undef $QUEUE_MONITOR_PID;
-  if ($Forks::Super::QUEUE_INTERRUPT
-      && $Forks::Super::SysInfo::CONFIG{SIGUSR1}) {
-    $SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT';
-  }
-  return;
+    @QUEUE = ();
+    undef $QUEUE_MONITOR_PID;
+    if ($Forks::Super::QUEUE_INTERRUPT
+	&& $Forks::Super::SysInfo::CONFIG{SIGUSR1}) {
+	$SIG{$Forks::Super::QUEUE_INTERRUPT} = 'DEFAULT';
+    }
+    return;
 }
 
 #
@@ -89,39 +89,39 @@ sub init_child {
 # $Forks::Super::QUEUE_INTERRUPT signals to this
 #
 sub _launch_queue_monitor {
-  if (!$Forks::Super::SysInfo::CONFIG{'SIGUSR1'}) {
-    debug('_lqm returning: no SIGUSR1') if $QUEUE_DEBUG;
-    return;
-  }
-  if (defined $QUEUE_MONITOR_PID) {
-    debug('_lqm returning: $QUEUE_MONITOR_PID defined') if $QUEUE_DEBUG;
-    return;
-  }
+    if (!$Forks::Super::SysInfo::CONFIG{'SIGUSR1'}) {
+	debug('_lqm returning: no SIGUSR1') if $QUEUE_DEBUG;
+	return;
+    }
+    if (defined $QUEUE_MONITOR_PID) {
+	debug('_lqm returning: $QUEUE_MONITOR_PID defined') if $QUEUE_DEBUG;
+	return;
+    }
 
-  if ($Forks::Super::SysInfo::CONFIG{'setitimer'}) {
-    _launch_queue_monitor_setitimer();
-  } else {
-    _launch_queue_monitor_fork();
-  }
-  return;
+    if ($Forks::Super::SysInfo::CONFIG{'setitimer'}) {
+	_launch_queue_monitor_setitimer();
+    } else {
+	_launch_queue_monitor_fork();
+    }
+    return;
 }
 
 sub _check_queue {
-  # check_queue call triggered by a SIGALRM. 
-  # XXX - we can do logging or other special handling here ...
-  check_queue();
-  return;
+    # check_queue call triggered by a SIGALRM. 
+    # XXX - we can do logging or other special handling here ...
+    check_queue();
+    return;
 }
 
 sub _launch_queue_monitor_setitimer {
 
-  $QUEUE_MONITOR_PPID = $$;
-  $QUEUE_MONITOR_PID = 'setitimer';
-  $XSIG{ALRM}[2] = \&_check_queue;
+    $QUEUE_MONITOR_PPID = $$;
+    $QUEUE_MONITOR_PID = 'setitimer';
+    $XSIG{ALRM}[2] = \&_check_queue;
 
-  Time::HiRes::setitimer(
+    Time::HiRes::setitimer(
 	&Time::HiRes::ITIMER_REAL, $QUEUE_MONITOR_FREQ, $QUEUE_MONITOR_FREQ);
-  return;
+    return;
 }
 
 sub _launch_queue_monitor_fork {
@@ -199,45 +199,43 @@ sub _launch_queue_monitor_fork_child {
 }
 
 sub _kill_queue_monitor {
-  if (defined($QUEUE_MONITOR_PPID) && $$ == $QUEUE_MONITOR_PPID) {
-    if (defined $QUEUE_MONITOR_PID) {
-      if ($DEBUG || $QUEUE_DEBUG) {
-	debug("killing queue monitor $QUEUE_MONITOR_PID");
-      }
-	
-      if ($QUEUE_MONITOR_PID eq 'setitimer') {
+    if (defined($QUEUE_MONITOR_PPID) && $$ == $QUEUE_MONITOR_PPID) {
+	if (defined $QUEUE_MONITOR_PID) {
+	    if ($DEBUG || $QUEUE_DEBUG) {
+		debug("killing queue monitor $QUEUE_MONITOR_PID");
+	    }
 
-	$XSIG{ALRM}[1] = undef;
-	$XSIG{ALRM}[2] = undef;
-	Time::HiRes::setitimer(&Time::HiRes::ITIMER_REAL, 0);
-	undef $QUEUE_MONITOR_PID;
-	undef $QUEUE_MONITOR_PPID;
+	    if ($QUEUE_MONITOR_PID eq 'setitimer') {
 
-      } elsif ($QUEUE_MONITOR_PID > 0) {
+		$XSIG{ALRM}[1] = undef;
+		$XSIG{ALRM}[2] = undef;
+		Time::HiRes::setitimer(&Time::HiRes::ITIMER_REAL, 0);
+		undef $QUEUE_MONITOR_PID;
+		undef $QUEUE_MONITOR_PPID;
 
-	# on linux x86_64-linux, is this the source of the t/42d failures?
-	CORE::kill 'TERM', $QUEUE_MONITOR_PID;
+	    } elsif ($QUEUE_MONITOR_PID > 0) {
+		CORE::kill 'TERM', $QUEUE_MONITOR_PID;
 
-	my $z = CORE::waitpid $QUEUE_MONITOR_PID, 0;
-	if ($DEBUG || $QUEUE_DEBUG) {
-	  debug("kill queue monitor result: $z");
+		my $z = CORE::waitpid $QUEUE_MONITOR_PID, 0;
+		if ($DEBUG || $QUEUE_DEBUG) {
+		    debug("kill queue monitor result: $z");
+		}
+
+		undef $QUEUE_MONITOR_PID;
+		undef $QUEUE_MONITOR_PPID;
+		if (defined $OLD_QINTERRUPT_SIG) {
+		    $SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_QINTERRUPT_SIG;
+		}
+	    }
 	}
-
-	undef $QUEUE_MONITOR_PID;
-	undef $QUEUE_MONITOR_PPID;
-	if (defined $OLD_QINTERRUPT_SIG) {
-	  $SIG{$Forks::Super::QUEUE_INTERRUPT} = $OLD_QINTERRUPT_SIG;
-	}
-      }
     }
-  }
-  return;
+    return;
 }
 
 
 sub _cleanup {
-  _kill_queue_monitor();
-  return;
+    _kill_queue_monitor();
+    return;
 }
 
 #
@@ -246,38 +244,38 @@ sub _cleanup {
 # deferred jobs
 #
 sub queue_job {
-  my $job = shift;
-  if ($Forks::Super::Job::INSIDE_END_QUEUE) {
-    return;
-  }
-  if (defined $job) {
-    $job->{state} = 'DEFERRED';
-    $job->{queued} ||= Time::HiRes::time();
-    $job->{pid} = $NEXT_DEFERRED_ID--;
-    $Forks::Super::ALL_JOBS{$job->{pid}} = $job;
-    if ($DEBUG || $QUEUE_DEBUG) {
-      debug('queueing job ', $job->toString());
+    my $job = shift;
+    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
+	return;
     }
-  }
+    if (defined $job) {
+	$job->{state} = 'DEFERRED';
+	$job->{queued} ||= Time::HiRes::time();
+	$job->{pid} = $NEXT_DEFERRED_ID--;
+	$Forks::Super::ALL_JOBS{$job->{pid}} = $job;
+	if ($DEBUG || $QUEUE_DEBUG) {
+	    debug('queueing job ', $job->toString());
+	}
+    }
 
-  my @q = grep { $_->{state} eq 'DEFERRED' } @Forks::Super::ALL_JOBS;
-  @QUEUE = @q;
-  if (@QUEUE > 0 && !$QUEUE_MONITOR_PID && !$INHIBIT_QUEUE_MONITOR) {
-    _launch_queue_monitor();
-  } elsif (@QUEUE == 0 && defined($QUEUE_MONITOR_PID)) {
-    _kill_queue_monitor();
-  }
-  return;
+    my @q = grep { $_->{state} eq 'DEFERRED' } @Forks::Super::ALL_JOBS;
+    @QUEUE = @q;
+    if (@QUEUE > 0 && !$QUEUE_MONITOR_PID && !$INHIBIT_QUEUE_MONITOR) {
+	_launch_queue_monitor();
+    } elsif (@QUEUE == 0 && defined($QUEUE_MONITOR_PID)) {
+	_kill_queue_monitor();
+    }
+    return;
 }
 
 sub _check_for_reap {
-  if ($CHECK_FOR_REAP && $Forks::Super::Sigchld::REAP > 0) {
-    if ($DEBUG || $QUEUE_DEBUG) {
-      debug('reap during queue examination -- restart');
+    if ($CHECK_FOR_REAP && $Forks::Super::Sigchld::REAP > 0) {
+	if ($DEBUG || $QUEUE_DEBUG) {
+	    debug('reap during queue examination -- restart');
+	}
+	return 1;
     }
-    return 1;
-  }
-  return;
+    return;
 }
 
 #
@@ -285,37 +283,37 @@ sub _check_for_reap {
 # DEFFERED state.
 #
 sub run_queue {
-  my ($ignore) = @_;
-  if (@QUEUE <= 0) {
-    return;
-  }
-  if ($Forks::Super::Job::INSIDE_END_QUEUE > 0) {
-    return;
-  }
+    my ($ignore) = @_;
+    if (@QUEUE <= 0) {
+	return;
+    }
+    if ($Forks::Super::Job::INSIDE_END_QUEUE > 0) {
+	return;
+    }
 
-  {
-    no warnings 'once';
-    return if $Forks::Super::CHILD_FORK_OK <= 0
-      && $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
-  }
-  queue_job();
+    {
+	no warnings 'once';
+	return if $Forks::Super::CHILD_FORK_OK <= 0
+	    && $$ != ($Forks::Super::MAIN_PID || $MAIN_PID);
+    }
+    queue_job();
 
-  return if @QUEUE <= 0;
+    return if @QUEUE <= 0;
 
-  if ($_LOCK++ > 0) {
+    if ($_LOCK++ > 0) {
+	$_LOCK--;
+	return;
+    }
+
+    # tasks for run_queue:
+    #   assemble all DEFERRED jobs
+    #   order by priority
+    #   go through the list and attempt to launch each job in order.
+
+    debug('run_queue(): examining deferred jobs') if $DEBUG || $QUEUE_DEBUG;
+    while (_attempt_to_launch_deferred_jobs()) { 1 }
     $_LOCK--;
     return;
-  }
-
-  # tasks for run_queue:
-  #   assemble all DEFERRED jobs
-  #   order by priority
-  #   go through the list and attempt to launch each job in order.
-
-  debug('run_queue(): examining deferred jobs') if $DEBUG || $QUEUE_DEBUG;
-  while (_attempt_to_launch_deferred_jobs()) { 1 }
-  $_LOCK--;
-  return;
 }
 
 sub _get_deferred_jobs {
@@ -372,36 +370,36 @@ sub _attempt_to_launch_deferred_jobs {
 }
 
 sub suspend_resume_jobs {
-  my @jobs = grep {
-    defined($_->{suspend}) &&
-      ($_->{state} eq 'ACTIVE' || $_->{state} eq 'SUSPENDED')
+    my @jobs = grep {
+	defined($_->{suspend}) &&
+	    ($_->{state} eq 'ACTIVE' || $_->{state} eq 'SUSPENDED')
     } @Forks::Super::ALL_JOBS;
-  return if @jobs <= 0;
+    return if @jobs <= 0;
 
-  if ($_LOCK++ > 0) {
+    if ($_LOCK++ > 0) {
+	$_LOCK--;
+	return;
+    }
+
+    debug('suspend_resume_jobs(): examining jobs') if $DEBUG || $QUEUE_DEBUG;
+
+    foreach my $job (@jobs) {
+	no strict 'refs';
+	my $job_is_suspended = $job->{state} =~ /SUSPEND/;
+	my $action = $job->{suspend}->();
+	if ($action < 0 && ! $job_is_suspended) {
+	    $job->suspend;
+	    debug("suspend_resume_jobs: suspend callback value $action for ",
+		  'job ', $job->{pid}, ' ... suspending') if $job->{debug};
+	} elsif ($action > 0 && $job_is_suspended) {
+	    $job->resume;
+	    debug("suspend_resume_jobs: suspend callback value $action for ",
+		  'job ', $job->{pid}, ' ... resuming') if $job->{debug};
+	}
+    }
+
     $_LOCK--;
     return;
-  }
-
-  debug('suspend_resume_jobs(): examining jobs') if $DEBUG || $QUEUE_DEBUG;
-
-  foreach my $job (@jobs) {
-    no strict 'refs';
-    my $job_is_suspended = $job->{state} =~ /SUSPEND/;
-    my $action = $job->{suspend}->();
-    if ($action < 0 && ! $job_is_suspended) {
-	$job->suspend;
-	debug("suspend_resume_jobs: suspend callback value $action for ",
-	      'job ', $job->{pid}, ' ... suspending') if $job->{debug};
-    } elsif ($action > 0 && $job_is_suspended) {
-	$job->resume;
-	debug("suspend_resume_jobs: suspend callback value $action for ",
-	      'job ', $job->{pid}, ' ... resuming') if $job->{debug};
-    }
-  }
-
-  $_LOCK--;
-  return;
 }
 
 #
@@ -415,9 +413,9 @@ sub suspend_resume_jobs {
 # or  Forks::Super::run_queue  manually from time to time.
 #
 sub check_queue {
-  run_queue() if !$_LOCK;
-  suspend_resume_jobs() if !$_LOCK;
-  return;
+    run_queue() if !$_LOCK;
+    suspend_resume_jobs() if !$_LOCK;
+    return;
 }
 
 #############################################################################
@@ -426,21 +424,21 @@ sub check_queue {
 # we should restart the queue monitor.
 
 sub Forks::Super::Queue::QueueMonitorFreq::TIESCALAR {
-  my ($class,$value) = @_;
-  $value = int $value;
-  if ($value == 0) {
-    $value = 1;
-  } elsif ($value < 0) {
-    $value = &DEFAULT_QUEUE_MONITOR_FREQ; # 30 seconds
-  }
-  debug('new F::S::Q::QueueMonitorFreq obj') if $QUEUE_DEBUG;
-  return bless \$value, $class;
+    my ($class,$value) = @_;
+    $value = int $value;
+    if ($value == 0) {
+	$value = 1;
+    } elsif ($value < 0) {
+	$value = &DEFAULT_QUEUE_MONITOR_FREQ; # 30 seconds
+    }
+    debug('new F::S::Q::QueueMonitorFreq obj') if $QUEUE_DEBUG;
+    return bless \$value, $class;
 }
 
 sub Forks::Super::Queue::QueueMonitorFreq::FETCH {
-  my $self = shift;
-  debug("F::S::Q::QueueMonitorFreq::FETCH: $$self") if $QUEUE_DEBUG;
-  return $$self;
+    my $self = shift;
+    debug("F::S::Q::QueueMonitorFreq::FETCH: $$self") if $QUEUE_DEBUG;
+    return $$self;
 }
 
 sub Forks::Super::Queue::QueueMonitorFreq::STORE {
@@ -471,14 +469,14 @@ sub Forks::Super::Queue::QueueMonitorFreq::STORE {
 # always call _kill_queue_monitor.
 
 sub Forks::Super::Queue::InhibitQueueMonitor::TIESCALAR {
-  my ($class,$value) = @_;
-  $value = 0+!!$value;
-  return bless \$value, $class;
+    my ($class,$value) = @_;
+    $value = 0+!!$value;
+    return bless \$value, $class;
 }
 
 sub Forks::Super::Queue::InhibitQueueMonitor::FETCH {
-  my $self = shift;
-  return $$self;
+    my $self = shift;
+    return $$self;
 }
 
 sub Forks::Super::Queue::InhibitQueueMonitor::STORE {
@@ -500,13 +498,13 @@ sub Forks::Super::Queue::InhibitQueueMonitor::STORE {
 # Restart queue monitor if value for $QUEUE_INTERRUPT is changed.
 
 {
-  no warnings 'once';
+    no warnings 'once';
 
-  *Forks::Super::Queue::QueueInterrupt::TIESCALAR
-    = \&Forks::Super::Tie::Enum::TIESCALAR;
+    *Forks::Super::Queue::QueueInterrupt::TIESCALAR
+	= \&Forks::Super::Tie::Enum::TIESCALAR;
 
-  *Forks::Super::Queue::QueueInterrupt::FETCH
-    = \&Forks::Super::Tie::Enum::FETCH;
+    *Forks::Super::Queue::QueueInterrupt::FETCH
+	= \&Forks::Super::Tie::Enum::FETCH;
 }
 
 sub Forks::Super::Queue::QueueInterrupt::STORE {
@@ -535,7 +533,7 @@ Forks::Super::Queue
 
 =head1 VERSION
 
-0.54
+0.55
 
 =head1 DESCRIPTION
 

@@ -31,13 +31,13 @@ my $t = Time::HiRes::time();
 my $count = waitall 3.5 + ($t5 - $t);
 $t = Time::HiRes::time() - $t5;
 ok($count == 2, "waitall reaped $count==2 processes after 2 sec"); ### 20 ###
-ok($t >= 3.33 && $t <= 4.05, "waitall respected timeout ${t}s expected ~3s");
+okl($t >= 3.33 && $t <= 4.05, "waitall respected timeout ${t}s expected ~3s");
 
 $t = Time::HiRes::time();
 $count = waitall 5 + ($t5 - $t);
 $t = Time::HiRes::time() - $t5;
 ok($count == 0, "waitall reaped $count==0 processes in next 1 sec"); ### 22 ###
-ok($t >= 4.85 && $t <= 6.25,                ### 23 ### was 5.25 obs 
+okl($t >= 4.85 && $t <= 6.25,                ### 23 ### was 5.25 obs 
    "waitall respected timeout ${t}s expected ~5s");
 
 $t = Time::HiRes::time();
@@ -45,7 +45,7 @@ $count = waitall 8 + ($t5 - $t);
 $t = Time::HiRes::time() - $t5;
 ok($count == 1,                             ### 24 ###
    "waitall reaped $count==1 process in next 3 sec t=$t");
-ok($t >= 7.15 && $t <= 10.8,                ### 25 ### was 8.55 obs 8.56.10.77
+okl($t >= 7.15 && $t <= 10.8,                ### 25 ### was 8.55 obs 8.56.10.77
    "waitall respected timeout ${t}s expected ~8s");
 
 $t = Time::HiRes::time();

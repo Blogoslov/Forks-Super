@@ -29,54 +29,54 @@ use strict;
 use warnings;
 
 our @ISA = qw(Exporter IO::Handle);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 sub TIEHANDLE {
-  my ($class, %props) = @_;
-  my $self = bless Forks::Super::Job::Ipc::_gensym(), $class;
-  foreach my $attr (keys %props) {
-      $$self->{$attr} = $props{$attr};
-  }
-  $$self->{created} = Time::HiRes::time();
-  return $self;
+    my ($class, %props) = @_;
+    my $self = bless Forks::Super::Job::Ipc::_gensym(), $class;
+    foreach my $attr (keys %props) {
+	$$self->{$attr} = $props{$attr};
+    }
+    $$self->{created} = Time::HiRes::time();
+    return $self;
 }
 
 #############################################################################
 
 sub OPEN {
-  my ($self, $mode, $expr) = @_;
-  $$self->{OPEN}++;
-  my ($result, $new_err);
-  my $old_err = $!;
-  if ($$self->{is_opened}) {
+    my ($self, $mode, $expr) = @_;
+    $$self->{OPEN}++;
+    my ($result, $new_err);
+    my $old_err = $!;
+    if ($$self->{is_opened}) {
     # filehandle already open, implicit close
-    $self->CLOSE;
-  }
-
-  {
-    local $! = 0;
-    if (defined $expr) {
-      # XXX - we currently don't make calls with the 4+ arg version of open
-      #       so we don't need to support it now, but one day we might.
-
-      # suppress "Filehandle %s reopened as %s only for input/output",
-      # which can occur when we close and reopen the STDxxx filehandles
-      no warnings 'io';
-      $result = open *$self, $mode, $expr;
-    } else {
-      $result = open *$self, $mode;         ## no critic (TwoArgOpen)
+	$self->CLOSE;
     }
-    $$self->{opened} = ($$self->{is_opened} = $result) && Time::HiRes::time();
-    if (!$result) {
-	$$self->{closed} = "open($mode,$expr) failed: $!";
-    } else {
-	# $$self->{closed} could be defined from an earlier, failed open attempt
-	delete $$self->{closed};
+
+    {
+	local $! = 0;
+	if (defined $expr) {
+	    # XXX - we currently don't make calls with the 4+ arg version of open
+	    #       so we don't need to support it now, but one day we might.
+
+	    # suppress "Filehandle %s reopened as %s only for input/output",
+	    # which can occur when we close and reopen the STDxxx filehandles
+	    no warnings 'io';
+	    $result = open *$self, $mode, $expr;
+	} else {
+	    $result = open *$self, $mode;         ## no critic (TwoArgOpen)
+	}
+	$$self->{opened} = ($$self->{is_opened} = $result) && Time::HiRes::time();
+	if (!$result) {
+	    $$self->{closed} = "open($mode,$expr) failed: $!";
+	} else {
+	    # $$self->{closed} could be defined from an earlier, failed open attempt
+	    delete $$self->{closed};
+	}
+	$$self->{open_error} = $new_err = $!;
     }
-    $$self->{open_error} = $new_err = $!;
-  }
-  $! = $new_err || $old_err;
-  return $result;
+    $! = $new_err || $old_err;
+    return $result;
 }
 
 sub BINMODE {
@@ -180,25 +180,12 @@ sub CLOSE {
 }
 
 sub EOF {
-  my $self = shift;
-  return eof $self;
+    my $self = shift;
+    return eof $self;
 }
 
 sub is_pipe {
-  return 0;
-}
-
-sub UNTIE {
-    # XXX - without this method, we often get
-    #   'untie attempted while ... inner references ...' message.
-    my ($self, $existing_inner_references) = @_;
-    if ($existing_inner_references > 1) {
-	if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
-	    warn 'untie attempted while ', $existing_inner_references,
-	    	' still exist';
-	}
-    }
-    return;
+    return 0;
 }
 
 sub Forks::Super::Tie::Delegator::AUTOLOAD {

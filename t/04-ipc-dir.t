@@ -14,7 +14,7 @@ if (${^TAINT}) {
 	if defined $ENV{IPC_DIR};
 }
 
-if ($ENV{IPC_DIR} eq 'undef') {
+if ($ENV{IPC_DIR} && $ENV{IPC_DIR} eq 'undef') {
    SKIP: {
        skip "file IPC disabled by environment var", 14;
    };

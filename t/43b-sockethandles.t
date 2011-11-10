@@ -4,8 +4,8 @@ use strict;
 use warnings;
 
 sub _read_socket {
-  my $handle = shift;
-  return $Forks::Super::Job::Ipc::USE_TIE_SH
+    my $handle = shift;
+    return $Forks::Super::Job::Ipc::USE_TIE_SH
 	? <$handle>
 	: Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
@@ -19,46 +19,48 @@ sub _read_socket {
 
 # this is a subroutine that copies STDIN to STDOUT and optionally STDERR
 sub repeater {
-  Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
+    Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
 
-  my ($n, $e) = @_;
-  my $end_at = time + 6;
-  my ($input_found, $input) = 1;
-  my $curpos;
-  local $!;
+    my ($n, $e) = @_;
+    my $end_at = time + 6;
+    my ($input_found, $input) = 1;
+    my $curpos;
+    local $!;
 
-  binmode STDOUT;  # for Windows compatibility
-  binmode STDERR;  # has no bad effect on other OS
-  Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
-  while (time < $end_at) {
-    while (defined ($_ = _read_socket(*STDIN))) {
-      if ($Forks::Super::DEBUG) {
-	$input = substr($_,0,-1);
-	$input_found = 1;
-	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
-			    fileno(STDIN));
-      }
-      if ($e) {
-        print STDERR $_;
-	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
-			      fileno(STDERR));
+    binmode STDOUT;  # for Windows compatibility
+    binmode STDERR;  # has no bad effect on other OS
+    Forks::Super::debug("repeater: ready to read input")
+	if $Forks::Super::DEBUG;
+    while (time < $end_at) {
+	while (defined ($_ = _read_socket(*STDIN))) {
+	    if ($Forks::Super::DEBUG) {
+		$input = substr($_,0,-1);
+		$input_found = 1;
+		Forks::Super::debug("repeater: read \"$input\" on STDIN/",
+				    fileno(STDIN));
+	    }
+	    if ($e) {
+		print STDERR $_;
+		if ($Forks::Super::DEBUG) {
+		    Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
+					fileno(STDERR));
+		}
+	    }
+	    for (my $i = 0; $i < $n; $i++) {
+		print STDOUT "$i:$_";
+		if ($Forks::Super::DEBUG) {
+		    Forks::Super::debug(
+			"repeater: wrote [$i] \"$input\" to STDOUT/",
+			fileno(STDOUT));
+		}
+	    }
 	}
-      }
-      for (my $i = 0; $i < $n; $i++) {
-        print STDOUT "$i:$_";
-	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
-			      fileno(STDOUT));
+	if ($Forks::Super::DEBUG && $input_found) {
+	    $input_found = 0;
+	    Forks::Super::debug("repeater: no input");
 	}
-      }
+	Forks::Super::pause();
     }
-    if ($Forks::Super::DEBUG && $input_found) {
-      $input_found = 0;
-      Forks::Super::debug("repeater: no input");
-    }
-    Forks::Super::pause();
-  }
 }
 
 #######################################################
@@ -80,20 +82,20 @@ ok($Forks::Super::CHILD_STDOUT{$pid} eq $Forks::Super::CHILD_STDERR{$pid},
 my $t = time;
 my @out = ();
 while (time < $t+12) {
-  while ((my $line = Forks::Super::read_stdout($pid))) {
-    push @out, $line;
-  }
+    while ((my $line = Forks::Super::read_stdout($pid))) {
+	push @out, $line;
+    }
 }
 
 Forks::Super::close_fh($pid);
 
 # perhaps some warning message was getting into the output stream
 if (@out != 3) {
-  print STDERR "\ntest join+read stdout: failure imminent.\n";
-  print STDERR "Expecting three lines but what we get is:\n";
-  my $i;
-  print STDERR map { ("Output line ", ++$i , ": $_") } @out;
-  print STDERR "\n";
+    print STDERR "\ntest join+read stdout: failure imminent.\n";
+    print STDERR "Expecting three lines but what we get is:\n";
+    my $i;
+    print STDERR map { ("Output line ", ++$i , ": $_") } @out;
+    print STDERR "\n";
 }
 
 @out = grep { !/alarm\(\) not available/ } @out;

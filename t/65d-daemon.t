@@ -20,7 +20,7 @@ if (${^TAINT}) {
 
 ### to cmd
 
-my $output = "$CWD/t/out/daemon3.$$.out";
+my $output = "$CWD/t/out/daemon4.$$.out";
 my $pid = fork {
     daemon => 1,
     env => { LOG_FILE => $output, VALUE => 10 },
@@ -72,7 +72,7 @@ SKIP: {
     $Forks::Super::Debug::DEBUG = 0;
 
     my $k1 = Forks::Super::kill 'TERM', $pid;
-    sleep 3;
+    sleep 4;
     my $s3 = -s $output;
     sleep 2;
     my $k2 = Forks::Super::kill 'ZERO', $pid;

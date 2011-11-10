@@ -16,10 +16,17 @@ Forks::Super::Job::Timeout::warm_up();
 #
 
 SKIP: {
-  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-    skip "alarm function unavailable on this system ($^O,$]), "
-      . "can't test timeout feature", 3;
-  }
+
+=begin XXXXXX workaround 0.55
+
+    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
+	skip "alarm function unavailable on this system ($^O,$]), "
+	    . "can't test timeout feature", 3;
+    }
+
+=end XXXXXX
+
+=cut
 
 #######################################################
 
@@ -33,8 +40,8 @@ ok($p == $pid, "wait succeeded");
 # "fast fail" invokes Carp::croak, which wants to load
 # Carp::Heavy, Scalar::Util, List::Util, List::Util::XS.
 # That can add up.
-#ok($t <= 1.0, "expected fast fail took ${t}s"); ### 17 ###
-ok($t <= 1.9, "expected fast fail took ${t}s"); ### 17 ###
+#okl($t <= 1.0, "expected fast fail took ${t}s"); ### 17 ###
+okl($t <= 1.9, "expected fast fail took ${t}s"); ### 17 ###
 ok($? != 0, "job expired with non-zero exit STATUS");
 
 #######################################################

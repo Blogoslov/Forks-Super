@@ -59,7 +59,7 @@ my $p = wait 5.0;
 $t = Time::HiRes::time() - $t;
 ok($p == &Forks::Super::Wait::TIMEOUT,                     ### 5 ###
    "wait|wait times out $p==TIMEOUT");
-ok($t > 4.95,                                              ### 6 ###
+okl($t > 4.95,                                              ### 6 ###
    "wait|wait times out ${t}s, expected ~5s");
 ok($j->{state} eq 'SUSPENDED',                             ### 7 ###
    "wait|wait does not resume job");
@@ -70,7 +70,7 @@ $p = wait 5.0;
 $t = Time::HiRes::time() - $t;
 ok($p == &Forks::Super::Wait::ONLY_SUSPENDED_JOBS_LEFT,    ### 8 ###
    "wait|fail returns invalid");
-ok($t < 1.95, "fast fail ${t}s expected <1s");
+okl($t < 1.95, "fast fail ${t}s expected <1s");
 ok($j->{state} eq 'SUSPENDED',                             ### 10 ###
    "wait|fail does not resume job");
 
@@ -80,7 +80,7 @@ $p = wait 10.0;
 $t = Time::HiRes::time() - $t;
 ok($p == $pid,                                             ### 11 ###
    "wait|resume makes a process complete");
-ok($t > 0.95 && $t < 9,                                    ### 12 ###
+okl($t > 0.95 && $t < 9,                                    ### 12 ###
    "job completes before wait timeout ${t}s, expected 3-4s"); # obs 0.9995
 ok($j->{state} eq "REAPED", "job is complete");
 

@@ -13,59 +13,59 @@ $| = 1;
 #
 
 sub _read_pipe_that_might_be_a_socket {
-  # on MSWin32, we almost never use pipes.
+    # on MSWin32, we almost never use pipes.
 
-  my $handle = shift;
-  return $Forks::Super::Job::Ipc::USE_TIE_SH 
+    my $handle = shift;
+    return $Forks::Super::Job::Ipc::USE_TIE_SH 
 		|| !Forks::Super::Util::is_socket($handle)
-      ? <$handle>
-      : Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
+        ? <$handle>
+       : Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
 
 # this is a subroutine that copies STDIN to STDOUT and optionally STDERR
 sub repeater {
-  my ($n, $e) = @_;
+    my ($n, $e) = @_;
 
-  Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
-  my $end_at = time + 6;
-  my ($input_found, $input) = 1;
-  my $curpos;
-  local $!;
+    Forks::Super::debug("repeater: method beginning") if $Forks::Super::DEBUG;
+    my $end_at = time + 6;
+    my ($input_found, $input) = 1;
+    my $curpos;
+    local $!;
 
-  binmode STDOUT;  # for Windows compatibility
-  binmode STDERR;  # has no bad effect on other OS
-  Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
-  while (time < $end_at) {
-    while ($_ = _read_pipe_that_might_be_a_socket(*STDIN)) {
+    binmode STDOUT;  # for Windows compatibility
+    binmode STDERR;  # has no bad effect on other OS
+    Forks::Super::debug("repeater: ready to read input") if $Forks::Super::DEBUG;
+    while (time < $end_at) {
+	while ($_ = _read_pipe_that_might_be_a_socket(*STDIN)) {
 
-      if ($Forks::Super::DEBUG) {
-	$input = substr($_,0,-1);
-	$input_found = 1;
-	Forks::Super::debug("repeater: read \"$input\" on STDIN/",
-			    fileno(*STDIN));
-      }
-      if ($e) {
-        print STDERR $_;
-	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
-			      fileno(*STDERR));
+	    if ($Forks::Super::DEBUG) {
+		$input = substr($_,0,-1);
+		$input_found = 1;
+		Forks::Super::debug("repeater: read \"$input\" on STDIN/",
+				    fileno(*STDIN));
+	    }
+	    if ($e) {
+		print STDERR $_;
+		if ($Forks::Super::DEBUG) {
+		    Forks::Super::debug("repeater: wrote \"$input\" to STDERR/",
+					fileno(*STDERR));
+		}
+	    }
+	    for (my $i = 0; $i < $n; $i++) {
+		print STDOUT "$i:$_";
+		if ($Forks::Super::DEBUG) {
+		    Forks::Super::debug("repeater: wrote [$i] '$input' to STDOUT/",
+					fileno(*STDOUT));
+		}
+	    }
 	}
-      }
-      for (my $i = 0; $i < $n; $i++) {
-        print STDOUT "$i:$_";
-	if ($Forks::Super::DEBUG) {
-	  Forks::Super::debug("repeater: wrote [$i] \"$input\" to STDOUT/",
-			      fileno(*STDOUT));
+	if ($Forks::Super::DEBUG && $input_found) {
+	    $input_found = 0;
+	    Forks::Super::debug("repeater: no input");
 	}
-      }
+	Forks::Super::pause();
     }
-    if ($Forks::Super::DEBUG && $input_found) {
-      $input_found = 0;
-      Forks::Super::debug("repeater: no input");
-    }
-    Forks::Super::pause();
-  }
-  return;
+    return;
 }
 
 #######################################################
@@ -84,13 +84,13 @@ ok(defined($Forks::Super::CHILD_STDERR{$pid})
    && defined(fileno($Forks::Super::CHILD_STDERR{$pid})),
    "found stderr fh");
 SKIP: {
-  if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
-    skip "-- using sockets, not pipes on Win32", 1;
-  }
-  ok(is_pipe($Forks::Super::CHILD_STDIN{$pid}) &&
-     is_pipe($Forks::Super::CHILD_STDOUT{$pid}) &&
-     is_pipe($Forks::Super::CHILD_STDERR{$pid}),
-     "STDxxx handles are pipes");
+    if (&IS_WIN32 && !$ENV{WIN32_PIPE_OK}) {
+	skip "-- using sockets, not pipes on Win32", 1;
+    }
+    ok(is_pipe($Forks::Super::CHILD_STDIN{$pid}) &&
+       is_pipe($Forks::Super::CHILD_STDOUT{$pid}) &&
+       is_pipe($Forks::Super::CHILD_STDERR{$pid}),
+       "STDxxx handles are pipes");
 }
 my $msg = sprintf "%x", rand() * 99999999;
 my $fh_in = $Forks::Super::CHILD_STDIN{$pid};
@@ -101,9 +101,9 @@ my $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
 my $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 my (@out,@err);
 while (time < $t+8) {
-  push @out, Forks::Super::read_stdout($pid);
-  push @err, Forks::Super::read_stderr($pid);
-  sleep 1;
+    push @out, Forks::Super::read_stdout($pid);
+    push @err, Forks::Super::read_stderr($pid);
+    sleep 1;
 }
 Forks::Super::close_fh($pid);
 

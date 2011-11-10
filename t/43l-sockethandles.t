@@ -19,12 +19,12 @@ if ($] < 5.008) {
 }
 
 my $pid = fork {
-  child_fh => "out,err,socket,block,$layer",
-  sub => sub {
-    print STDERR "foo\n";
-    print STDOUT $unicode_phrase;
-    print STDOUT "baz\n";
-  }
+    child_fh => "out,err,socket,block,$layer",
+    sub => sub {
+	print STDERR "foo\n";
+	print STDOUT $unicode_phrase;
+	print STDOUT "baz\n";
+    }
 };
 
 ok(isValidPid($pid), "$pid is valid pid");

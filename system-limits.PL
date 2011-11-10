@@ -31,7 +31,7 @@ my %LIMITS = (file => $limits_file);
 our $MAIN_PID = $$;
 
 if ($^O eq 'cygwin') {
-  print STDERR qq!
+    print STDERR qq!
 *************************************************
 * On Cygwin systems, if you see error messages  *
 * that say "WFSO timed out after longjmp" five  *
@@ -49,38 +49,38 @@ if ($^O eq 'cygwin') {
 
 my $pid = fork();
 if ($pid) {
-  wait;
-  for (my $i = 0; $i < 5; $i++) {
+    wait;
+    for (my $i = 0; $i < 5; $i++) {
+	if (! -r $limits_file) {
+	    sleep 1;
+	}
+    }
+    print STDERR "\n\n";
     if (! -r $limits_file) {
-      sleep 1;
+	warn "System limitations file $limits_file still not found.\n ";
     }
-  }
-  print STDERR "\n\n";
-  if (! -r $limits_file) {
-    warn "System limitations file $limits_file still not found.\n ";
-  }
-  if ($^O eq 'cygwin') {
-    # clean up the stray process with the same PGID as this process.
-    # If that works, it will suppress the "WSFO time out ..." error.
-    my $target_pgid = $$;
-    if (fork() == 0) {
-      $0="system-limits.PL cygwin cleanup";
-      sleep 30;
-      my @proc_table = qx(/usr/bin/ps);
-      shift @proc_table;             # skip header
-      foreach my $ps (@proc_table) {
-	next if $ps =~ m(/usr/bin/ps);
-	$ps =~ s/^\s+//;
-	my @ps = split /\s+/, $ps;
-	if ($ps[2] == $target_pgid && $ps[0] != $target_pgid) {
-	  sleep 10;
-	  system("taskkill /f /pid $ps[3]");
-        }
-      }
-      exit;
+    if ($^O eq 'cygwin') {
+	# clean up the stray process with the same PGID as this process.
+	# If that works, it will suppress the "WSFO time out ..." error.
+	my $target_pgid = $$;
+	if (fork() == 0) {
+	    $0="system-limits.PL cygwin cleanup";
+	    sleep 30;
+	    my @proc_table = qx(/usr/bin/ps);
+	    shift @proc_table;             # skip header
+	    foreach my $ps (@proc_table) {
+		next if $ps =~ m(/usr/bin/ps);
+		$ps =~ s/^\s+//;
+		my @ps = split /\s+/, $ps;
+		if ($ps[2] == $target_pgid && $ps[0] != $target_pgid) {
+		    sleep 10;
+		    system("taskkill /f /pid $ps[3]");
+		}
+	    }
+	    exit;
+	}
     }
-  }
-  exit;
+    exit;
 }
 
 # for best results, only one process should be testing limits at a time
@@ -88,10 +88,10 @@ open(LOCK, ">>", "t/out/.lock-flim");
 flock LOCK, 2;
 
 END {
-  if ($$ == $MAIN_PID) {
-    close LOCK;
-    unlink "t/out/.lock-flim";
-  }
+    if ($$ == $MAIN_PID) {
+	close LOCK;
+	unlink "t/out/.lock-flim";
+    }
 }
 
 #my %LIMITS = ();
@@ -99,7 +99,8 @@ END {
 $LIMITS{system} = $^O;
 $LIMITS{version} = $];
 
-# XXX - what else is interesting? max pending signals?
+# XXX - what else is interesting? 
+#       max pending signals?
 
 &get_Time_HiRes_tolerance;
 &checkif_sleep_alarm_compatible;
@@ -110,7 +111,7 @@ $LIMITS{version} = $];
 &find_pipe_capacity;            # on some systems:  512 * ulimit -p
 &wait_waitpid_results;
 
-&find_max_fork(200);  # run last because it might crash the program
+&find_max_fork(300);  # run last because it might crash the program
 print "Created system limitations file in: $limits_file\n";
 
 close LOCK;
@@ -118,113 +119,113 @@ close LOCK;
 #############################################################################
 
 sub write_limits {
-  my (%new_data) = @_;
-  $LIMITS{$_}=$new_data{$_} for keys %new_data;
+    my (%new_data) = @_;
+    $LIMITS{$_}=$new_data{$_} for keys %new_data;
 
-  open(my $lhf, '>', $LIMITS{file});
-  foreach my $key (keys %LIMITS) {
-    print $lhf "$key:$LIMITS{$key}\n";
-  }
-  close $lhf;
-  
+    open(my $lhf, '>', $LIMITS{file});
+    foreach my $key (keys %LIMITS) {
+	print $lhf "$key:$LIMITS{$key}\n";
+    }
+    close $lhf;
 }
 
 #############################################################################
 
 sub get_Time_HiRes_tolerance {
-  # I found an insidious bug where this code:
-  #    do {
-  #       $t1 = Time::HiRes::time();
-  #       $t2 = Time::HiRes::time();
-  #       $t2 < $t1
-  #    };
-  # could return *TRUE*. 
-  #
-  # On opensolaris 5.11 (running on Oracle VM Virtualbox, which was
-  # running on Windows 7), this can be as much as 0.03s.
-  #
-  # Even on Windows 7/Cygwin, it can be 0.0005s
-  #
+    # I found an insidious bug where this code:
+    #    do {
+    #       $t1 = Time::HiRes::time();
+    #       $t2 = Time::HiRes::time();
+    #       $t2 < $t1
+    #    };
+    # could return *TRUE*. 
+    #
+    # On opensolaris 5.11 (running on Oracle VM Virtualbox, which was
+    # running on Windows 7), this can be as much as 0.03s.
+    #
+    # Even on Windows 7/Cygwin, it can be 0.0005s
+    #
 
-  # Ideally, this subroutine is run on a lightly loaded system.
+    # Ideally, this subroutine is run on a lightly loaded system.
 
-  unless (eval { use Time::HiRes (); 1 }) {
-    write_limits(TimeHiRes_tol => 0.0);
-  }
-  my ($max,$t,$u) = (0, Time::HiRes::time());
-  my $v = $t + 10;
-  while ($t < $v) {
-    ($u,$t) = ($t,Time::HiRes::time());
-    if ($u-$t > $max) {
-      $max = $u-$t;
+    unless (eval { use Time::HiRes (); 1 }) {
+	write_limits(TimeHiRes_tol => 0.0);
     }
-  }
-  write_limits(TimeHiRes_tol => $max * 1.1);
+    my ($max,$t,$u) = (0, Time::HiRes::time());
+    my $v = $t + 10;
+    while ($t < $v) {
+	($u,$t) = ($t,Time::HiRes::time());
+	if ($u-$t > $max) {
+	    $max = $u-$t;
+	}
+    }
+    write_limits(TimeHiRes_tol => $max * 1.1);
 }
 
 sub checkif_sleep_alarm_compatible {
-  my $compatible = -1;
-  eval {
-    local $SIG{ALRM} = sub { die "Timeout\n" };
-    alarm 2;
-    $compatible = 1;
-    sleep 4;
-    $compatible = "000";
-    alarm 0;
-  };
-  if ($compatible > 0) {
-    print STDERR "$compatible: sleep and alarm are compatible on this system\n";
-  } else {
-    # either "alarm" isn't implemented, or
-    # "alarm" or "sleep" are implemented in terms of each other,
-    # and can't be used together
-    # AFAICT Strawberry Perl 5.8 suffers from this
-    print STDERR "sleep and alarm are *not* compatible on this system\n";
-  }
-  write_limits(sleep_alarm_compat => $compatible);
+    my $compatible = -1;
+    eval {
+	local $SIG{ALRM} = sub { die "Timeout\n" };
+	alarm 2;
+	$compatible = 1;
+	sleep 4;
+	$compatible = "000";
+	alarm 0;
+    };
+    if ($compatible > 0) {
+	print STDERR "$compatible: sleep and alarm are compatible on this system\n";
+    } else {
+	# either "alarm" isn't implemented, or
+	# "alarm" or "sleep" are implemented in terms of each other,
+	# and can't be used together
+	#
+	# does Perl v5.8 on Solaris suffer from this?
+	print STDERR "sleep and alarm are *not* compatible on this system\n";
+    }
+    write_limits(sleep_alarm_compat => $compatible);
 }
 
 #
 # determine the maximum number of simultaneous background processes
 #
 sub find_max_fork {
-  my $N = shift;
-  my $limits_file = $LIMITS{file};
-  if (-f $limits_file) {
-    unlink $limits_file;
-  }
+    my $N = shift;
+    my $limits_file = $LIMITS{file};
+    if (-f $limits_file) {
+	unlink $limits_file;
+    }
 
-  print STDERR "";
-  undef $@;
-  my $r = eval {
-    unlink "$limits_file.pid";
-    for (my $i=0; $i<$N; $i++) {
-      undef $@;
-      my $pid;
-      eval { $pid = fork() };    # CORE::fork, not Forks::Super::fork
-      if ($@ || !defined $pid) {
-	print STDERR "Cannot fork more than $i child processes.\n";
+    print STDERR "";
+    undef $@;
+    my $r = eval {
+	unlink "$limits_file.pid";
+	for (my $i=0; $i<$N; $i++) {
+	    undef $@;
+	    my $pid;
+	    eval { $pid = fork() };    # CORE::fork, not Forks::Super::fork
+	    if ($@ || !defined $pid) {
+		print STDERR "Cannot fork more than $i child processes.\n";
+		1 while wait > -1;
+		exit 0;
+	    } elsif ($pid == 0) {
+		print STDERR "";
+		$0 = "system-limits.PL \&find_max_fork";
+		sleep 10;
+		exit 0;
+	    }
+	    if ($i > 1) {
+		&write_limits('maxfork' => $i);
+	    }
+	}
 	1 while wait > -1;
-	exit 0;
-      } elsif ($pid == 0) {
-	print STDERR "";
-	$0 = "system-limits.PL \&find_max_fork";
-	sleep 10;
-	exit 0;
-      }
-      if ($i > 1) {
-	&write_limits('maxfork' => $i);
-      }
-    }
-    1 while wait > -1;
 
-    if ($N == 200) {
-      return find_max_fork(2000);
-    }
-    print STDERR "$^O-$] successfully forked $N processes.\n";
-  };
-  print "Result: $r / $@\n";
-  return $r;
+	if ($N < 2000) {
+	    return find_max_fork(2000);
+	}
+	# print STDERR "$^O-$] successfully forked $N processes.\n";
+    };
+    print "Result: $r / $@\n";
+    return $r;
 }
 
 #
@@ -250,40 +251,40 @@ sub find_max_open_filehandles {
 
 
 
-  # we also want to get the error number for the
-  # "Too many open files" and "No such file or directory"
-  # error messages -- in a different locale we cannot
-  # count on $! containing any particular text.
+    # we also want to get the error number for the
+    # "Too many open files" and "No such file or directory"
+    # error messages -- in a different locale we cannot
+    # count on $! containing any particular text.
 
-  my $i = 0;
-  undef $!;
-  my $j = $$;
-  my @fh = ();
-  while (open (my $fh, ">", "xxx.$j")) {
-    $i++;
-    push @fh, $fh;
-  }
-  my $err = 0 + $!;
-  close $_ for @fh;
-  # print STDERR "Msg for $i open files: $err\n";
-  $! = $err;
-  &write_limits('maxfilehandle' => $i,
-		'maxfilehandle_msg' => $!,
-		'maxfilehandle_errno' => $err);
-  unlink "xxx.$j";
-  print STDERR "Can open $i file handles simultaneously\n";
+    my $i = 0;
+    undef $!;
+    my $j = $$;
+    my @fh = ();
+    while (open (my $fh, ">", "xxx.$j")) {
+	$i++;
+	push @fh, $fh;
+    }
+    my $err = 0 + $!;
+    close $_ for @fh;
+    # print STDERR "Msg for $i open files: $err\n";
+    $! = $err;
+    &write_limits('maxfilehandle' => $i,
+		  'maxfilehandle_msg' => $!,
+		  'maxfilehandle_errno' => $err);
+    unlink "xxx.$j";
+    print STDERR "Can open $i file handles simultaneously\n";
 
-  #################################
-  # also figure out the errno
-  # for file not found.
-  #################################
+    #################################
+    # also figure out the errno
+    # for file not found.
+    #################################
 
-  $! = 0;
-  open my $xh, '<', 'qwpor/qwer/qw/t/346/234/t';
-  &write_limits('fnf_errno' => 0+$!,
-		'fnf_msg' => $!);
+    $! = 0;
+    open my $xh, '<', 'qwpor/qwer/qw/t/346/234/t';
+    &write_limits('fnf_errno' => 0+$!,
+		  'fnf_msg' => $!);
 
-  return $i;
+    return $i;
 }
 
 sub find_max_open_sockets {
@@ -319,6 +320,10 @@ sub wait_waitpid_results {
     sleep 1;
     $info{ignore_waitpid_result} = waitpid $pid, 0;
     $info{ignore_waitpid_status} = $?;
+    if ($info{ignore_waitpid_result} == $pid) {
+	$info{ignore_waitpid_result} = 'undef';
+	$info{ignore_waitpid_status} = 'undef';
+    }
 
     write_limits( %info );
 }
@@ -333,91 +338,91 @@ sub wait_waitpid_results {
 #           Forks::Super::Job::OS::get_number_of_processors() method
 #
 sub count_number_of_cpus {
-  my ($ncpu, $fh);
+    my ($ncpu, $fh);
 
-  $ncpu = 0;
-  if (eval "require Sys::CpuAffinity; 1") {
-    $ncpu = Sys::CpuAffinity::getNumCpus();
+    $ncpu = 0;
+    if (eval "require Sys::CpuAffinity; 1") {
+	$ncpu = Sys::CpuAffinity::getNumCpus();
 
-    # darwin: result might have format "1 [2 cores]"
-    $ncpu =~ s{\d+ \[(\d+) cores\]}{$1};
-  }
-  if ($ncpu == 0 && eval "require Test::Smoke::SysInfo;1") {
-    my $sysinfo = Test::Smoke::SysInfo->new();
-    $ncpu = $sysinfo && $sysinfo->{_ncpu};
-  }
+	# darwin: result might have format "1 [2 cores]"
+	$ncpu =~ s{\d+ \[(\d+) cores\]}{$1};
+    }
+    if ($ncpu == 0 && eval "require Test::Smoke::SysInfo;1") {
+	my $sysinfo = Test::Smoke::SysInfo->new();
+	$ncpu = $sysinfo && $sysinfo->{_ncpu};
+    }
 
-  if ($ncpu == 0 && $^O eq "MSWin32") {
-    $ncpu = $ENV{NUMBER_OF_PROCESSORS};
-  }
-  if ($ncpu == 0 && open($fh,'<','/proc/cpuinfo')) {
-    $ncpu = grep /^processor\s/, <$fh>;
-    close $fh;
-  }
-  if ($ncpu == 0 && open($fh,'<','/proc/stat')) {
-    $ncpu = grep /^cpu\d/i, <$fh>;
-    close $fh;
-  }
-  if ($ncpu == 0) {
-    $ncpu = grep /\d+.+processors?$/i, qx(hinv -c processor 2>/dev/null);
-  }
-  if ($ncpu == 0) {
-    $ncpu = () = qx(bindprocessor -q 2>/dev/null);
-  }
-  if ($ncpu == 0) {
-    $ncpu = grep /^hw.ncpu:/, qx(sysctl -a 2>/dev/null);
-  }
-  if ($ncpu == 0) {
-    $ncpu = () = qx(psrinfo 2> /dev/null);
-  }
-  if ($ncpu == 0) {
-    $ncpu = qx(hwprefs cpu_count 2>/dev/null);
-  }
+    if ($ncpu == 0 && $^O eq "MSWin32") {
+	$ncpu = $ENV{NUMBER_OF_PROCESSORS};
+    }
+    if ($ncpu == 0 && open($fh,'<','/proc/cpuinfo')) {
+	$ncpu = grep /^processor\s/, <$fh>;
+	close $fh;
+    }
+    if ($ncpu == 0 && open($fh,'<','/proc/stat')) {
+	$ncpu = grep /^cpu\d/i, <$fh>;
+	close $fh;
+    }
+    if ($ncpu == 0) {
+	$ncpu = grep /\d+.+processors?$/i, qx(hinv -c processor 2>/dev/null);
+    }
+    if ($ncpu == 0) {
+	$ncpu = () = qx(bindprocessor -q 2>/dev/null);
+    }
+    if ($ncpu == 0) {
+	$ncpu = grep /^hw.ncpu:/, qx(sysctl -a 2>/dev/null);
+    }
+    if ($ncpu == 0) {
+	$ncpu = () = qx(psrinfo 2> /dev/null);
+    }
+    if ($ncpu == 0) {
+	$ncpu = qx(hwprefs cpu_count 2>/dev/null);
+    }
 
-  if ($ncpu > 0) {
-    print STDERR "There are $ncpu cpus on this system.\n";
-    write_limits( ncpu => $ncpu + 0 );
-  } else {
-    print STDERR "I am having trouble detecting the number\n";
-    print STDERR "of processors on your system. Consider\n";
-    print STDERR "installing the  Sys::CpuAffinity  module\n";
-    print STDERR "before running this script.\n";
-    write_limits( ncpu => "1.0" );
-  }
+    if ($ncpu > 0) {
+	print STDERR "There are $ncpu cpus on this system.\n";
+	write_limits( ncpu => $ncpu + 0 );
+    } else {
+	print STDERR "I am having trouble detecting the number\n";
+	print STDERR "of processors on your system. Consider\n";
+	print STDERR "installing the  Sys::CpuAffinity  module\n";
+	print STDERR "before running this script.\n";
+	write_limits( ncpu => "1.0" );
+    }
 }
 
 sub find_socket_capacity {
-  my $socket_capacity = 
-    _get_capacity(16384, 1,
-		  qq[use Socket;
-		     socketpair DUMMY,WRITER,AF_UNIX,SOCK_STREAM,PF_UNSPEC]);
-  print STDERR "Default socket capacity is about $socket_capacity bytes\n";
-  &write_limits('socket_capacity' => $socket_capacity);
+    my $socket_capacity = 
+	_get_capacity(16384, 1,
+		      qq[use Socket;
+		         socketpair DUMMY,WRITER,AF_UNIX,SOCK_STREAM,PF_UNSPEC]);
+    print STDERR "Default socket capacity is about $socket_capacity bytes\n";
+    &write_limits('socket_capacity' => $socket_capacity);
 }
 
 sub find_pipe_capacity {
-  my $pipe_capacity =
-    _get_capacity(256, 2, qq[pipe DUMMY,WRITER]);
-  print STDERR "Default pipe capacity is about $pipe_capacity bytes\n";
-  &write_limits('pipe_capacity' => $pipe_capacity);
+    my $pipe_capacity =
+	_get_capacity(256, 2, qq[pipe DUMMY,WRITER]);
+    print STDERR "Default pipe capacity is about $pipe_capacity bytes\n";
+    &write_limits('pipe_capacity' => $pipe_capacity);
 }
 
 sub _get_capacity {
-  my ($packetsize, $timeout, $create_WRITER) = @_;
-  my $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
-  while ($capacity <= 0) {
-    if ($capacity > -2) {
-      return 0 if $packetsize <= 1;
-      print STDERR "Packet size of $packetsize was too large. Retrying\n";
-      $packetsize = int($packetsize / 64);
-    } elsif ($capacity == -2) {
-      return 0 if $timeout > 300;
-      print STDERR "Capacity not found with timeout=$timeout. Retrying\n";
-      $timeout *= 2;
+    my ($packetsize, $timeout, $create_WRITER) = @_;
+    my $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
+    while ($capacity <= 0) {
+	if ($capacity > -2) {
+	    return 0 if $packetsize <= 1;
+	    print STDERR "Packet size of $packetsize was too large. Retrying\n";
+	    $packetsize = int($packetsize / 64);
+	} elsif ($capacity == -2) {
+	    return 0 if $timeout > 300;
+	    print STDERR "Capacity not found with timeout=$timeout. Retrying\n";
+	    $timeout *= 2;
+	}
+	$capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
     }
-    $capacity = __get_capacity($packetsize,$timeout,$create_WRITER);
-  }
-  return $capacity;
+    return $capacity;
 }
 
 #####################################################################
@@ -433,17 +438,17 @@ sub _get_capacity {
 # when it times out.
 #####################################################################
 sub __get_capacity {
-  my ($packetsize, $timeout, $create_WRITER, $output_file) = @_;
-  $output_file ||= "./test-capacity.out";
-  my $pid_file = "./test-capacity.pid";
-  if ($packetsize < 1) {
-    $packetsize = 1;
-  }
+    my ($packetsize, $timeout, $create_WRITER, $output_file) = @_;
+    $output_file ||= "./test-capacity.out";
+    my $pid_file = "./test-capacity.pid";
+    if ($packetsize < 1) {
+	$packetsize = 1;
+    }
 
-  # capacity == -1  means the packetsize was too large: decrease packetsize
-  # capacity == -2  means the pipe did not block: increase timeout
-  my $capacity = -1;
-  my $code = <<"__END_SLAVE_CODE__";
+    # capacity == -1  means the packetsize was too large: decrease packetsize
+    # capacity == -2  means the pipe did not block: increase timeout
+    my $capacity = -1;
+    my $code = <<"__END_SLAVE_CODE__";
 use IO::Handle;
 use strict;
 \$| = 1;
@@ -453,48 +458,48 @@ binmode WRITER;
 my \$output = " " x $packetsize;
 my \$written = 0;
 for (;;) {
-  # print WRITER \$output;
-  syswrite WRITER, \$output;
-  \$written += length \$output;
-  open F, ">", \"$output_file\";
-  print F time - \$^T >= $timeout ? -2 : \$written;
-  close F;
+ # print WRITER \$output;
+ syswrite WRITER, \$output;
+ \$written += length \$output;
+ open F, ">", \"$output_file\";
+ print F time - \$^T >= $timeout ? -2 : \$written;
+ close F;
 }
 __END_SLAVE_CODE__
 ;
 
-  unlink $output_file, $pid_file;
-  if (fork() == 0) {
-    $0 = "system-limits.PL __get_capacity";
-    sleep $timeout + 1;
-    open my $pf, '<', $pid_file;
-    my $pid = 0 + <$pf>;
+    unlink $output_file, $pid_file;
+    if (fork() == 0) {
+	$0 = "system-limits.PL __get_capacity";
+	sleep $timeout + 1;
+	open my $pf, '<', $pid_file;
+	my $pid = 0 + <$pf>;
 
-    # hopefully, one of these will do the job on your system
-    kill ('TERM', $pid)
-      || kill ('HUP', $pid)
-      || !system ("TASKKILL /f /pid $pid")
-      || do {
-	warn "Attempts to kill pid \"$pid\" failing ...\n"; 0
-      }
-      || !system ("kill -TERM $pid") 
-      || kill ('BREAK', $pid);
-    exit 0;
-  }
+	# hopefully, one of these will do the job on your system
+	kill ('TERM', $pid)
+	    || kill ('HUP', $pid)
+	    || !system ("TASKKILL /f /pid $pid")
+	    || do {
+		warn "Attempts to kill pid \"$pid\" failing ...\n"; 0
+	}
+	|| !system ("kill -TERM $pid") 
+	    || kill ('BREAK', $pid);
+	exit 0;
+    }
 
-  my $pid = open(SLAVE, "| $^X");
+    my $pid = open(SLAVE, "| $^X");
 
-  open my $pf, '>', $pid_file;
-  print $pf $pid;
-  close $pf;
+    open my $pf, '>', $pid_file;
+    print $pf $pid;
+    close $pf;
 
-  print SLAVE $code;
-  close SLAVE;
+    print SLAVE $code;
+    close SLAVE;
 
-  sleep 1;
-  open(CAP, '<', $output_file);
-  $capacity = (<CAP>)[-1];
-  close CAP;
-  unlink $output_file, $pid_file;
-  return $capacity + 0;
+    sleep 1;
+    open(CAP, '<', $output_file);
+    $capacity = (<CAP>)[-1];
+    close CAP;
+    unlink $output_file, $pid_file;
+    return $capacity + 0;
 }

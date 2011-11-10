@@ -15,7 +15,7 @@ if (${^TAINT}) {
     ($^X) = $^X =~ /(.*)/;
 }
 
-my $output = "$CWD/t/out/daemon4.$$.out";
+my $output = "$CWD/t/out/daemon5.$$.out";
 
 # does daemon respect a timeout option
 my $pid = fork {
@@ -26,12 +26,12 @@ my $pid = fork {
      timeout => 4,
 };
 ok(isValidPid($pid), "fork to cmd with daemon & timeout");
-my $k = Forks::Super::kill 'ZERO', $pid;
 sleep 2;
+my $k = Forks::Super::kill 'ZERO', $pid;
 ok($k, "($k) daemon proc is alive");
 sleep 6;
 $k = Forks::Super::kill 'ZERO', $pid;
-ok(!$k, "($k) daemon proc timed out in <= 8s");
+okl(!$k, "($k) daemon proc timed out in <= 8s");
 if ($k) {
    for (1..5) {
        sleep 1;
@@ -43,5 +43,5 @@ if ($k) {
    }  
 }
 
-unlink $output unless $ENV{KEEP};
+unlink $output, "$output.err" unless $ENV{KEEP};
 

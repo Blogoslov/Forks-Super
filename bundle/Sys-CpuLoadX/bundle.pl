@@ -10,8 +10,8 @@ my $SuperModule = 'Forks::Super';
 my $TargetModule = 'Sys::CpuLoadX';
 my $TargetModuleMinVersion = '0.01';
 if ($^O =~ /netbsd/i) {
-  # NetBSD fix in 0.03
-  $TargetModuleMinVersion = '0.03';
+    # NetBSD fix in 0.03
+    $TargetModuleMinVersion = '0.03';
 }
 
 
@@ -32,36 +32,36 @@ is unsuccessful.
 ]; 
 
 my $TargetModulePrompt 
-  = "Do you want to attempt to install Sys::CpuLoadX v$version?";
+    = "Do you want to attempt to install Sys::CpuLoadX v$version?";
 
 my $TargetModulePromptDefault = 'y'; # was 'n' before Forks::Super v0.39
 my $TargetModuleDeclineMessage =
-  qq[Some features of $SuperModule may not be available.\n];
+    qq[Some features of $SuperModule may not be available.\n];
 
 sub run_auto_generated_Makefile_PL {
     unless (eval "use Module::Build::Compat 0.02; 1" ) {
-      print "This module requires Module::Build to install itself.\n";
+	print "This module requires Module::Build to install itself.\n";
 
-      require ExtUtils::MakeMaker;
-      my $yn = ExtUtils::MakeMaker::prompt
-	('  Install Module::Build now from CPAN?', 'y');
+	require ExtUtils::MakeMaker;
+	my $yn = ExtUtils::MakeMaker::prompt
+	    ('  Install Module::Build now from CPAN?', 'y');
 
-      unless ($yn =~ /^y/i) {
-	die " *** Cannot install without Module::Build.  Exiting ...\n";
-      }
+	unless ($yn =~ /^y/i) {
+	    die " *** Cannot install without Module::Build.  Exiting ...\n";
+	}
 
-      require Cwd;
-      require File::Spec;
-      require CPAN;
+	require Cwd;
+	require File::Spec;
+	require CPAN;
 
-      # Save this 'cause CPAN will chdir all over the place.
-      my $cwd = Cwd::cwd();
+	# Save this 'cause CPAN will chdir all over the place.
+	my $cwd = Cwd::cwd();
 
-      CPAN::Shell->install('Module::Build::Compat');
-      CPAN::Shell->expand("Module", "Module::Build::Compat")->uptodate
-	or die "Couldn't install Module::Build, giving up.\n";
+	CPAN::Shell->install('Module::Build::Compat');
+	CPAN::Shell->expand("Module", "Module::Build::Compat")->uptodate
+	    or die "Couldn't install Module::Build, giving up.\n";
 
-      chdir $cwd or die "Cannot chdir() back to $cwd: $!";
+	chdir $cwd or die "Cannot chdir() back to $cwd: $!";
     }
     eval "use Module::Build::Compat 0.02; 1" or die $@;
     use lib '_build/lib';
@@ -87,7 +87,6 @@ do '../conditionally-install-submodule.pl';
   declineMessage => "Some features of Forks::Super may not be available",
   force => scalar(grep { /force/ } @ARGV),
   reinstall => $ENV{BUNDLE_REINSTALL}
-
 );
 
 

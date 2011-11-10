@@ -23,7 +23,7 @@ Thoughts about a major revision. Also see the  TODO  file.
 
 	    <	Write in child, read in parent
 	    >	Write in parent, read in child
-	    <>  Bidirectional [implies sockets => 1]
+	    <>  Bidirectional [implies sockets => 1 or a tied handle]
 
 	Identifier (CHANNEL_ID):
 
@@ -288,3 +288,6 @@ Thoughts about a major revision. Also see the  TODO  file.
 	___ require included modules?
 	___ set up lexical variables that are in-scope and launch time?
 	___ Now that's what I would call a real cluster fork.
+
+    ___ Anything to learn from python  multiprocessing  module? See   
+        stackoverflow.com/questions/7931455/

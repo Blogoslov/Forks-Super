@@ -7,9 +7,9 @@ use warnings;
 # < ipcfile  tokens in the right place on windows.
 
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 # these programs should run in both Unix [sh/csh/bash] shell

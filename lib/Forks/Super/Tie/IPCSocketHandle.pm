@@ -28,80 +28,81 @@ use IO::Socket;
 use IO::Handle;
 
 our @ISA = qw(IO::Socket IO::Handle);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
-sub trivial_pause { return $^O eq 'MSWin32' 
-		      && Forks::Super::Util::pause(0.001) };
+# v0.55: try to remove ...
+#sub trivial_pause { return $^O eq 'MSWin32'
+#			&& 0
+#			&& Forks::Super::Util::pause(0.001) };
 
 sub TIEHANDLE {
-  my ($class, $real_socket, $glob) = @_;
-  $$glob->{DELEGATE} = $real_socket;
-  eval {
-    bless $glob, 'Forks::Super::Tie::IPCSocketHandle::Delegator';
-  } or carp 'Forks::Super::Tie::IPCSocketHandle: ',
-  		"failed to bless tied obj as Delegator\n";
+    my ($class, $real_socket, $glob) = @_;
+    $$glob->{DELEGATE} = $real_socket;
+    eval {
+	bless $glob, 'Forks::Super::Tie::IPCSocketHandle::Delegator';
+    } or carp 'Forks::Super::Tie::IPCSocketHandle: ',
+            "failed to bless tied obj as Delegator\n";
 
-  # any attributes that the real socket had should be passed
-  # on to the glob.
-  foreach (keys %$$real_socket) {
-      $$glob->{$_} = $$real_socket->{$_};
-  }
+    # any attributes that the real socket had should be passed
+    # on to the glob.
+    foreach (keys %$$real_socket) {
+	$$glob->{$_} = $$real_socket->{$_};
+    }
 
-  # apply PerlIO layers to the socket here ...
-  my $job = $$glob->{job} || Forks::Super::Job->this;
-  if (defined($job) && $job->{debug}) {
-      Forks::Super::Debug::debug("io layers are @{$job->{fh_config}{layers}}");
-  }
-  if (defined($job) && $job->{fh_config}{layers}) {
-      my @io_layers = @{$job->{fh_config}{layers}};
-      if ($$real_socket->{is_read}) {
-	  @io_layers = reverse @io_layers;
-      }
-      foreach my $layer (@io_layers) {
-	  for my $redo (1..2) {
-	      local $! = 0;
-	      if (binmode $real_socket, $layer) {
-		  if ($job->{debug}) {
-		      Forks::Super::Debug::debug("applied PerlIO layer $layer",
+    # apply PerlIO layers to the socket here ...
+    my $job = $$glob->{job} || Forks::Super::Job->this;
+    if (defined($job) && $job->{debug}) {
+	Forks::Super::Debug::debug("io layers are @{$job->{fh_config}{layers}}");
+    }
+    if (defined($job) && $job->{fh_config}{layers}) {
+	my @io_layers = @{$job->{fh_config}{layers}};
+	if ($$real_socket->{is_read}) {
+	    @io_layers = reverse @io_layers;
+	}
+	foreach my $layer (@io_layers) {
+	    for my $redo (1..2) {
+		local $! = 0;
+		if (binmode $real_socket, $layer) {
+		    if ($job->{debug}) {
+			Forks::Super::Debug::debug("applied PerlIO layer $layer",
 						 " to socket $real_socket");
-		  }
-		  last;
-	      } elsif ($redo==1) {
-		   carp 'Forks::Super::Tie::IPCSocketHandle: ',
- 	              "failed to apply PerlIO layer $layer to $real_socket: $!";
-	      }
-	      Forks::Super::pause(0.01);
-	  }
-      }
-  }
+		    }
+		    last;
+		} elsif ($redo==1) {
+		    carp 'Forks::Super::Tie::IPCSocketHandle: ',
+		        "failed to apply PerlIO layer $layer to $real_socket: $!";
+		}
+		Forks::Super::pause(0.01);
+	    }
+	}
+    }
 
+    my $self = { SOCKET => $real_socket, GLOB => $glob };
+    $self->{_FILENO} = CORE::fileno($real_socket);
+    $self->{_SHUTDOWN} = $$real_socket->{_SHUTDOWN} || 0;
 
-  my $self = { SOCKET => $real_socket, GLOB => $glob };
-  $self->{_FILENO} = CORE::fileno($real_socket);
-  $self->{_SHUTDOWN} = $$real_socket->{_SHUTDOWN} || 0;
-
-  bless $self, $class;
-  return $self;
+    bless $self, $class;
+    return $self;
 }
 
 #############################################################################
 
 sub OPEN {
-  Carp::confess "Can't call 'open' on a socket handle\n";
+    Carp::confess "Can't call 'open' on a socket handle\n";
 }
 
 sub BINMODE {
-  my ($self, $layer) = @_;
-  $self->{BINMODE}++;
-  return binmode $self->{SOCKET}, $layer || ':raw';
+    my ($self, $layer) = @_;
+    $self->{BINMODE}++;
+    return binmode $self->{SOCKET}, $layer || ':raw';
 }
 
 sub GETC {
-  my $self = shift;
-  $self->{GETC}++;
-  return getc($self->{SOCKET});
+    my $self = shift;
+    $self->{GETC}++;
+    return getc($self->{SOCKET});
 }
 
 sub FILENO {
@@ -118,9 +119,9 @@ sub PRINT {
                   . (defined $\ ? $\ : '');
 
     my $z = print {$self->{SOCKET}} @list;
-    if ($^O eq 'MSWin32') {
-	trivial_pause();
-    }
+#    if ($^O eq 'MSWin32') {
+#	trivial_pause();
+#    }
     return $z;
 }
 
@@ -131,15 +132,15 @@ sub PRINTF {
 }
 
 sub WRITE {
-  my ($self, $string, $length, $offset) = @_;
-  $self->{WRITE}++;
-  $length ||= length $string;
-  $offset ||= 0;
+    my ($self, $string, $length, $offset) = @_;
+    $self->{WRITE}++;
+    $length ||= length $string;
+    $offset ||= 0;
 
-  my $n = syswrite $self->{SOCKET}, $string, $length, $offset;
-  # $self->{SOCKET}->flush();
-  trivial_pause();
-  return $n;
+    my $n = syswrite $self->{SOCKET}, $string, $length, $offset;
+    # $self->{SOCKET}->flush();
+#   trivial_pause();
+    return $n;
 }
 
 sub READLINE {
@@ -220,7 +221,7 @@ sub CLOSE {
 	}
 	close *{$self->{GLOB}};
     }
-    
+
     $self->{CLOSE}++;
     $self->{_SHUTDOWN} ||= 0;
     my $glob = $self->{GLOB};
@@ -229,19 +230,18 @@ sub CLOSE {
     $how += 2*($$glob->{is_write} || 0);
     $how = ($how+2) % 3;
 
-#    my $how = -1 + (( ($$glob->{is_read} || 0)
-#		      + 2 * ($$glob->{is_write} || 0)) 
-#		    || 3);
-
     delete $self->{SOCKET};
     ${$self->{GLOB}}->{closed}++;
     return $self->shutdown($how);
 }
 
+sub UNTIE {
+}
+
 sub DESTROY {
-  my $self = shift;
-  $self = {};
-  return;
+    my $self = shift;
+    $self = {};
+    return;
 }
 
 #
@@ -250,35 +250,32 @@ sub DESTROY {
 # on the tied object's real underlying socket handle
 #
 sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
-  return if $Forks::Super::Job::INSIDE_END_QUEUE;
-  my $method = $Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD;
-  $method =~ s/.*:://;
-  my $delegator = shift;
-  return if !$delegator;
+    return if $Forks::Super::Job::INSIDE_END_QUEUE;
+    my $method = $Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD;
+    $method =~ s/.*:://;
+    my $delegator = shift;
+    return if !$delegator;
 
-  my $delegate = $$delegator->{DELEGATE};
-  return if !$delegate;
+    my $delegate = $$delegator->{DELEGATE};
+    return if !$delegate;
 
-  ## no critic (StringyEval)
-  if (wantarray) {
-      my @r = eval "\$delegate->$method(\@_)" or do {};
-    if ($@) {
-      Carp::cluck "IPCSocketHandle delegate fail: $method @_; error=$@\n";
+    ## no critic (StringyEval)
+    if (wantarray) {
+	my @r = eval "\$delegate->$method(\@_)" or do {};
+	if ($@) {
+	    Carp::cluck "IPCSocketHandle delegate fail: $method @_; error=$@\n";
+	}
+	return @r;
+    } else {
+	my $r = eval "\$delegate->$method(\@_)";
+	if ($@) {
+	    Carp::cluck "IPCSocketHandle delegate fail: $method @_; error=$@\n";
+	}
+	return $r;
     }
-    return @r;
-  } else {
-    my $r = eval "\$delegate->$method(\@_)";
-    if ($@) {
-      Carp::cluck "IPCSocketHandle delegate fail: $method @_; error=$@\n";
-    }
-    return $r;
-  }
 }
 
 sub Forks::Super::Tie::IPCSockethandle::Delegator::DESTROY {
-}
-
-sub Forks::Super::Tie::IPCSocketHandle::Delegator::DESTROY {
 }
 
 1;

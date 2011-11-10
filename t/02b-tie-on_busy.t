@@ -11,8 +11,8 @@ use warnings;
 #
 
 for my $valid (qw(Block block FAIL Queue)) {
-  $Forks::Super::ON_BUSY = $valid;
-  ok($Forks::Super::ON_BUSY eq lc $valid);
+    $Forks::Super::ON_BUSY = $valid;
+    ok($Forks::Super::ON_BUSY eq lc $valid);
 }
 
 my $current = $Forks::Super::ON_BUSY;

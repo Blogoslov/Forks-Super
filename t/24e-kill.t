@@ -6,13 +6,6 @@ use warnings;
 
 my $PID = $$;
 
-END {
-    if ($$ == $PID) {
-	unlink glob("t/out/24e.$PID.*");
-    }
-}
-
-
 sub write_test_file {
     my ($filename,$count) = @_;
     open my $fn, '>', $filename;
@@ -77,3 +70,7 @@ ok(@k == 3, "sent kill signal to 3 processes")
     or diag("signalled @k, expected 3 procs");
 
 waitall;
+1 while Forks::Super::Util::isValidPid(CORE::wait);
+
+unlink glob("t/out/24e.$PID.*");
+# XXX - files don't get deleted on MSWin32?

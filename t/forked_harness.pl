@@ -1,3 +1,5 @@
+#!perl
+#
 # forked_harness.pl [options] tests
 #
 # Forks::Super proof-of-concept to run unit tests in parallel.
@@ -34,8 +36,9 @@ package t::forked_harness;
 use lib qw(blib/lib blib/arch lib .);
 use strict;
 use warnings;
+
 BEGIN {
-    if ($^O eq 'MSWin32' && $ENV{IPC_DIR} eq 'undef') {
+    if ($^O eq 'MSWin32' && 'undef' eq ($ENV{IPC_DIR} || '')) {
 	delete $ENV{IPC_DIR};
 	push @ARGV, '-e', 'IPC_DIR=undef';
     }
@@ -131,7 +134,7 @@ $Forks::Super::ON_BUSY = 'block' if $ENV{BLOCK} || $pause > 0;
 sub color_print;
 
 # these colors are appropriate when your terminal has a dark background.
-# How can this program determine when your terminal has a dark background?
+# XXX-How can this program determine when your terminal has a dark background?
 my %colors = (ITERATION => 'bold white',
 	      GOOD_STATUS => 'bold green',
 	      BAD_STATUS => 'bold red',
@@ -148,7 +151,6 @@ if ($debug) {
 #
 # determine the set of test scripts to run
 #
-
 
 my $glob_required = 0;
 if (@ARGV == 0) {
@@ -167,7 +169,7 @@ if (@ARGV == 0) {
 	$test_files =~ s/\s+=/= /;
 	my @test_files = split /\s+/, $test_files;
 	shift @test_files;
-	
+
 	@ARGV = @test_files;
     }
     $glob_required = 1;
@@ -418,10 +420,16 @@ sub process_test_output {
 	my @stdout2 = grep { m/ ?\.+ ?ok/ || m/ ?\.+ ?skipped:/ } @stdout;
 	if (@stdout2 > 0) {
 	    @stdout = @stdout2;
+	} elsif (grep { m/All tests successful./ } @stdout) {
+	    @stdout = @stdout2;
+	} elsif (grep { m/child process timeout/ } @stderr) {
+	    $fail{$test_file}{'TIMEOUT'}++;
+	    $not_ok = 1;
+	    $status = 255 + 127 * 256;
 	} else {
 	    # the output didn't say anything about test failures and
 	    # the exit code was zero, but the output also didn't say "ok" --
-	    # this test is not quite right -- could be a time out, or
+	    # this test is not quite right -- 
 	    # the test harness could have aborted
 
 	    $not_ok = 0.5;
@@ -531,8 +539,6 @@ sub process_test_output {
 	        "possibly an intermittent segmentation fault. Rerunning ...\n";
 	launch_test_file($test_file);
 	$::fail35584++;
-	#return $::fail35584 > 10 * $j{"$test_file:iteration"}
-	#  ? 'ABORT' : 'CONTINUE';
 	return 'ABORT';
     }
 
@@ -589,9 +595,7 @@ sub summarize {
 	_summarize_results();
     }
     if ($really_quiet == 0 && scalar keys %fail > 0) {
-
 	_summarize_failures();
-
     }
     if ($total_status == 0) {
 	_summarize_success();
@@ -697,7 +701,8 @@ sub check_endgame {
     closedir D;
 
     $0 = '-';
-    # to do: check the process table and see if any of the
+
+    # to do: check the process table and see if any languishing
     #    processes came from here ...
 
     return;
@@ -758,30 +763,30 @@ specified, defaults to value of  TEST_FILES  in ./Makefile or ../Makefile
 
 Recognized options:
 
-  -h,--harness         wrap tests in ExtUtils::Command::MM::test_harness
-  -v,--verbose         with -h, use verbose test harness
-  -I,--include lib     use Perl lib dirs [default: blib/lib, blib/arch]
-  -p,--popts option    pass option to perl interpreter during test
+    -h,--harness         wrap tests in ExtUtils::Command::MM::test_harness
+    -v,--verbose         with -h, use verbose test harness
+    -I,--include lib     use Perl lib dirs [default: blib/lib, blib/arch]
+    -p,--popts option    pass option to perl interpreter during test
                        [e.g., -p -d:Trace, -p -MCarp::Always]
-  -s,--shuffle         run tests in random order
-  -t,--timeout n       abort test after <n> seconds [default: 150]
-  -r,--repeat n        do up to <n> iterations of testing, aborting if
+    -s,--shuffle         run tests in random order
+    -t,--timeout n       abort test after <n> seconds [default: 150]
+    -r,--repeat n        do up to <n> iterations of testing, aborting if
                        an iteration had test failures
-  -x,--xrepeat n       run each test <n> times within each test iteration
-  -m,--maxproc n       run up to <n> tests simultaneously
-  -q,--quiet           produce less output (-q is *not* the opposite of -v!)
-  --qq,--really-quiet  show test status, no other output
-  -d,--debug           produce output about what forked_harness.pl is doing
-  -a,--abort-on-fail   stop immediately after any test failure
-  -C,--color           colorize output (requires Term::ANSIColor >= 3.00)
-  -E,--env var=value   pass environment variable to the tests
+    -x,--xrepeat n       run each test <n> times within each test iteration
+    -m,--maxproc n       run up to <n> tests simultaneously
+    -q,--quiet           produce less output (-q is *not* the opposite of -v!)
+    --qq,--really-quiet  show test status, no other output
+    -d,--debug           produce output about what forked_harness.pl is doing
+    -a,--abort-on-fail   stop immediately after any test failure
+    -C,--color           colorize output (requires Term::ANSIColor >= 3.00)
+    -E,--env var=value   pass environment variable to the tests
 
 ENVIRONMENT
 
-   COLOR               if true, try to colorize output [like -C flag]
-   ENDGAME_CHECK       if true, check that program cleans up after itself
-   MAX_PROC            number of simultaneous tests [like -m flag]
-   TEST_VERBOSE        if true, use verbose test harness [like -v flag]
+    COLOR               if true, try to colorize output [like -C flag]
+    ENDGAME_CHECK       if true, check that program cleans up after itself
+    MAX_PROC            number of simultaneous tests [like -m flag]
+    TEST_VERBOSE        if true, use verbose test harness [like -v flag]
 
 __END_USAGE__
     ;
@@ -796,11 +801,11 @@ __END_USAGE__
 
 =head1 NAME
 
-forked_harness.pl - framework for running tests in parallel with Forks::Super
+forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.54
+0.55
 
 =head1 SYNOPSIS
 
@@ -1142,7 +1147,7 @@ the C<Makefile> of L<Forks::Super> that use C<forked_harness.pl>:
     stresstest :: pure_all
 	$(FULLPERL) t/forked_harness.pl $(TEST_FILES) -r 20 -x 5 -s -q
 
- 
+
 =head1 AUTHOR
 
 Marty O'Brien, E<lt>mob@cpan.orgE<gt>

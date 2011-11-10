@@ -16,20 +16,21 @@ use constant IS_CYGWIN => $^O =~ /cygwin/i;
 use constant IS_WIN32ish => &IS_WIN32 || &IS_CYGWIN;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
-		    is_socket is_pipe IS_WIN32 IS_CYGWIN);
+		    is_socket is_pipe IS_WIN32 IS_CYGWIN okl);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 our (%SIG_NO, @SIG_NAME, $Time_HiRes_avail,
     $something_productive, $something_else_productive);
 our $_PAUSE = 0;
 our $DEFAULT_PAUSE = 0.10; # s. Warning: may also be set in Forks/Super.pm
+our $DEFAULT_PAUSE_IO = 0.05;
 
 $Time_HiRes_avail = eval  { use Time::HiRes; 1 } || 0;
 if (!$Time_HiRes_avail) {
-  *Time::HiRes::time = \&time;
-  *Time::HiRes::sleep = \&__fake_Time_HiRes_sleep;
+    *Time::HiRes::time = \&time;
+    *Time::HiRes::sleep = \&__fake_Time_HiRes_sleep;
 }
 my $Time_HiRes_sleep_avail = defined &Time::HiRes::sleep;
 
@@ -77,7 +78,8 @@ sub is_number {
 sub isValidPid {
     my ($pid, $is_wait) = @_;
 
-    if (ref $pid eq 'Forks::Super::Job') {
+    if (ref($pid) && $pid->isa('Forks::Super::Job')) {
+#   if (ref $pid eq 'Forks::Super::Job') {
 	# DWIM - if the job is completed, isValidPid() was probably called from
 	#    the output of a waitpid/wait call, so test {real_pid} and not {pid}
 	#    DWIM behavior can be overridden with $is_wait argument.
@@ -193,9 +195,9 @@ sub signal_name {
 }
 
 sub signal_number {
-  my $name = shift;
-  _load_signal_data();
-  return $SIG_NO{$name};
+    my $name = shift;
+    _load_signal_data();
+    return $SIG_NO{$name};
 }
 
 # signal names that are normally instructions to terminate a program
@@ -242,7 +244,7 @@ sub _load_signal_data {
 }
 
 sub _has_POSIX_signal_framework {
-  return !&IS_WIN32; # XXX - incomplete, but covers the most important case
+    return !&IS_WIN32; # XXX - incomplete, but covers the most important case
 }
 
 sub is_socket {
@@ -250,6 +252,16 @@ sub is_socket {
     if ($Forks::Super::Job::INSIDE_END_QUEUE) {
 	return 1 if ref $handle eq 'REF';
     }
+
+    my $th = tied *$handle;
+    if (ref($th)) {
+	return 1 if $th->isa('Forks::Super::Tie::IPCSocketHandle');
+	return 0 if $th->isa('Forks::Super::Tie::IPCFileHandle');
+	return 0 if $th->isa('Forks::Super::Tie::IPCPipeHandle');
+    }
+
+=begin XXXXXX refactored 0.55
+
     if (ref tied *$handle eq 'Forks::Super::Tie::IPCFileHandle') {
 	return 0;
     }
@@ -259,6 +271,11 @@ sub is_socket {
     if (ref tied *$handle eq 'Forks::Super::Tie::IPCPipeHandle') {
 	return 0;
     }
+
+=end XXXXXX
+
+=cut
+
     if (defined $$handle->{is_socket}) {
 	return $$handle->{is_socket};
     }
@@ -270,6 +287,16 @@ sub is_pipe {
     if (defined $$handle->{is_pipe}) {
 	return $$handle->{is_pipe};
     }
+
+    my $th = tied *$handle;
+    if (ref($th)) {
+	return 0 if $th->isa('Forks::Super::Tie::IPCFileHandle');
+	return 0 if $th->isa('Forks::Super::Tie::IPCSocketHandle');
+	return 1 if $th->isa('Forks::Super::Tie::IPCPipeHandle');
+    }
+
+=begin XXXXXX refactored 0.55
+
     if (ref tied *$handle eq 'Forks::Super::Tie::IPCFileHandle') {
 	return 0;
     }
@@ -282,6 +309,11 @@ sub is_pipe {
     if ($$handle->{is_socket} || $$handle->{is_file} || 0) {
 	return 0;
     }
+
+=end XXXXXX
+
+=cut
+
     if (defined $handle->{std_delegate}) {
 	$handle = $handle->{std_delegate};
     }
@@ -307,7 +339,7 @@ sub abs_path {
 
     my $z = eval {
 	my $dir2 = Cwd::abs_path($dir);
-	if ($dir ne $dir2) {
+	if ($dir2 && $dir ne $dir2) {
 	    $dir = $dir2;
 	}
 	1;
@@ -335,6 +367,24 @@ sub filter (&\@) {
     return @$out;
 }
 
+sub okl {
+    # pass a unit test automatically if $ENV{TEST_LENIENT} is set.
+    # Use in special circumstances (e.g. high CPU load, flaky network)
+    # for special tests (e.g., timing tests, external connectivity tests)
+    # that might fail for reasons beyond your control.
+    my ($condition,$message) = @_;
+    $message ||= '';
+    if ($ENV{TEST_LENIENT}) {
+	if (!$condition) {
+	    return Test::More::ok(1, "$message (LENIENT PASS)");
+	} else {
+	    return Test::More::ok(1, "$message (lenient)");
+	}
+    } else {
+	return Test::More::ok($condition, $message);
+    }
+}
+
 1;
 
 =head1 NAME
@@ -343,14 +393,17 @@ Forks::Super::Util - utility routines for Forks::Super module
 
 =head1 VERSION
 
-0.54
+0.55
 
 =head1 SYNOPSIS
+
+    use Forks::Super::Util qw(functions to import);
+    use Forks::Super::Util qw(:all);
 
 =head1 DESCRIPTION
 
 A collection of useful and mostly unrelated routines for things
-that the L<Forks::Super> module needs to do.
+that the L<Forks::Super> distribution needs to do.
 
 =head1 SUBROUTINES
 

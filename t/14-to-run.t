@@ -7,9 +7,9 @@ use warnings;
 # placeholder for testing  fork { run => \@ } feature.
 
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 my $output = "t/out/test14.$$";

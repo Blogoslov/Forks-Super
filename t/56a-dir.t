@@ -10,19 +10,21 @@ mkdir "t/dir2-$$" or die;
 mkdir "t/dir2-$$/dir3" or die;
 
 my $PERL = $Config{perlpath};  # in case $^X is a relative path ...
+$PERL = $^X if ! -x $PERL;
 
 if (${^TAINT}) {
     $ENV{PATH} = '';
+    ($PERL)=$PERL=~/(.*)/;
 }
 
 my $pid0 = fork { dir => get_path("t/dir2-$$") };
    # ok: $$ is parent pid, not new child pid
 
 if ($pid0 == 0) {
-  open my $BAR, '>', 'www';
-  print $BAR 'Prey for whirled peas';
-  close $BAR;
-  exit;
+    open my $BAR, '>', 'www';
+    print $BAR 'Prey for whirled peas';
+    close $BAR;
+    exit;
 }
 ok(isValidPid($pid0), "natural child launched with dir option");
 wait;
@@ -34,8 +36,12 @@ unlink "www", "t/dir2-$$/www";
 
 
 my $pid1 = fork { 
-  dir => get_path("t/dir1-$$"),
-  sub => sub { open my $FOO, '>>', 'xxx'; print $FOO "Hello world"; close $FOO }
+    dir => get_path("t/dir1-$$"),
+    sub => sub { 
+	open my $FOO, '>>', 'xxx';
+	print $FOO "Hello world";
+	close $FOO;
+    }
 };
 ok(isValidPid($pid1), "sub child launched with dir option");
 wait;
@@ -45,8 +51,8 @@ ok($pid1->status == 0, "child completed normally");
 unlink "xxx", "t/dir1-$$/xxx";
 
 my $pid2 = fork {
-  chdir => get_path("t/dir2-$$/dir3"),
-  exec => [$PERL, "../../external-command.pl", "-o=yyy", "-e=message"]
+    chdir => get_path("t/dir2-$$/dir3"),
+    exec => [$PERL, "../../external-command.pl", "-o=yyy", "-e=message"]
 };
 ok(isValidPid($pid2), "exec child launched with chdir option");
 wait;
@@ -56,8 +62,8 @@ ok($pid2->status == 0, "child completed normally");
 unlink "t/dir2-$$/dir3/yyy", "yyy";
 
 my $pid3 = fork {
-  dir => get_path("t/dir56789"),
-  cmd => [ $PERL, "../external-command.pl", "-o=zzz", "-e=message" ]
+    dir => get_path("t/dir56789"),
+    cmd => [ $PERL, "../external-command.pl", "-o=zzz", "-e=message" ]
 };
 ok(isValidPid($pid3), "cmd child launched with invalid dir option");
 wait;

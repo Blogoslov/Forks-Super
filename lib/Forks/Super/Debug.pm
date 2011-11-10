@@ -4,7 +4,7 @@
 #
 
 package Forks::Super::Debug;
-use Forks::Super::Util;
+use Forks::Super::Util 'IS_WIN32';
 use IO::Handle;
 use Exporter;
 use Carp;
@@ -14,7 +14,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 our ($DEBUG, $DEBUG_FH, %_CARPED, 
      $OLD_SIG__WARN__, $OLD_SIG__DIE__, $OLD_CARP_VERBOSE);
@@ -79,10 +79,208 @@ sub use_Carp_Always {
 
 # stop emulation of Carp::Always
 sub no_Carp_Always {
-  $Carp::Verbose = $OLD_CARP_VERBOSE || 0;
-  $SIG{__WARN__} = $OLD_SIG__WARN__ || 'DEFAULT';
-  $SIG{__DIE__} = $OLD_SIG__DIE__ || 'DEFAULT';
-  return;
+    $Carp::Verbose = $OLD_CARP_VERBOSE || 0;
+    $SIG{__WARN__} = $OLD_SIG__WARN__ || 'DEFAULT';
+    $SIG{__DIE__} = $OLD_SIG__DIE__ || 'DEFAULT';
+    return;
+}
+
+#############################################################################
+
+my $parent_dumps = 0;
+sub parent_dump {
+    # do something like what a Java virtual machine does when it gets
+    # a SIGQUIT signal -- print out some information about the
+    # currently running jobs. It will help users identify "stuck" jobs
+
+    # XXX - this subroutine is not ready for prime time, yet but you can
+    # preview it by setting  $SIG{QUIT} = \&Forks::Super::Debug::parent_dump
+    # in your script and sending  SIGQUIT's  to it.
+
+    # what would we want to know?
+    #   all jobs
+    #   --------
+    #     job id
+    #     current state
+    #     creation time
+    #     cmd/exec: command
+    #     sub/not code ref: name of subroutine
+    #     sub/code ref:     caller
+    #
+    #   queued jobs
+    #   -----------
+    #     last queue check, reason for last deferral (*)
+    #
+    #   active/suspended jobs
+    #   ---------------------
+    #     start time
+    #     current pid
+    #   X child_fh summary
+    #   X sub/natural: stack trace from child (*)
+    #
+    #   completed jobs
+    #   --------------
+    #     completion time (total run time)
+    #     exit status
+    #     reaped? reap time
+    #   X output produced, input consumed (*)
+    #
+    # other stuff we want to know:
+    # ----------------------------
+    #     total jobs on queue
+    #     total active jobs
+    #     total completed jobs
+    #     completed job distribution of run times
+    return unless $$ == $Forks::Super::MAIN_PID;
+    $parent_dumps++;
+
+    open my $TTY, '>>', &IS_WIN32 ? 'CON' : '/dev/tty';
+
+    print $TTY scalar localtime(time), "\n";
+    print $TTY "Full Forks::Super v$Forks::Super::VERSION job dump process $$\n";
+    print $TTY "Default maximum background processes: $Forks::Super::MAX_PROC\n";
+    print $TTY "Default maximum CPU load:          $Forks::Super::MAX_LOAD\n";
+    print $TTY "Child fork ok:                     $Forks::Super::CHILD_FORK_OK\n";
+    print $TTY "Default busy system busy behavior: $Forks::Super::ON_BUSY\n";
+    if (defined($Forks::Super::IPC_DIR) && $Forks::Super::IPC_DIR ne '') {
+	print $TTY "Default IPC directory:  $Forks::Super::IPC_DIR\n";
+    }
+    
+    print $TTY "\n";
+
+    # active jobs
+    my $header = 0;
+    my ($num_active, $num_deferred, $num_complete, $num_other) = (0,0,0,0);
+    foreach my $job (@Forks::Super::ALL_JOBS) {
+	if ($job->is_active || $job->{state} eq 'SUSPENDED') {
+	    print $TTY "ACTIVE JOBS\n-----------\n\n" unless $header++;
+	    _dump_job($TTY, $job);
+	    $num_active++;
+	}
+    }
+
+    # queued jobs
+    $header = 0;
+    foreach my $job (@Forks::Super::ALL_JOBS) {
+	if ($job->is_deferred) {
+	    print $TTY "QUEUED JOBS\n-----------\n\n" unless $header++;
+	    _dump_job($TTY, $job, 'queue');
+	    $num_deferred++;
+	}
+    }
+
+    # complete jobs
+    my @run_times = ();
+    $header = 0;
+    foreach my $job (@Forks::Super::ALL_JOBS, 
+		     @Forks::Super::Job::ARCHIVED_JOBS) {
+	if ($job->is_complete) {
+	    print $TTY "COMPLETE JOBS\n-------------\n\n" unless $header++;
+	    _dump_job($TTY, $job);
+	    push @run_times, $job->{end} - $job->{start};
+	    $num_complete++;
+	}
+    }
+
+    # other ?
+    $header = 0;
+    foreach my $job (@Forks::Super::ALL_JOBS, 
+		     @Forks::Super::Job::ARCHIVED_JOBS) {
+	if (!$job->is_active && !$job->is_complete
+	        && !$job->is_deferred && !$job->is_suspended) {
+	    print $TTY "OTHER JOBS\n----------\n\n" unless $header++;
+	    _dump_job($TTY,$job);
+	    $num_other++;
+	}
+    }
+
+    # summary
+    if ($num_active || $num_complete || $num_deferred || $num_other) {
+	print $TTY "SUMMARY\n-------\n";
+	print $TTY "Active jobs  : $num_active\n" if $num_active;
+	print $TTY "Deferred jobs: $num_deferred\n" if $num_deferred;
+	if ($num_complete) {
+	    my ($x,$x2) = (0,0);
+	    $x+=$_, $x2+=$_*$_ for @run_times;
+	    $x /= @run_times;
+	    $x2 /= @run_times;
+	    $x2 -= $x*$x;
+	    $x2 = $x2 > 0 ? sqrt($x2) : 0.0;  # stdev of run times
+	    printf $TTY ("Completed jobs: %d  Run time: %.3fs +/- %.3fs\n",
+			 $num_complete, $x, $x2);
+	}
+	print $TTY "Other jobs    : $num_other\n" if $num_other;
+	print $TTY "\n";
+    }
+
+    close $TTY;
+    return;
+}
+
+sub _dump_job {
+    my ($fh, $job, $style) = @_;
+    print $fh "Job";
+    if ($job->{name}) {
+	print $fh " name=$job->{name}";
+    }
+    if (!defined($job->{real_pid})) {
+	print $fh " jobid=$job->{pid}";
+    } elsif ($job->{pid} == $job->{real_pid}) {
+	print $fh " jobid=$job->{pid}";
+    } else {
+	print $fh " jobid=$job->{real_pid}/$job->{pid}";
+    }
+    print $fh " ", $job->{state}, "\n";
+
+    # XXX - print info about IPC channels
+
+    if ($job->{style} eq 'natural') {
+	print $fh "\tStyle: natural\n";
+    } elsif ($job->{style} eq 'sub') {
+	if (ref($job->{sub}) eq 'CODE') {
+	    print $fh "\tStyle: Perl subroutine (CODE ref)\n";
+	} else {
+	    print $fh "\tStyle: Perl subroutine ($job->{sub})\n";
+	}
+    } elsif ($job->{style} eq 'cmd') {
+	my $cmd = $job->{cmd};
+	if (ref($cmd) eq 'ARRAY') {
+	    $cmd = join ' ', @$cmd;
+	}
+	print $fh "\tStyle: external command ($cmd)\n";
+    } elsif ($job->{style} eq 'exec') {
+	my $cmd = $job->{exec};
+	if (ref($cmd) eq 'ARRAY') {
+	    $cmd = join ' ', @$cmd;
+	}
+	print $fh "\tStyle: exec ($cmd)\n";
+    } else {
+	print $fh "\tStyle: $job->{style}\n";
+    }
+
+    print $fh "\tCreated: ", scalar localtime($job->{created}), "\n";
+
+    if ($job->{state} eq 'DEFERRED') {
+	print $fh "\tQueued : ", scalar localtime($job->{queued}), "\n";
+	print $fh "\tQ Prio.: ", $job->{queue_priority}, "\n";
+	if ($job->{queue_message}) {
+	    print $fh "\tLast queue msg: ", $job->{queue_message}, "\n";
+	}
+    }
+
+    if ($job->{start}) {
+	print $fh "\tStarted: ", scalar localtime($job->{start}), "\n";
+    }
+    if ($job->{end}) {
+	print $fh "\tFinished: ", scalar localtime($job->{end}), "\n";
+	print $fh "\tRun time: ", ($job->{end}-$job->{start}), "s\n";
+    }
+    if ($job->{reaped}) {
+	print $fh "\tReaped  : ", scalar localtime($job->{reaped}), "\n";
+	print $fh "\tExit status: ", $job->{status}, "\n";
+    }
+    print $fh "\n";
+    return;
 }
 
 #############################################################################
@@ -130,7 +328,7 @@ Forks::Super::Debug - debugging and logging routines for Forks::Super distro
 
 =head1 VERSION
 
-0.54
+0.55
 
 =head1 VARIABLES
 
@@ -193,6 +391,24 @@ value of C<$!> that can be produced.
             carp_once [$!], "do_something() did something!: $!";
         }
     }
+
+=head2 parent_dump
+
+Writes information about all known jobs to the console.
+
+Many implementations of the Java Virtual Machine have a useful debugging
+feature where it will dump a list of all thread stacks when the JVM
+receives a C<SIGQUIT> signal. 
+
+C<Forks::Super::Debug::parent_dump> is this module's attempt to
+emulate this feature. When this subroutine is invoked, it will dump
+information about all known jobs to the console.
+
+To enable this feature in your program, you must explicitly set a 
+signal handler that points to this subroutine. You do not necessarily have to
+set a signal handler for C<SIGQUIT>.
+
+    $SIG{USR2} = \&Forks::Super::Debug::parent_dump;
 
 =head1 EXPORTS
 

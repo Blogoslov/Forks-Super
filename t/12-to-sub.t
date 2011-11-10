@@ -18,29 +18,29 @@ use warnings;
 # See t/external-command.pl
 #
 sub internal_command {
-  my (@args) = @_;
-  my $out;
-  foreach my $arg (@args) {
-    my ($key,$val) = split /=/, $arg;
-    if ($key eq "--output" or $key eq "-o") {
-      open($out, ">", $val);
-      select $out;
-      $out->autoflush(1);
-    } elsif ($key eq "--echo" or $key eq "-e") {
-      print $val, " ";
-    } elsif ($key eq "--ppid" or $key eq "-p") {
-      my $pid = $$;
+    my (@args) = @_;
+    my $out;
+    foreach my $arg (@args) {
+	my ($key,$val) = split /=/, $arg;
+	if ($key eq "--output" or $key eq "-o") {
+	    open($out, ">", $val);
+	    select $out;
+	    $out->autoflush(1);
+	} elsif ($key eq "--echo" or $key eq "-e") {
+	    print $val, " ";
+	} elsif ($key eq "--ppid" or $key eq "-p") {
+	    my $pid = $$;
       print $pid, " ";
-    } elsif ($key eq "--sleep" or $key eq "-s") {
-      sleep $val || 1;
-    } elsif ($key eq "--exit" or $key eq "-x") {
-      select STDOUT;
-      close $out;
-      exit $val || 0;
+	} elsif ($key eq "--sleep" or $key eq "-s") {
+	    sleep $val || 1;
+	} elsif ($key eq "--exit" or $key eq "-x") {
+	    select STDOUT;
+	    close $out;
+	    exit $val || 0;
+	}
     }
-  }
-  select STDOUT;
-  close $out;
+    select STDOUT;
+    close $out;
 }
 
 my $output = "t/out/test12.$$";
@@ -133,7 +133,7 @@ $p = wait;
 my $v = Time::HiRes::time();
 ($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait on sleepy sub ok");        ### 18 ###
-ok($u >= 2.9 && $t <= 5.05,                     ### 19 ### was 4 obs 4.69
+okl($u >= 2.9 && $t <= 5.05,                     ### 19 ### was 4 obs 4.69
    "background sub ran ${t}s ${u}s, expected 3-4s");
 
 ##################################################################

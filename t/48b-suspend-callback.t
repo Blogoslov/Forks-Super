@@ -5,20 +5,23 @@ use strict;
 use warnings;
 no warnings 'once';
 
-my $file = "t/out/49.$$.out";
+# v0.55 - think I fixed the race condition that could make
+#         this test hang/timeout
+
+my $file = "t/out/48b.$$.out";
 $Forks::Super::Util::DEFAULT_PAUSE = 0.5;
 
 our ($DEBUG, $DEVNULL);
 $DEBUG = $ENV{DEBUG} ? *STDERR : do {open($DEVNULL,'>',"$file.debug");$DEVNULL};
 
 END {
-  if ($$ == $Forks::Super::MAIN_PID) {
-      unlink $file, "$file.tmp", "$file.debug", "$file.sem";
-      unless ($ENV{DEBUG}) {
-	  close $DEVNULL;
-	  unlink "$file.debug";
-      }
-  }
+    if ($$ == $Forks::Super::MAIN_PID) {
+	unlink $file, "$file.tmp", "$file.debug";
+	unless ($ENV{DEBUG}) {
+	    close $DEVNULL;
+	    unlink "$file.debug";
+	}
+    }
 }
 
 #
@@ -28,75 +31,61 @@ END {
 # return 0 if a job should be left in whatever state it is in
 #
 sub child_suspend_callback_function {
-  my ($job) = @_;
-  my $d = (time - $::T) % 20;
-  no warnings 'unopened';
-  print $DEBUG "callback: \$d=$d ";
-  if ($d < 5) {
-    print $DEBUG " :  noop\n";
-    return 0;
-  }
-  if ($d < 10) {
-      print $DEBUG " :  suspend\n";
-      open my $SEM, '>>', "$file.sem";
-      flock $SEM, 2;
-      close $SEM;
-
-      # there is still a race condition here, as the child process could seize
-      # the semaphore between now and the time the  SIGSTOP  actually gets
-      # sent from the parent to the child.
-
-      # If that happens, this test will hang and possibly timeout.
-
-      return -1;
-  }
-  if ($d < 15) {
-    print $DEBUG " :  noop\n";
-    return 0;
-  }
-  print $DEBUG " :  resume\n";
-  return +1;
+    my ($job) = @_;
+    my $d = (time - $::T) % 20;
+    no warnings 'unopened';
+    print $DEBUG "callback: \$d=$d ";
+    if ($d < 5) {
+	print $DEBUG " :  noop\n";
+	return 0;
+    }
+    if ($d < 10) {
+	print $DEBUG " :  suspend\n";
+	return -1;
+    }
+    if ($d < 15) {
+	print $DEBUG " :  noop\n";
+	return 0;
+    }
+    print $DEBUG " :  resume\n";
+    return +1;
 }
 
 sub read_value {
-  no warnings 'unopened';
-  my $fh;
-  for (1..10) {
-      last if open $fh, '<', $file;
-      sleep 1;
-  }
-  my $F = <$fh>;
-  close $fh;
-  print $DEBUG "read_value is $F\n";
-  return $F;
+    no warnings 'unopened';
+    my $fh;
+    for (1..10) {
+	last if open $fh, '<', $file;
+	sleep 1;
+    }
+    my @F = <$fh>;
+    close $fh;
+    my $F = pop @F;
+    $F = pop @F if $F !~ /\S/;
+    print $DEBUG "read_value is $F\n";
+    return $F;
 }
 
 sub write_value {
-  my ($value) = @_;
+    my ($value) = @_;
 
-  no warnings 'unopened', 'io';
+    no warnings 'unopened', 'io';
 
-  # don't suspend while we're in the middle of changing the ipc file
-  open my $SEM, '>>', "$file.sem";
-  flock $SEM, 2;
-
-  open my $fh, '>', "$file.tmp";
-  print $DEBUG "write_value $value\n";
-  print $fh $value;
-  close $fh;
-  rename "$file.tmp", $file;
-  print $DEBUG "write_value: sync\n";
-
-  close $SEM;
-  return;
+    # don't suspend while we're in the middle of changing the ipc file
+    open my $fh, '>>', $file;
+    print $DEBUG "write_value $value\n";
+    print $fh $value . "\n";
+    close $fh;
+    print $DEBUG "write_value: sync\n";
+    return;
 }
 
 $Forks::Super::Queue::QUEUE_MONITOR_FREQ = 2;
 
 if (Forks::Super::Util::IS_WIN32ish
         && !Forks::Super::Config::CONFIG_module("Win32::API")) {
-   ok(1, "# skip suspend/resume not supported on $^O") for 1..9;
-   exit;
+    ok(1, "# skip suspend/resume not supported on $^O") for 1..9;
+    exit;
 }
 
 my $t0 = $::T = Time::HiRes::time();
@@ -134,10 +123,10 @@ ok($job->{state} eq 'ACTIVE', "$$\\job has started")
 # www.cpantesters.org/cpan/report/25b3453c-a320-11e0-8b35-dd57e1de4735:
 #    job was COMPLETE at this point, not ACTIVE?
 if ($job->{state} eq 'COMPLETE') {
-   my $waitpid = waitpid $job, 0;
-   my $status = $job->{status};
-   diag("ack. job is COMPLETE when it should be active? waitpid:$waitpid ",
-        "status:$status. Don't expect the rest of this test to go well.");
+    my $waitpid = waitpid $job, 0;
+    my $status = $job->{status};
+    diag("ack. job is COMPLETE when it should be active? waitpid:$waitpid ",
+	 "status:$status. Don't expect the rest of this test to go well.");
 }
 
 
@@ -154,9 +143,9 @@ while ($pause_time > 2) {
 if ($pause_time > 0) {
     Forks::Super::Util::pause($pause_time);
 }
-ok($job->{state} eq 'SUSPENDED', "job is suspended")
-      or diag("job state was ", $job->{state}, " expected SUSPENDED");
 $w = read_value();
+ok($job->{state} eq 'SUSPENDED', "job is suspended  w=$w")
+      or diag("job state was ", $job->{state}, " expected SUSPENDED");
 if (!defined $w) {
     warn "read_value() did not return a value. Retrying ...\n";
     sleep 1;
@@ -172,7 +161,7 @@ my $x = read_value();
 ok($x == $w, "job has stopped increment value, expect val:$x == $w");
 
 Forks::Super::Util::pause($t1 + 18.0 - Time::HiRes::time());
-ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',
+ok($job->{state} eq 'ACTIVE' || $job->{state} eq 'COMPLETE',  ### 7 ###
      "job has resumed state=" . $job->{state})
       or diag("job state was ", $job->{state}, " expected COMPLETE or ACTIVE");
 $x = read_value();

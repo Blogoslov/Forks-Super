@@ -16,10 +16,17 @@ Forks::Super::Job::Timeout::warm_up();
 #
 
 SKIP: {
-  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-    skip "alarm function unavailable on this system ($^O,$]), "
-      . "can't test timeout feature", 3;
-  }
+
+=begin XXXXXX workaround 0.55
+
+    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
+	skip "alarm function unavailable on this system ($^O,$]), "
+	    . "can't test timeout feature", 3;
+    }
+
+=end XXXXXX
+
+=cut
 
 #######################################################
 
@@ -28,7 +35,7 @@ my $t = Time::HiRes::time();
 my $p = wait;
 $t = Time::HiRes::time() - $t;
 ok($p == $pid, "wait successful; Expected $pid got $p");
-ok($t <= 1.9, "fast fail timeout=${t}s, expected <=1s"); ### 8 ###
+okl($t <= 1.9, "fast fail timeout=${t}s, expected <=1s"); ### 8 ###
 ok($? != 0, "job failed with non-zero STATUS $?");
 
 #######################################################

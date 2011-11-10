@@ -5,9 +5,9 @@ use warnings;
 
 SKIP: {
 
-  if (!Forks::Super::Config::CONFIG_module("DateTime::Format::Natural")) {
-    skip "natural language test requires DateTime::Format::Natural module", 4;
-  }
+    if (!Forks::Super::Config::CONFIG_module("DateTime::Format::Natural")) {
+	skip "natural language test requires DateTime::Format::Natural module", 4;
+    }
 
 my $t = Time::HiRes::time();
 my $pid = fork { delay => "in 5 seconds", sub => sub { sleep 3 } };
@@ -17,7 +17,7 @@ my $elapsed = $job->{start} - $t;
 
 ok(!isValidPid($pid,-1) && $pp == $pid || $pp == $job->{real_pid}, 
    "created task with natural language delay");
-ok($elapsed >= 4 && $elapsed <= 6.2, "natural language delay was respected")
+okl($elapsed >= 4 && $elapsed <= 6.2, "natural language delay was respected")
     or diag("took ${elapsed}s, expected 4-6");
 
 my $future = "in 6 seconds";

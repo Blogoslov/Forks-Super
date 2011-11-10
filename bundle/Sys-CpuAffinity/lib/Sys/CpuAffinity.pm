@@ -8,7 +8,7 @@ use base qw(DynaLoader);
 ## no critic (DotMatch,LineBoundary,Sigils,Punctuation,Quotes,Magic,Checked)
 ## no critic (NamingConventions::Capitalization,BracedFileHandle)
 
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 our $DEBUG = $ENV{DEBUG} || 0;
 our $XS_LOADED = 0;
 eval { bootstrap Sys::CpuAffinity $VERSION; $XS_LOADED = 1 };
@@ -33,7 +33,7 @@ sub import {
 #
 # For XS-based solutions, the stub will go in the distributions
 # contrib/  directory, and will be available if it successfully
-# compiles during the installation process. See 
+# compiles during the installation process. See
 # _getAffinity_with_xs_sched_getaffinity  for an example of
 # how to use a compiled function. All exported XS function names
 # should begin with "xs_" and all function names, even the ones
@@ -48,112 +48,110 @@ sub import {
 #
 
 sub getAffinity {
-  my ($pid, %flags) = @_; # %flags reserved for future use
-  my $wpid = $pid;
+    my ($pid, %flags) = @_; # %flags reserved for future use
+    my $wpid = $pid;
 
-  my $mask = 0
-    || _getAffinity_with_taskset($pid)
-    || _getAffinity_with_xs_sched_getaffinity($pid)
-    || _getAffinity_with_xs_processor_bind($pid)
-    || _getAffinity_with_xs_cpuset_getaffinity($pid)
-    || _getAffinity_with_xs_pthread_self_getaffinity($pid)
-    || _getAffinity_with_BSD_Process_Affinity($pid)
-    || _getAffinity_with_cpuset($pid)
-    || _getAffinity_with_pbind($pid)
-    || _getAffinity_with_xs_win32($pid)
-    || _getAffinity_with_xs_irix_sysmp($pid)
-    || _getAffinity_with_Win32Process($wpid)
-    || _getAffinity_with_Win32API($wpid)
-    || 0;
+    my $mask = 0
+	|| _getAffinity_with_taskset($pid)
+	|| _getAffinity_with_xs_sched_getaffinity($pid)
+	|| _getAffinity_with_xs_processor_bind($pid)
+	|| _getAffinity_with_xs_cpuset_getaffinity($pid)
+	|| _getAffinity_with_xs_pthread_self_getaffinity($pid)
+	|| _getAffinity_with_BSD_Process_Affinity($pid)
+	|| _getAffinity_with_cpuset($pid)
+	|| _getAffinity_with_pbind($pid)
+	|| _getAffinity_with_xs_win32($pid)
+	|| _getAffinity_with_xs_irix_sysmp($pid)
+	|| _getAffinity_with_Win32Process($wpid)
+	|| _getAffinity_with_Win32API($wpid)
+	|| 0;
 
-  return if $mask == 0;
-  return wantarray ? _maskToArray($mask) : $mask;
+    return if $mask == 0;
+    return wantarray ? _maskToArray($mask) : $mask;
 }
 
 sub _sanitize_set_affinity_args {
-  my ($pid,$mask) = @_;
+    my ($pid,$mask) = @_;
 
-  return if ! $pid;
-  if (ref $mask eq 'ARRAY') {
-    $mask = _arrayToMask(@$mask);
-  }
-  my $np = getNumCpus();
-  if ($mask == -1 && $np > 0) {
-    $mask = (2 ** $np) - 1;
-  }
-  if ($mask <= 0) {
-    carp "Sys::CpuAffinity: invalid mask $mask in call to setAffinty\n";
-    return;
-  }
-
-  # http://www.cpantesters.org/cpan/report/07107190-b19f-3f77-b713-d32bba55d77f
-  # 1 << 32 == 1  caused test failure in v0.90
-
-  my $maxmask = 1 << $np;
-  if ($maxmask > 1 && $mask >= $maxmask) {
-    my $newmask = $mask & ($maxmask - 1);
-    if ($newmask == 0) {
-      carp "Sys::CpuAffinity: mask $mask is not valid for system with ",
-        "$np processors.\n";
-      return;
-    } else {
-      carp "Sys::CpuAffinity: mask $mask adjusted to $newmask for ",
-        "system with $np processors\n";
-      $mask = $newmask;
+    return if ! $pid;
+    if (ref $mask eq 'ARRAY') {
+	$mask = _arrayToMask(@$mask);
     }
-  }
-  $_[1] = $mask;
-  return 1;
+    my $np = getNumCpus();
+    if ($mask == -1 && $np > 0) {
+	$mask = (2 ** $np) - 1;
+    }
+    if ($mask <= 0) {
+	carp "Sys::CpuAffinity: invalid mask $mask in call to setAffinty\n";
+	return;
+    }
+
+    # www.cpantesters.org/cpan/report/07107190-b19f-3f77-b713-d32bba55d77f
+    # 1 << 32 == 1  caused test failure in v0.90
+
+    my $maxmask = 1 << $np;
+    if ($maxmask > 1 && $mask >= $maxmask) {
+	my $newmask = $mask & ($maxmask - 1);
+	if ($newmask == 0) {
+	    carp "Sys::CpuAffinity: mask $mask is not valid for system with ",
+	    "$np processors.\n";
+	    return;
+	} else {
+	    carp "Sys::CpuAffinity: mask $mask adjusted to $newmask for ",
+	    "system with $np processors\n";
+	    $mask = $newmask;
+	}
+    }
+    $_[1] = $mask;
+    return 1;
 }
 
 sub setAffinity {
-  my ($pid, $mask, %flags) = @_; # %flags reserved for future use
+    my ($pid, $mask, %flags) = @_; # %flags reserved for future use
 
-  return 0 if ! _sanitize_set_affinity_args($pid, $mask);
+    return 0 if ! _sanitize_set_affinity_args($pid, $mask);
 
-  return _setAffinity_with_Win32API($pid,$mask)
-    || _setAffinity_with_xs_win32($pid,$mask)
-    || _setAffinity_with_Win32Process($pid,$mask)
-    || _setAffinity_with_taskset($pid,$mask)
-    || _setAffinity_with_xs_sched_setaffinity($pid,$mask)
-    || _setAffinity_with_BSD_Process_Affinity($pid,$mask)
-    || _setAffinity_with_xs_cpuset_setaffinity($pid,$mask)  # XXX needs work
-    || _setAffinity_with_xs_processor_bind($pid,$mask)
-    || _setAffinity_with_xs_pthread_self_setaffinity($pid,$mask)
-    || _setAffinity_with_bindprocessor($pid,$mask)
-    || _setAffinity_with_cpuset($pid,$mask)
-    || _setAffinity_with_pbind($pid,$mask)
-    || _setAffinity_with_xs_irix_sysmp($pid,$mask)
-    || 0;
+    return _setAffinity_with_Win32API($pid,$mask)
+	|| _setAffinity_with_xs_win32($pid,$mask)
+	|| _setAffinity_with_Win32Process($pid,$mask)
+	|| _setAffinity_with_taskset($pid,$mask)
+	|| _setAffinity_with_xs_sched_setaffinity($pid,$mask)
+	|| _setAffinity_with_BSD_Process_Affinity($pid,$mask)
+	|| _setAffinity_with_xs_cpuset_setaffinity($pid,$mask)  # XXX needs work
+	|| _setAffinity_with_xs_processor_bind($pid,$mask)
+	|| _setAffinity_with_xs_pthread_self_setaffinity($pid,$mask)
+	|| _setAffinity_with_bindprocessor($pid,$mask)
+	|| _setAffinity_with_cpuset($pid,$mask)
+	|| _setAffinity_with_pbind($pid,$mask)
+	|| _setAffinity_with_xs_irix_sysmp($pid,$mask)
+	|| 0;
 }
 
 our $_NUM_CPUS_CACHED = 0;
 sub getNumCpus {
-  if ($_NUM_CPUS_CACHED) {
-    return $_NUM_CPUS_CACHED;
-  }
-  return $_NUM_CPUS_CACHED =
-       _getNumCpus_from_Win32API()                  # XXX - broken
-    || _getNumCpus_from_xs_Win32API_System_Info()
-    || _getNumCpus_from_xs_cpusetGetCPUCount()
-    || _getNumCpus_from_proc_cpuinfo()
-    || _getNumCpus_from_proc_stat()
-    || _getNumCpus_from_bindprocessor()
-    ## cpan test 1062dc56-75df-11e0-a49b-9797e3ecc90b:
-    ##    sysctl more reliable than dmesg_bsd for OpenBSD?
-    || _getNumCpus_from_sysctl()
-    || _getNumCpus_from_dmesg_bsd()
-    || _getNumCpus_from_dmesg_solaris()
-    || _getNumCpus_from_psrinfo()
-    || _getNumCpus_from_hinv()
-    || _getNumCpus_from_hwprefs()
-    || _getNumCpus_from_system_profiler()
-    || _getNumCpus_from_prtconf()
-    || _getNumCpus_from_Win32API_System_Info()
-    || _getNumCpus_from_Test_Smoke_SysInfo()
-    || _getNumCpus_from_ENV()
-    || _getNumCpus_from_taskset()
-    || -1;
+    if ($_NUM_CPUS_CACHED) {
+	return $_NUM_CPUS_CACHED;
+    }
+    return $_NUM_CPUS_CACHED =
+	_getNumCpus_from_Win32API()                  # XXX - broken
+	|| _getNumCpus_from_xs_Win32API_System_Info()
+	|| _getNumCpus_from_xs_cpusetGetCPUCount()
+	|| _getNumCpus_from_proc_cpuinfo()
+	|| _getNumCpus_from_proc_stat()
+	|| _getNumCpus_from_bindprocessor()
+	|| _getNumCpus_from_sysctl()
+	|| _getNumCpus_from_dmesg_bsd()
+	|| _getNumCpus_from_dmesg_solaris()
+	|| _getNumCpus_from_psrinfo()
+	|| _getNumCpus_from_hinv()
+	|| _getNumCpus_from_hwprefs()
+	|| _getNumCpus_from_system_profiler()
+	|| _getNumCpus_from_prtconf()
+	|| _getNumCpus_from_Win32API_System_Info()
+	|| _getNumCpus_from_Test_Smoke_SysInfo()
+	|| _getNumCpus_from_ENV()
+	|| _getNumCpus_from_taskset()
+	|| -1;
 }
 
 ######################################################################
@@ -161,26 +159,26 @@ sub getNumCpus {
 # count processors toolbox
 
 sub _getNumCpus_from_ENV {
-  # in some OS, the number of processors is part of the default environment
-  # this also makes it easy to spoof the value (is that good or bad?)
-  if ($^O eq 'MSWin32' || $^O eq 'cygwin') {
-    if (defined $ENV{NUMBER_OF_PROCESSORS}) {
-      _debug("from Windows ENV: nproc=$ENV{NUMBER_OF_PROCESSORS}");
-      return $ENV{NUMBER_OF_PROCESSORS};
+    # in some OS, the number of processors is part of the default environment
+    # this also makes it easy to spoof the value (is that good or bad?)
+    if ($^O eq 'MSWin32' || $^O eq 'cygwin') {
+	if (defined $ENV{NUMBER_OF_PROCESSORS}) {
+	    _debug("from Windows ENV: nproc=$ENV{NUMBER_OF_PROCESSORS}");
+	    return $ENV{NUMBER_OF_PROCESSORS};
+	}
     }
-  }
-  return 0;
+    return 0;
 }
 
 sub _getNumCpus_from_Win32API {
-  # GetActiveProcessorCount api function is only supported since Windows 7?
-  # !!! Unfortunately, it also seems to make Windows 7 crash !!!
-  return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
-  return 0 if !_configModule('Win32::API');
+    # GetActiveProcessorCount api function is only supported since Windows 7?
+    # !!! Unfortunately, it also seems to make Windows 7 crash !!!
+    return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
+    return 0 if !_configModule('Win32::API');
 
-  # ALL_PROCESSOR_GROUPS: 0xffff
-  return ###_win32api('GetActiveProcessorCount', 0xffff) ||
-    0;
+    # ALL_PROCESSOR_GROUPS: 0xffff
+    return ###_win32api('GetActiveProcessorCount', 0xffff) ||
+	0;
 }
 
 our %WIN32_SYSTEM_INFO = ();
@@ -217,109 +215,110 @@ sub __is_wow64 {
 }
 
 sub _getNumCpus_from_Win32API_System_Info {
-  return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
-  return 0 if !_configModule('Win32::API');
+    return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
+    return 0 if !_configModule('Win32::API');
 
-  if (0 == scalar keys %WIN32_SYSTEM_INFO) {
-    if (!defined $WIN32API{'GetSystemInfo'}) {
-      my $is_wow64 = __is_wow64();
-      my $lpsysinfo_type_avail = Win32::API::Type::is_known('LPSYSTEM_INFO');
+    if (0 == scalar keys %WIN32_SYSTEM_INFO) {
+	if (!defined $WIN32API{'GetSystemInfo'}) {
+	    my $is_wow64 = __is_wow64();
+	    my $lpsysinfo_type_avail
+		= Win32::API::Type::is_known('LPSYSTEM_INFO');
 
-      my $proto = sprintf 'BOOL %s(%s i)',
-        $is_wow64 ? 'GetNativeSystemInfo' : 'GetSystemInfo',
-        $lpsysinfo_type_avail ? 'LPSYSTEM_INFO' : 'PCHAR';
+	    my $proto = sprintf 'BOOL %s(%s i)',
+		    $is_wow64 ? 'GetNativeSystemInfo' : 'GetSystemInfo',
+		    $lpsysinfo_type_avail ? 'LPSYSTEM_INFO' : 'PCHAR';
 
-      $WIN32API{'GetSystemInfo'} = Win32::API->new('kernel32', $proto);
+	    $WIN32API{'GetSystemInfo'} = Win32::API->new('kernel32', $proto);
+	}
+
+	# does this part break on 64-bit machines? Don't think so.
+	my $buffer = chr(0) x 36;
+	$WIN32API{'GetSystemInfo'}->Call($buffer);
+	($WIN32_SYSTEM_INFO{'PageSize'},
+	 $WIN32_SYSTEM_INFO{'...'},
+	 $WIN32_SYSTEM_INFO{'...'},
+	 $WIN32_SYSTEM_INFO{'...'},
+	 $WIN32_SYSTEM_INFO{'NumberOfProcessors'},
+	 $WIN32_SYSTEM_INFO{'...'},
+	 $WIN32_SYSTEM_INFO{'...'},
+	 $WIN32_SYSTEM_INFO{'...'},
+	 $WIN32_SYSTEM_INFO{'...'})
+	    = unpack 'VVVVVVVvv',   substr $buffer,4;
     }
-
-    # does this part break on 64-bit machines? Don't think so.
-    my $buffer = chr(0) x 36;
-    $WIN32API{'GetSystemInfo'}->Call($buffer);
-    ($WIN32_SYSTEM_INFO{'PageSize'},
-     $WIN32_SYSTEM_INFO{'...'},
-     $WIN32_SYSTEM_INFO{'...'},
-     $WIN32_SYSTEM_INFO{'...'},
-     $WIN32_SYSTEM_INFO{'NumberOfProcessors'},
-     $WIN32_SYSTEM_INFO{'...'},
-     $WIN32_SYSTEM_INFO{'...'},
-     $WIN32_SYSTEM_INFO{'...'},
-     $WIN32_SYSTEM_INFO{'...'})
-      = unpack 'VVVVVVVvv',   substr $buffer,4;
-  }
-  return $WIN32_SYSTEM_INFO{'NumberOfProcessors'} || 0;
+    return $WIN32_SYSTEM_INFO{'NumberOfProcessors'} || 0;
 }
 
 
 sub _getNumCpus_from_xs_cpusetGetCPUCount { # NOT TESTED irix
-  if ($XS_LOADED && defined &xs_cpusetGetCPUCount) {
-    return xs_cpusetGetCPUCount();
-  } else {
-    return 0;
-  }
+    if ($XS_LOADED && defined &xs_cpusetGetCPUCount) {
+	return xs_cpusetGetCPUCount();
+    } else {
+	return 0;
+    }
 }
 
 sub _getNumCpus_from_xs_Win32API_System_Info {
-  if (defined &xs_get_numcpus_from_windows_system_info) {
-    return xs_get_numcpus_from_windows_system_info();
-  } elsif (defined &xs_get_numcpus_from_windows_system_info_alt) {
-    return xs_get_numcpus_from_windows_system_info_alt();
-  } else {
-    return 0;
-  }
+    if (defined &xs_get_numcpus_from_windows_system_info) {
+	return xs_get_numcpus_from_windows_system_info();
+    } elsif (defined &xs_get_numcpus_from_windows_system_info_alt) {
+	return xs_get_numcpus_from_windows_system_info_alt();
+    } else {
+	return 0;
+    }
 }
 
 sub _getNumCpus_from_proc_cpuinfo {
 
-  # I'm told this could give the wrong answer with a "non-SMP kernel"
-  # http://www-oss.fnal.gov/fss/hypermail/archives/hyp-linux/0746.html
+    # I'm told this could give the wrong answer with a "non-SMP kernel"
+    # http://www-oss.fnal.gov/fss/hypermail/archives/hyp-linux/0746.html
 
-  return 0 if ! -r '/proc/cpuinfo';
+    return 0 if ! -r '/proc/cpuinfo';
 
-  my $num_processors = 0;
-  my $cpuinfo_fh;
-  if (open $cpuinfo_fh, '<', '/proc/cpuinfo') {
-    while (<$cpuinfo_fh>) {
-      if (/^processor\s/) {
-        $num_processors++;
-      }
+    my $num_processors = 0;
+    my $cpuinfo_fh;
+    if (open $cpuinfo_fh, '<', '/proc/cpuinfo') {
+	while (<$cpuinfo_fh>) {
+	    if (/^processor\s/) {
+		$num_processors++;
+	    }
+	}
+	close $cpuinfo_fh;
     }
-    close $cpuinfo_fh;
-  }
-  _debug("from /proc/cpuinfo: nproc=$num_processors");
-  return $num_processors || 0;
+    _debug("from /proc/cpuinfo: nproc=$num_processors");
+    return $num_processors || 0;
 }
 
 sub _getNumCpus_from_proc_stat {
 
-  return 0 if ! -r '/proc/stat';
+    return 0 if ! -r '/proc/stat';
 
-  my $num_processors = 0;
-  my $stat_fh;
-  if (open $stat_fh, '<', '/proc/stat') {
-    while (<$stat_fh>) {
-      if (/^cpu\d/i) {
-        $num_processors++;
-      }
+    my $num_processors = 0;
+    my $stat_fh;
+    if (open $stat_fh, '<', '/proc/stat') {
+	while (<$stat_fh>) {
+	    if (/^cpu\d/i) {
+		$num_processors++;
+	    }
+	}
+	close $stat_fh;
     }
-    close $stat_fh;
-  }
-  _debug("from /proc/stat: nproc=$num_processors");
-  return $num_processors || 0;
+    _debug("from /proc/stat: nproc=$num_processors");
+    return $num_processors || 0;
 }
 
 sub _getNumCpus_from_bindprocessor {
-  return 0 if $^O !~ /aix/i;
-  return 0 if !_configExternalProgram('bindprocessor');
-  my $cmd = _configExternalProgram('bindprocessor');
-  my $bindprocessor_output = qx($cmd -q 2> /dev/null);
-  $bindprocessor_output =~ s/\s+$//;
-  return 0 if !$bindprocessor_output;
+    return 0 if $^O !~ /aix/i;
+    return 0 if !_configExternalProgram('bindprocessor');
+    my $cmd = _configExternalProgram('bindprocessor');
+    my $bindprocessor_output = qx($cmd -q 2> /dev/null);
+    $bindprocessor_output =~ s/\s+$//;
+    return 0 if !$bindprocessor_output;
 
-  # Typical output: "The available processors are: 0 1 2 3"
+    # Typical output: "The available processors are: 0 1 2 3"
 
-  $bindprocessor_output =~ s/.*:\s+//;
-  my $num_processors = () = split /\s+/, $bindprocessor_output;
-  return $num_processors;
+    $bindprocessor_output =~ s/.*:\s+//;
+    my $num_processors = () = split /\s+/, $bindprocessor_output;
+    return $num_processors;
 }
 
 sub _getNumCpus_from_dmesg_bsd {
@@ -327,13 +326,13 @@ sub _getNumCpus_from_dmesg_bsd {
 
     my @dmesg;
     if (-r '/var/run/dmesg.boot' && open my $fh, '<', '/var/run/dmesg.boot') {
-      @dmesg = <$fh>;
-      close $fh;
+	@dmesg = <$fh>;
+	close $fh;
     } elsif (! _configExternalProgram('dmesg')) {
-      return 0;
+	return 0;
     } else {
-      my $cmd = _configExternalProgram('dmesg');
-      @dmesg = qx($cmd 2> /dev/null);
+	my $cmd = _configExternalProgram('dmesg');
+	@dmesg = qx($cmd 2> /dev/null);
     }
     # on the version of FreeBSD that I have to play with
     # (8.0), dmesg contains this message:
@@ -356,9 +355,16 @@ sub _getNumCpus_from_dmesg_bsd {
 
     # try NetBSD format. This will also probably work for OpenBSD.
     if (!$ncpus) {
+	# 1.05 - account for duplicates in @dmesg
+	my %d = ();
 	@d = grep { /^cpu\d+ at / } @dmesg;
+	foreach my $dmesg (@d) {
+	    if ($dmesg =~ /^cpu(\d+) at /) {
+		$d{$1}++;
+	    }
+	}
 	_debug("dmesg_bsd[2] contains:\n",@d);
-	$ncpus = scalar @d;
+	$ncpus = scalar keys %d;
     }
     if (@dmesg < 50) {
 	_debug("full dmesg log:\n", @dmesg);
@@ -435,90 +441,90 @@ sub _getNumCpus_from_psrinfo {
 }
 
 sub _getNumCpus_from_hinv {   # NOT TESTED irix
-  return 0 if $^O =~ /irix/i;
-  return 0 if !_configExternalProgram('hinv');
-  my $cmd = _configExternalProgram('hinv');
+    return 0 if $^O =~ /irix/i;
+    return 0 if !_configExternalProgram('hinv');
+    my $cmd = _configExternalProgram('hinv');
 
-  # 1.01-1.04: debug
-  if ($Sys::CpuAffinity::IS_TEST && !$Sys::CpuAffinity::HINV_CALLED++) {
-    print STDERR "$cmd output:\n";
-    print STDERR qx($cmd);
-    print STDERR "\n\n";
-    print STDERR "$cmd -c processor output:\n";
-    print STDERR qx($cmd -c processor);
-    print STDERR "\n\n";
-  }
+    # 1.01-1.05: debug
+    if ($Sys::CpuAffinity::IS_TEST && !$Sys::CpuAffinity::HINV_CALLED++) {
+	print STDERR "$cmd output:\n";
+	print STDERR qx($cmd);
+	print STDERR "\n\n";
+	print STDERR "$cmd -c processor output:\n";
+	print STDERR qx($cmd -c processor);
+	print STDERR "\n\n";
+    }
 
 
-  # found this in Test::Smoke::SysInfo v0.042 in Test-Smoke-1.43 module
-  my @processor = qx($cmd -c processor 2> /dev/null);
-  _debug('"hinv -c processor" output: ', @processor);
-  my ($cpu_cnt) = grep { /\d+.+processors?$/i } @processor;
-  my $ncpu = (split ' ', $cpu_cnt)[0];
+    # found this in Test::Smoke::SysInfo v0.042 in Test-Smoke-1.43 module
+    my @processor = qx($cmd -c processor 2> /dev/null);
+    _debug('"hinv -c processor" output: ', @processor);
+    my ($cpu_cnt) = grep { /\d+.+processors?$/i } @processor;
+    my $ncpu = (split ' ', $cpu_cnt)[0];
 
-  if ($ncpu == 0) {
-    # there might be output like:
-    # PU 30 at Module 001c35/Slot 0/Slice C: 400 Mhz MIPS R12000 Processor...
-    $ncpu = grep { /^CPU / } @processor;
-  }
+    if ($ncpu == 0) {
+	# there might be output like:
+	# PU 30 at Module 001c35/Slot 0/Slice C: 400 Mhz MIPS R12000 Processor
+	$ncpu = grep { /^CPU / } @processor;
+    }
 
-  return $ncpu;
+    return $ncpu;
 }
 
 
 sub _getNumCpus_from_hwprefs {
-  return 0 if $^O !~ /darwin/i && $^O !~ /MacOS/i;
-  return 0 if !_configExternalProgram('hwprefs');
-  my $cmd = _configExternalProgram('hwprefs');
-  my $result = qx($cmd cpu_count 2> /dev/null);
-  $result =~ s/\s+$//;
-  _debug("\"$cmd cpu_count\" output: ", $result);
-  return $result || 0;
+    return 0 if $^O !~ /darwin/i && $^O !~ /MacOS/i;
+    return 0 if !_configExternalProgram('hwprefs');
+    my $cmd = _configExternalProgram('hwprefs');
+    my $result = qx($cmd cpu_count 2> /dev/null);
+    $result =~ s/\s+$//;
+    _debug("\"$cmd cpu_count\" output: ", $result);
+    return $result || 0;
 }
 
 sub _getNumCpus_from_system_profiler {  # NOT TESTED darwin
-  return 0 if $^O !~ /darwin/ && $^O !~ /MacOS/i;
-  return 0 if !_configExternalProgram('system_profiler');
+    return 0 if $^O !~ /darwin/ && $^O !~ /MacOS/i;
+    return 0 if !_configExternalProgram('system_profiler');
 
-  # with help from Test::Smoke::SysInfo
-  my $cmd = _configExternalProgram('system_profiler');
-  my $system_profiler_output
-    = qx($cmd -detailLevel mini SPHardwardDataType 2> /dev/null);
-  my %system_profiler;
-  while ($system_profiler_output =~ m/^\s*([\w ]+):\s+(.+)$/gm) {
-    $system_profiler{uc $1} = $2;
-  }
+    # with help from Test::Smoke::SysInfo
+    my $cmd = _configExternalProgram('system_profiler');
+    my $system_profiler_output
+	= qx($cmd -detailLevel mini SPHardwardDataType 2> /dev/null);
+    my %system_profiler;
+    while ($system_profiler_output =~ m/^\s*([\w ]+):\s+(.+)$/gm) {
+	$system_profiler{uc $1} = $2;
+    }
 
-  my $ncpus = $system_profiler{'NUMBER OF CPUS'};
-  if (!defined $ncpus) {
-    $ncpus = $system_profiler{'TOTAL NUMBER OF CORES'};
-  }
-  return $ncpus;
+    my $ncpus = $system_profiler{'NUMBER OF CPUS'};
+    if (!defined $ncpus) {
+	$ncpus = $system_profiler{'TOTAL NUMBER OF CORES'};
+    }
+    return $ncpus;
 }
 
 sub _getNumCpus_from_prtconf {    # NOT TESTED
-  # solaris has a prtconf command, but I don't think it outputs #cpus.
-  return 0 if $^O !~ /aix/i;
-  return 0 if !_configExternalProgram('prtconf');
-  my $cmd = _configExternalProgram('prtconf');
-  my @result;
-  @result = qx($cmd 2> /dev/null);
-  my ($result) = grep { /Number Of Processors:/ } @result;
-  return 0 if !$result;
-  my ($ncpus) = $result =~ /:\s+(\d+)/;
-  return $ncpus || 0;
+    # solaris has a prtconf command, but I don't think it outputs #cpus.
+    return 0 if $^O !~ /aix/i;
+    return 0 if !_configExternalProgram('prtconf');
+    my $cmd = _configExternalProgram('prtconf');
+    my @result;
+    @result = qx($cmd 2> /dev/null);
+    my ($result) = grep { /Number Of Processors:/ } @result;
+    return 0 if !$result;
+    my ($ncpus) = $result =~ /:\s+(\d+)/;
+    return $ncpus || 0;
 }
 
 sub _getNumCpus_from_Test_Smoke_SysInfo {   # NOT TESTED
-  return 0 if !_configModule('Test::Smoke::SysInfo');
-  my $sysinfo = Test::Smoke::SysInfo->new();
-  if (defined $sysinfo && defined $sysinfo->{_ncpu}) {
-      # darwin: result might have format  "1 [2 cores]", see
-      # www.cpantesters.org/cpan/report/db6067c4-9a66-11e0-91fb-39e97f60f2f7
-      $sysinfo->{_ncpu} =~ s/\d+ \[(\d+) cores\]/$1/;
-      return $sysinfo->{_ncpu};
-  }
-  return;
+    return 0 if !_configModule('Test::Smoke::SysInfo');
+    my $sysinfo = Test::Smoke::SysInfo->new();
+    if (defined $sysinfo && defined $sysinfo->{_ncpu}) {
+	# darwin: result might have format  "1 [2 cores]", see
+	# www.cpantesters.org/cpan/report/db6067c4-9a66-11e0-91fb-39e97f60f2f7
+	$sysinfo->{_ncpu} =~ s/\d+ \[(\d+) cores\]/$1/;
+	return $sysinfo->{_ncpu};
+    }
+    return;
 }
 
 sub _getNumCpus_from_taskset {
@@ -561,200 +567,196 @@ sub _getNumCpus_from_taskset {
 # get affinity toolbox
 
 sub _getAffinity_with_Win32API {
-  my $opid = shift;
-  return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
-  return 0 if !_configModule('Win32::API');
+    my $opid = shift;
+    return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
+    return 0 if !_configModule('Win32::API');
 
-  my $pid = $opid;
-  if ($^O eq 'cygwin') {
-    $pid = __pid_to_winpid($opid);
-    # return 0 if !defined $pid;
-  }
-  return 0 if !$pid;
+    my $pid = $opid;
+    if ($^O eq 'cygwin') {
+	$pid = __pid_to_winpid($opid);
+	# return 0 if !defined $pid;
+    }
+    return 0 if !$pid;
 
-  if ($pid > 0) {
-
-    return _getProcessAffinity_with_Win32API($pid);
-
-  } else { # $pid is a Windows pseudo-process (thread ID)
-
-    return _getThreadAffinity_with_Win32API(-$pid);
-
-  }
-
+    if ($pid > 0) {
+	return _getProcessAffinity_with_Win32API($pid);
+    } else { # $pid is a Windows pseudo-process (thread ID)
+	return _getThreadAffinity_with_Win32API(-$pid);
+    }
 }
 
 sub _getProcessAffinity_with_Win32API {
-  my $pid = shift;
-  my ($processMask, $systemMask, $processHandle) = (0,0);
+    my $pid = shift;
+    my ($processMask, $systemMask, $processHandle) = (0,0);
 
-  # 0x0400 - PROCESS_QUERY_INFORMATION,
-  # 0x1000 - PROCESS_QUERY_LIMITED_INFORMATION
-  $processHandle = _win32api('OpenProcess',0x0400,0,$pid)
-                || _win32api('OpenProcess',0x1000,0,$pid);
-  return 0 if ! $processHandle;
-  return 0 if ! _win32api('GetProcessAffinityMask', $processHandle,
-                          $processMask, $systemMask);
+    # 0x0400 - PROCESS_QUERY_INFORMATION,
+    # 0x1000 - PROCESS_QUERY_LIMITED_INFORMATION
+    $processHandle = _win32api('OpenProcess',0x0400,0,$pid)
+	|| _win32api('OpenProcess',0x1000,0,$pid);
+    return 0 if ! $processHandle;
+    return 0 if ! _win32api('GetProcessAffinityMask', $processHandle,
+			    $processMask, $systemMask);
 
-  my $mask = _unpack_Win32_mask($processMask);
-  _debug("affinity with Win32::API: $mask");
-  return $mask;
+    my $mask = _unpack_Win32_mask($processMask);
+    _debug("affinity with Win32::API: $mask");
+    return $mask;
 }
 
 sub _getThreadAffinity_with_Win32API {
-  my $thrid = shift;
-  my ($processMask, $systemMask, $threadHandle) = (0,0);
+    my $thrid = shift;
+    my ($processMask, $systemMask, $threadHandle) = (0,0);
 
-  # 0x0020: THREAD_QUERY_INFORMATION
-  # 0x0400: THREAD_QUERY_LIMITED_INFORMATION
-  # 0x0040: THREAD_SET_INFORMATION
-  # 0x0200: THREAD_SET_LIMITED_INFORMATION
-  $threadHandle = _win32api('OpenThread', 0x0060, 0, $thrid)
+    # 0x0020: THREAD_QUERY_INFORMATION
+    # 0x0400: THREAD_QUERY_LIMITED_INFORMATION
+    # 0x0040: THREAD_SET_INFORMATION
+    # 0x0200: THREAD_SET_LIMITED_INFORMATION
+    $threadHandle = _win32api('OpenThread', 0x0060, 0, $thrid)
         || _win32api('OpenThread', 0x0600, 0, $thrid)
         || _win32api('OpenThread', 0x0020, 0, $thrid)
         || _win32api('OpenThread', 0x0400, 0, $thrid);
-  if (! $threadHandle) {
-    return 0;
-  }
-
-  # The Win32 API does not have a  GetThreadAffinityMask  function.
-  # SetThreadAffinityMask  will return the previous affinity,
-  # but then you have to call it again to restore the original affinity.
-  # Also, SetThreadAffinityMask won't work if you don't have permission
-  # to change the affinity.
-
-  # SetThreadAffinityMask argument has to be compatible with
-  # process affinity, so get process affinity.
-
-  # XXX - this function only works for threads that are contained
-  #       by the current process, and that should cover most use
-  #       cases of this module. But how would you get the process 
-  #       id of an arbitrary Win32 thread?
-  my $cpid = _win32api('GetCurrentProcessId');
-
-  my $processHandle
-      = _win32api('OpenProcess', 0x0400, 0, $cpid)
-     || _win32api('OpenProcess', 0x1000, 0, $cpid);
-
-  local ($!,$^E) = (0,0);
-  my $result = _win32api('GetProcessAffinityMask', 
-			 $processHandle, $processMask, $systemMask);
-
-  if ($result == 0) {
-    carp 'Could not determine process affinity ',
-        "(required to get thread affinity)\n";
-    return 0;
-  }
-
-  $processMask = _unpack_Win32_mask($processMask);
-  # $systemMask = _unpack_Win32_mask($systemMask);
-
-  if ($processMask == 0) {
-    carp 'Process affinity apparently set to zero, ',
-        "will not be able to set/get compatible thread affinity\n";
-    return 0;
-  }
-
-  my $previous_affinity = _win32api('SetThreadAffinityMask',
-				    $threadHandle, $processMask);
-
-  if ($previous_affinity == 0) {
-    Carp::cluck "Win32::API::SetThreadAffinityMask: $! / $^E\n";
-    return 0;
-  }
-
-  # hope we can restore it.
-  if ($previous_affinity != $processMask) {
-    local $! = 0;
-    local $^E = 0;
-    my $new_affinity = _win32api('SetThreadAffinityMask',
-				 $threadHandle, $previous_affinity);
-    if ($new_affinity == 0) {
-
-      # http://msdn.microsoft.com/en-us/library/ms686247(v=vs.85).aspx:
-      #
-      # "If the thread affinity mask requests a processor that is not
-      # selected for the process affinity mask, the last error code
-      # is ERROR_INVALID_PARAMETER." ($! => 87)
-      #
-      # In MSWin32, the result of a fork() is a "pseudo-process",
-      # a Win32 thread that is still contained by its parent.
-      # So on MSWin32 a race condition exists where the parent
-      # process can choose an incompatible set of affinities 
-      # during the execution of this function (basically, between
-      # the two calls to  SetThreadAffinityMask , above).
-
-      carp "Sys::CpuAffinity::_getThreadAffinity_with_Win32API:\n",
-          "set thread $thrid affinity to $processMask in order to retrieve\n",
-          "affinity, but was unable to restore previous value:\n",
-          "Handle=$threadHandle, Prev=$previous_affinity, Error=$! / $^E\n";
+    if (! $threadHandle) {
+	return 0;
     }
-  }
-  return $previous_affinity;
+
+    # The Win32 API does not have a  GetThreadAffinityMask  function.
+    # SetThreadAffinityMask  will return the previous affinity,
+    # but then you have to call it again to restore the original affinity.
+    # Also, SetThreadAffinityMask won't work if you don't have permission
+    # to change the affinity.
+
+    # SetThreadAffinityMask argument has to be compatible with
+    # process affinity, so get process affinity.
+
+    # XXX - this function only works for threads that are contained
+    #       by the current process, and that should cover most use
+    #       cases of this module. But how would you get the process
+    #       id of an arbitrary Win32 thread?
+    my $cpid = _win32api('GetCurrentProcessId');
+
+    my $processHandle
+	= _win32api('OpenProcess', 0x0400, 0, $cpid)
+	|| _win32api('OpenProcess', 0x1000, 0, $cpid);
+
+    local ($!,$^E) = (0,0);
+    my $result = _win32api('GetProcessAffinityMask',
+			   $processHandle, $processMask, $systemMask);
+
+    if ($result == 0) {
+	carp 'Could not determine process affinity ',
+	        "(required to get thread affinity)\n";
+	return 0;
+    }
+
+    $processMask = _unpack_Win32_mask($processMask);
+    # $systemMask = _unpack_Win32_mask($systemMask);
+
+    if ($processMask == 0) {
+	carp 'Process affinity apparently set to zero, ',
+        	"will not be able to set/get compatible thread affinity\n";
+	return 0;
+    }
+
+    my $previous_affinity = _win32api('SetThreadAffinityMask',
+				      $threadHandle, $processMask);
+
+    if ($previous_affinity == 0) {
+	Carp::cluck "Win32::API::SetThreadAffinityMask: $! / $^E\n";
+	return 0;
+    }
+
+    # hope we can restore it.
+    if ($previous_affinity != $processMask) {
+	local $! = 0;
+	local $^E = 0;
+	my $new_affinity = _win32api('SetThreadAffinityMask',
+				     $threadHandle, $previous_affinity);
+	if ($new_affinity == 0) {
+
+	    # http://msdn.microsoft.com/en-us/library/ms686247(v=vs.85).aspx:
+	    #
+	    # "If the thread affinity mask requests a processor that is not
+	    # selected for the process affinity mask, the last error code
+	    # is ERROR_INVALID_PARAMETER." ($! => 87)
+	    #
+	    # In MSWin32, the result of a fork() is a "pseudo-process",
+	    # a Win32 thread that is still contained by its parent.
+	    # So on MSWin32 a race condition exists where the parent
+	    # process can choose an incompatible set of affinities
+	    # during the execution of this function (basically, between
+	    # the two calls to  SetThreadAffinityMask , above).
+
+	    carp "Sys::CpuAffinity::_getThreadAffinity_with_Win32API:\n",
+		    "set thread $thrid affinity to $processMask ",
+		    "in order to retrieve\naffinity, but was unable to ",
+		    "restore previous value:\nHandle=$threadHandle, ",
+		    "Prev=$previous_affinity, Error=$! / $^E\n";
+	}
+    }
+    return $previous_affinity;
 }
 
 sub _unpack_Win32_mask {
-  # The Win32 GetProcessAffinityMask function takes
-  # "PDWORD" arguments. We pass (arbitrary) integers for these 
-  # arguments, but on return they are changed to 1-4 bytes 
-  # representing a packed integer.
+    # The Win32 GetProcessAffinityMask function takes
+    # "PDWORD" arguments. We pass (arbitrary) integers for these
+    # arguments, but on return they are changed to 1-4 bytes
+    # representing a packed integer.
 
-  my $packed = shift;
-  return unpack "L", substr($packed . "\0\0\0\0", 0, 4);
+    my $packed = shift;
+    return unpack "L", substr($packed . "\0\0\0\0", 0, 4);
 }
 
 
 
 sub _getAffinity_with_Win32Process {
-  my $pid = shift;
+    my $pid = shift;
 
-  return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
-  return 0 if !_configModule('Win32::Process');
-  return 0 if $pid < 0;  # pseudo-process / thread id
+    return 0 if $^O ne 'MSWin32' && $^O ne 'cygwin';
+    return 0 if !_configModule('Win32::Process');
+    return 0 if $pid < 0;  # pseudo-process / thread id
 
-  if ($^O eq 'cygwin') {
-    $pid = __pid_to_winpid($pid);
-    return 0 if !defined $pid;
-  }
+    if ($^O eq 'cygwin') {
+	$pid = __pid_to_winpid($pid);
+	return 0 if !defined $pid;
+    }
 
-  my ($processHandle, $processMask, $systemMask, $result);
-  if (! Win32::Process::Open($processHandle, $pid, 0)
-      || ref($processHandle) ne 'Win32::Process') {
-    return 0;
-  }
-  if (! $processHandle->GetProcessAffinityMask($processMask, $systemMask)) {
-    return 0;
-  }
-  _debug("affinity with Win32::Process: $processMask");
-  return $processMask;
+    my ($processHandle, $processMask, $systemMask, $result);
+    if (! Win32::Process::Open($processHandle, $pid, 0)
+	|| ref($processHandle) ne 'Win32::Process') {
+	return 0;
+    }
+    if (! $processHandle->GetProcessAffinityMask($processMask, $systemMask)) {
+	return 0;
+    }
+    _debug("affinity with Win32::Process: $processMask");
+    return $processMask;
 }
 
 sub _getAffinity_with_taskset {
-  my $pid = shift;
-  return 0 if $^O ne 'linux';
-  return 0 if !_configExternalProgram('taskset');
-  my $taskset = _configExternalProgram('taskset');
-  my $taskset_output = qx($taskset -p $pid 2> /dev/null);
-  $taskset_output =~ s/\s+$//;
-  _debug("taskset output: $taskset_output");
-  return 0 if ! $taskset_output;
-  my ($mask) = $taskset_output =~ /: (\S+)/;
-  _debug("affinity with taskset: $mask");
-  return hex $mask;
+    my $pid = shift;
+    return 0 if $^O ne 'linux';
+    return 0 if !_configExternalProgram('taskset');
+    my $taskset = _configExternalProgram('taskset');
+    my $taskset_output = qx($taskset -p $pid 2> /dev/null);
+    $taskset_output =~ s/\s+$//;
+    _debug("taskset output: $taskset_output");
+    return 0 if ! $taskset_output;
+    my ($mask) = $taskset_output =~ /: (\S+)/;
+    _debug("affinity with taskset: $mask");
+    return hex $mask;
 }
 
 sub _getAffinity_with_xs_sched_getaffinity {
-  my $pid = shift;
-  return 0 if !defined &xs_sched_getaffinity_get_affinity;
-  return xs_sched_getaffinity_get_affinity($pid,0);
+    my $pid = shift;
+    return 0 if !defined &xs_sched_getaffinity_get_affinity;
+    return xs_sched_getaffinity_get_affinity($pid,0);
 }
 
 sub _getAffinity_with_xs_DEBUG_sched_getaffinity {
 
-  # XXX - xs_sched_getaffinity_get_affinity crashes during some 
+  # XXX - xs_sched_getaffinity_get_affinity crashes during some
   # (but definitely not all) tests, and never on the Linux
   # builds that I have available. Run a tracing version
-  # during t/11-exercise-all.t and see if we can figure 
+  # during t/11-exercise-all.t and see if we can figure
   # out what might be going wrong.
 
   my $pid = shift;
@@ -909,13 +911,13 @@ sub _getAffinity_with_xs_pthread_self_getaffinity {
     } else {
       return 0;
     }
-  } 
+  }
   return $z;
 }
 
 sub _getAffinity_with_xs_irix_sysmp {
 
-  # new in 1.00, not tested 
+  # new in 1.00, not tested
 
   my ($pid) = @_;
   return 0 if $^O !~ /irix/i;
@@ -1224,7 +1226,7 @@ sub _setAffinity_with_xs_irix_sysmp {
   }
 }
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 sub _maskToArray {
   my ($mask) = @_;
@@ -1249,7 +1251,7 @@ sub _arrayToMask {
   return $mask;
 }
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 sub __pid_to_winpid {
   my ($cygwinpid) = @_;
@@ -1366,7 +1368,7 @@ our %WIN32_API_SPECS
      'GetModuleHandle' => [ 'kernel32', 'HMODULE GetModuleHandle(LPCTSTR n)' ],
      'GetPriorityClass' => [ 'kernel32',
                 'DWORD GetPriorityClass(HANDLE h)' ],
-     'GetProcAddress' => [ 'kernel32', 
+     'GetProcAddress' => [ 'kernel32',
 			   'DWORD GetProcAddress(HINSTANCE a,LPCTSTR b)' ],
 #			   'DWORD GetProcAddress(HINSTANCE a,LPCWSTR b)' ],
      'GetProcessAffinityMask' => [ 'kernel32',
@@ -1437,7 +1439,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-Version 1.04
+Version 1.05
 
 =head1 SYNOPSIS
 
@@ -1466,14 +1468,14 @@ This module seeks to do one thing and do it well:
 manipulate CPU affinities through a common interface
 on as many systems as possible, by any means necessary.
 
-The module is composed of several subroutines, each one 
+The module is composed of several subroutines, each one
 implementing a different technique to perform a CPU affinity
 operation. A technique might try to import a Perl module,
 run an external program that might be installed on your system,
 or invoke some C code to access your system libraries.
 Usually, a technique is applicable to only a single
-or small group of operating systems, and on any particular 
-system, the vast majority of techniques would fail. 
+or small group of operating systems, and on any particular
+system, the vast majority of techniques would fail.
 Regardless of your particular system and configuration,
 it is hoped that at least one of the techniques will work
 and you will be able to get and set the CPU affinities of
@@ -1504,13 +1506,13 @@ some output that may or may not be good for debugging.
 The techniques for manipulating CPU affinities for Windows
 (including Cygwin) and Linux have been refined and tested
 pretty well. Some techniques applicable to BSD systems
-(particularly FreeBSD) and Solaris have been tested a little bit. 
+(particularly FreeBSD) and Solaris have been tested a little bit.
 The hope is that this module will include more techniques for
 more systems in future releases. See the L</"NOTE TO DEVELOPERS">
 below for information about how you can help.
 
-MacOS, OpenBSD are explicitly not supported, 
-as there does not appear to be any public interface for specifying 
+MacOS, OpenBSD are explicitly not supported,
+as there does not appear to be any public interface for specifying
 the CPU affinity of a process directly on those platforms.
 
 On NetBSD, getting and setting CPU affinity is supported B<only for
@@ -1592,7 +1594,7 @@ only bind the process one of the specified processors.
 
 =item C<$ncpu = Sys::CpuAffinity::getNumCpus()>
 
-Returns the module's best guess about the number of 
+Returns the module's best guess about the number of
 processors on this system.
 
 =back
@@ -1602,11 +1604,11 @@ processors on this system.
 This module may not work or produce undefined results on
 systems with more than 32 CPUs.
 
-Please report any bugs or feature requests to 
+Please report any bugs or feature requests to
 C<bug-sys-cpuaffinity at rt.cpan.org>, or through
-the web interface at 
+the web interface at
 L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Sys-CpuAffinity>.
-I will be notified, and then you'll automatically be notified of 
+I will be notified, and then you'll automatically be notified of
 progress on your bug as I make changes.
 
 =head1 INCOMPATIBILITIES
@@ -1650,7 +1652,7 @@ L<http://search.cpan.org/dist/Sys-CpuAffinity/>
 This module seeks to work for as many systems in as many
 configurations as possible. If you know of a tool, a function,
 a technique to set CPU affinities on a system -- any system,
--- then let's include it in this module. 
+-- then let's include it in this module.
 
 Feel free to submit code through this module's request tracker:
 
@@ -1661,10 +1663,10 @@ be included in the next release.
 
 =head1 ACKNOWLEDGEMENTS
 
-L<BSD::Process::Affinity|BSD::Process::Affinity> for demonstrating 
+L<BSD::Process::Affinity|BSD::Process::Affinity> for demonstrating
 how to get/set affinities on BSD systems.
 
-L<Test::Smoke::SysInfo|Test::Smoke::SysInfo> has some fairly portable 
+L<Test::Smoke::SysInfo|Test::Smoke::SysInfo> has some fairly portable
 code for detecting the number of processors.
 
 L<http://devio.us/> for providing a free OpenBSD account so this
@@ -1697,7 +1699,7 @@ See http://dev.perl.org/licenses/ for more information.
 
 Notes and to do list:
 
-Why worry about CPU affinity? See 
+Why worry about CPU affinity? See
 http://www.ibm.com/developerworks/linux/library/l-affinity.html?ca=dgr-lnxw41Affinity
 Other reasons are:
     bind expensive processes to subset of CPUs, leaving at least
@@ -1728,7 +1730,7 @@ Rumors of cpu affinity on other systems:
       * processor sets can only be changed by sysadmin
       * /cpuset in Irix has these same issues (different from /cpuset command in FreeBSD)
 
-    Solaris:  Solaris::Lgrp module 
+    Solaris:  Solaris::Lgrp module
         lgrp_affinity_set(P_PID,$pid,$lgrp,LGRP_AFF_xxx)
         lgrp_affinity_get(P_PID,$pid,$lgrp)
         affinity_get
@@ -1771,7 +1773,7 @@ by default.
 Some systems have a concept of the maximum number of processors that
 they can suppport.
 
-Currently (0.91-1.04), constant parameters to Win32 API functions are 
+Currently (0.91-1.04), constant parameters to Win32 API functions are
 hard coded, not extracted from the local header files.
 
 ##########################################

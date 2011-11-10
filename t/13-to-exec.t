@@ -7,9 +7,9 @@ use warnings;
 # test forking and invoking a shell command
 #
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 my $output = "t/out/test13.$$";
@@ -60,7 +60,7 @@ my $t = Time::HiRes::time();
 $p = wait;
 $t = Time::HiRes::time() - $t;
 ok($p == $pid, "wait reaped correct pid");
-ok($t > 4.4 && $t < 10.05,         ### 11 ### was 7.05,obs 8.02,11.96
+okl($t > 4.4 && $t < 10.05,         ### 11 ### was 7.05,obs 8.02,11.96
    "background command ran for ${t}s, expected 5-6s");
 
 ##################################################################

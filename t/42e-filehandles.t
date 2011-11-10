@@ -9,9 +9,9 @@ use warnings;
 # input require special handling
 #
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 #######################################################
@@ -36,7 +36,7 @@ ok($z > 0, "print to child STDIN successful");
 my $t = Time::HiRes::time();
 waitpid $pid, 0;
 $t = Time::HiRes::time() - $t;
-ok($t > 1.05 && $t < 6.18, #obs 6.17       ### 6 ###
+okl($t > 1.05 && $t < 6.18, #obs 6.17       ### 6 ###
    "compound command took ${t}s, expected ~2s");
 sleep 1;
 
@@ -52,7 +52,7 @@ ok(@err == 2 || @err == 3,
    "expect 2-3, got " . scalar @err . " lines of error");
 
 if (@out != 15 || (@err != 2 && @err != 3)) {
-  print STDERR "\@out:\n @out\n-----------------\nerr:\n @err\n----------\n";
+    print STDERR "\@out:\n @out\n-----------------\nerr:\n @err\n----------\n";
 }
 
 ok($out[0] eq "$msg\n", "got expected output from child");

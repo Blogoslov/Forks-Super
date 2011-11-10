@@ -18,7 +18,7 @@ ok($var == 1, "finish callback waits until finish");
 sleep 1;
 ok($var == 1, "finish callback waits until finish");
 for (my $i=0; $i<10 && $j->{state} eq 'ACTIVE'; $i++) {
-  Forks::Super::pause(1);
+    Forks::Super::pause(1);
 }
 ok($var == 4, "finish runs after finish, before reap");
 waitpid $pid, 0;
@@ -35,7 +35,7 @@ $var = 3;
 $pid = fork { sub => sub { sleep 3 }, callback => $var6 };
 sleep 1;
 ok($var == 3, "finish callback waits")
-   or diag("\$var was $var, expected 3");
+    or diag("\$var was $var, expected 3");
 waitpid $pid, 0;
 ok($var == 6, "finish callback from assigned code ref");
 
@@ -50,7 +50,7 @@ $pid = fork { sub => sub { sleep 2 },
 ok($w == 11, "start callback invoked");
 $j = Forks::Super::Job::get($pid);
 for (my $i = 0; $i < 7 && $j->{state} eq 'ACTIVE'; $i++) {
-  Forks::Super::pause(1);
+    Forks::Super::pause(1);
 }
 ok($w == 9, "finish callback invoked"); ### 10 ###
 waitpid $pid,0;

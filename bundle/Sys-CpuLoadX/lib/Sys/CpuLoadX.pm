@@ -19,11 +19,11 @@ our $VERSION = '0.03';
 our $WIN32_INTERVAL = 1000; # milliseconds to run to get CPU usage
 
 {
-  local $@;
-  eval { bootstrap Sys::CpuLoadX $VERSION };
-  if ($@) {
-    warn "bootstrap Sys::CpuLoadX call failed.\n";
-  }
+    local $@;
+    eval { bootstrap Sys::CpuLoadX $VERSION };
+    if ($@) {
+	warn "bootstrap Sys::CpuLoadX call failed.\n";
+    }
 }
 
 use IO::File;
@@ -32,84 +32,87 @@ my $cache = 'unknown';
 
 sub load {
 
-  # handle bsd getloadavg().  Read the README about why it is freebsd/openbsd.
-  if ($cache eq 'getloadavg()' or lc $^O eq 'freebsd' or lc $^O eq 'openbsd' ) {
-    $cache = 'getloadavg()';
-    return xs_getbsdload()
-  }
+    # handle bsd getloadavg().  Read the README about why it is freebsd/openbsd.
+    if ($cache eq 'getloadavg()' 
+	or lc $^O eq 'freebsd'
+	or lc $^O eq 'openbsd' ) {
 
-  # handle linux proc filesystem
-  if ($cache eq 'unknown' or $cache eq 'linux') {
-    my $fh = new IO::File('/proc/loadavg', 'r');
-    if (defined $fh) {
-      my $line = <$fh>;
-      $fh->close();
-      if ($line =~ /^(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)/) {
-        $cache = 'linux';
-        return ($1, $2, $3);
-      }              # if we can parse /proc/loadavg contents
-    }                # if we could load /proc/loadavg 
-  }                  # if linux or not cached
-   
-  # last resort...
-
-  $cache = 'uptimepipe';
-  local %ENV = %ENV;
-  $ENV{'LC_NUMERIC'}='POSIX';    # ensure that decimal separator is a dot
-
-  my $uptime_cmd = _configExternalProgram('uptime');
-  if ($uptime_cmd) {
-    my $uptime_result = qx($uptime_cmd 2> /dev/null);
-    $uptime_result =~ s/\s+$//;
-    my @uptime = (split /\s*,?\s+/, $uptime_result)[-3 .. -1];
-    if (@uptime == 3) {
-      return @uptime;
+	$cache = 'getloadavg()';
+	return xs_getbsdload()
     }
-  }
-  return (undef, undef, undef);
+
+    # handle linux proc filesystem
+    if ($cache eq 'unknown' or $cache eq 'linux') {
+	my $fh = new IO::File('/proc/loadavg', 'r');
+	if (defined $fh) {
+	    my $line = <$fh>;
+	    $fh->close();
+	    if ($line =~ /^(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)/) {
+		$cache = 'linux';
+		return ($1, $2, $3);
+	    }              # if we can parse /proc/loadavg contents
+	}                  # if we could load /proc/loadavg 
+    }                      # if linux or not cached
+    
+    # last resort...
+
+    $cache = 'uptimepipe';
+    local %ENV = %ENV;
+    $ENV{'LC_NUMERIC'}='POSIX';    # ensure that decimal separator is a dot
+
+    my $uptime_cmd = _configExternalProgram('uptime');
+    if ($uptime_cmd) {
+	my $uptime_result = qx($uptime_cmd 2> /dev/null);
+	$uptime_result =~ s/\s+$//;
+	my @uptime = (split /\s*,?\s+/, $uptime_result)[-3 .. -1];
+	if (@uptime == 3) {
+	    return @uptime;
+	}
+    }
+    return (undef, undef, undef);
 }
 
 sub get_cpu_load {
 
-  if ( (lc $^O eq 'freebsd' || lc $^O eq 'openbsd')
-       && defined &xs_getbsdload) {
+    if ( (lc $^O eq 'freebsd' || lc $^O eq 'openbsd')
+	 && defined &xs_getbsdload) {
 
-    my @bsdload = xs_getbsdload();
-    _debug("load from bsdload: @bsdload");
-    if (@bsdload >= 3) {
-      return $bsdload[0];
+	my @bsdload = xs_getbsdload();
+	_debug("load from bsdload: @bsdload");
+	if (@bsdload >= 3) {
+	    return $bsdload[0];
+	}
     }
-  }
 
-  if (defined &xs_getCpuUsage) {
-    my $cpuUsage = xs_getCpuUsage($WIN32_INTERVAL);
-    _debug("load from xs_getCpuUsage: $cpuUsage");
-    return $cpuUsage > 0 ? $cpuUsage * 0.01 : "0.00";
-  }
-
-  if (-r '/proc/loadavg' && $^O ne 'cygwin') {
-    open my $loadavg_fh, '<', '/proc/loadavg';
-    my $line = <$loadavg_fh>;
-    close $loadavg_fh;
-    _debug("load from /proc/loadavg: $line");
-    if ($line =~ /^(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)/) {
-      return $1;
+    if (defined &xs_getCpuUsage) {
+	my $cpuUsage = xs_getCpuUsage($WIN32_INTERVAL);
+	_debug("load from xs_getCpuUsage: $cpuUsage");
+	return $cpuUsage > 0 ? $cpuUsage * 0.01 : "0.00";
     }
-  }
 
-  my $uptime_cmd = _configExternalProgram('uptime');
-  if ($uptime_cmd && $^O ne 'cygwin') {
-    my $uptime_result = qx($uptime_cmd 2> /dev/null);
-    $uptime_result =~ s/\s+$//;
-    _debug("load from 'uptime': $uptime_result");
-    my @uptime = (split /\s*,?\s+/, $uptime_result)[-3 .. -1];
-    if (@uptime == 3) {
-      return $uptime[0];
+    if (-r '/proc/loadavg' && $^O ne 'cygwin') {
+	open my $loadavg_fh, '<', '/proc/loadavg';
+	my $line = <$loadavg_fh>;
+	close $loadavg_fh;
+	_debug("load from /proc/loadavg: $line");
+	if ($line =~ /^(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)/) {
+	    return $1;
+	}
     }
-  }
 
-  _debug("no load result: returning -1");
-  return -1.0;
+    my $uptime_cmd = _configExternalProgram('uptime');
+    if ($uptime_cmd && $^O ne 'cygwin') {
+	my $uptime_result = qx($uptime_cmd 2> /dev/null);
+	$uptime_result =~ s/\s+$//;
+	_debug("load from 'uptime': $uptime_result");
+	my @uptime = (split /\s*,?\s+/, $uptime_result)[-3 .. -1];
+	if (@uptime == 3) {
+	    return $uptime[0];
+	}
+    }
+
+    _debug("no load result: returning -1");
+    return -1.0;
 }
 
 ############################################################################# 
@@ -118,41 +121,41 @@ our %PROGRAM = ();
 our @PATH = ();
 
 sub _configExternalProgram {
-  my $program = shift;
-  return $PROGRAM{$program} if defined $PROGRAM{$program};
-  if (-x $program) {
-    _debug("Program $program is available in $program");
-    return $PROGRAM{$program} = $program;
-  }
-
-  my $which = qx(which $program 2>/dev/null);
-  $which =~ s/\s+$//;
-  if ($which) {
-    _debug("Program $program is available in $which");
-    return $PROGRAM{$program} = $which;
-  }
-
-  # poor man's which
-  if (@PATH == 0) {
-    @PATH = split /:/, $ENV{PATH};
-    push @PATH, split /;/, $ENV{PATH};
-    push @PATH, ".";
-    push @PATH, "/sbin", "/usr/sbin";
-  }
-  foreach my $dir (@PATH) {
-    if (-x "$dir/$program") {
-      _debug("Program $program is available in $dir/$program");
-      $PROGRAM{$program} = "$dir/$program";
+    my $program = shift;
+    return $PROGRAM{$program} if defined $PROGRAM{$program};
+    if (-x $program) {
+	_debug("Program $program is available in $program");
+	return $PROGRAM{$program} = $program;
     }
-  }
-  return $PROGRAM{$program} = 0;
+
+    my $which = qx(which $program 2>/dev/null);
+    $which =~ s/\s+$//;
+    if ($which) {
+	_debug("Program $program is available in $which");
+	return $PROGRAM{$program} = $which;
+    }
+
+    # poor man's which
+    if (@PATH == 0) {
+	@PATH = split /:/, $ENV{PATH};
+	push @PATH, split /;/, $ENV{PATH};
+	push @PATH, ".";
+	push @PATH, "/sbin", "/usr/sbin";
+    }
+    foreach my $dir (@PATH) {
+	if (-x "$dir/$program") {
+	    _debug("Program $program is available in $dir/$program");
+	    $PROGRAM{$program} = "$dir/$program";
+	}
+    }
+    return $PROGRAM{$program} = 0;
 }
 
 our $DEBUG = $ENV{DEBUG} || 0;
 sub _debug {
-  if ($DEBUG) {
-    print STDERR @_,"\n";
-  }
+    if ($DEBUG) {
+	print STDERR @_,"\n";
+    }
 }
 
 1;

@@ -10,9 +10,9 @@ use warnings;
 Forks::Super::Job::Timeout::warm_up();
 
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 
@@ -23,24 +23,31 @@ if (${^TAINT}) {
 #
 
 SKIP: {
-  if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-    skip "alarm function unavailable on this system ($^O,$]), "
-      . "can't test timeout feature", 3;
-  }
 
-  #######################################################
+=begin XXXXXX workaround 0.55
 
-  my $u = Time::HiRes::time();
-  my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
-  my $t = Time::HiRes::time();
-  my $p = wait;
-  my $v = Time::HiRes::time();
-  ($t,$u)=($v-$t,$v-$u);
-  ok($p == $pid, "wait successful; Expected $pid got $p");
-  ok($t > 3.9 && $u <= 7.5,                 ### 2b ### was 7, obs 7.03
-     "job completed before timeout ${t}s ${u} expected ~5s");
-  ok($? == 0, "job completed with zero exit STATUS");
+    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
+	skip "alarm function unavailable on this system ($^O,$]), "
+	    . "can't test timeout feature", 3;
+    }
 
-#######################################################
+=end XXXXXX
+
+=cut
+
+    #######################################################
+
+    my $u = Time::HiRes::time();
+    my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
+    my $t = Time::HiRes::time();
+    my $p = wait;
+    my $v = Time::HiRes::time();
+    ($t,$u)=($v-$t,$v-$u);
+    ok($p == $pid, "wait successful; Expected $pid got $p");
+    okl($t > 3.9 && $u <= 7.5,                 ### 2b ### was 7, obs 7.03
+	"job completed before timeout ${t}s ${u} expected ~5s");
+    ok($? == 0, "job completed with zero exit STATUS");
+
+    #######################################################
 
 } # end SKIP

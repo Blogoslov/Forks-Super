@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 14;
+use Test::More tests => 12;
 use Cwd;
 use Carp;
 use strict;
@@ -7,13 +7,13 @@ use warnings;
 
 my $CWD = Cwd::getcwd();
 if (${^TAINT}) {
-  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-  }
-  ($ipc_dir) = $ipc_dir =~ /(.*)/;
-  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
-  ($CWD) = $CWD =~ /(.*)/;
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+    ($CWD) = $CWD =~ /(.*)/;
 }
 
 sub run_simple_daemon {
@@ -37,7 +37,7 @@ sub run_simple_daemon {
 SKIP: {
 
     if ($^O eq 'MSWin32') {
-	skip "Can't daemon to sub in MSWin32", 14;
+	skip "Can't daemon to sub in MSWin32", 12;
     }
 
 ### natural
@@ -89,7 +89,7 @@ SKIP: {
 	  sleep 2;
 	  my $s2 = -s $output;
 	  $pid->resume;
-	  ok($s1 && $s1 == $s2, "suspend/resume on daemon ok")
+	  okl($s1 && $s1 == $s2, "suspend/resume on daemon ok")
 	      or diag("expected $s1/$s2 to be the same");
 	  sleep 1;
       }
@@ -107,14 +107,17 @@ SKIP: {
       unlink $output, "$output.err" unless $ENV{KEEP};
     }
 
-    ok(!defined($pid->status), "Can't retrieve status for a daemon");
-    ok(0 != $pid->is_daemon, "is_daemon returns true for daemon");
+    ok(!defined($pid->status), "Can't retrieve status for a daemon"); ### 10 ###
+    ok(0 != $pid->is_daemon, "is_daemon returns true for daemon");    
+
+=change v0.55  $pid->is_complete can now be "guessed" for daemon
     ok(0 == $pid->is_complete, "Can't retrieve is_complete for daemon");
-    ok(0 != $pid->is_started, "is_started ok for daemon");
+=cut
+
+    ok(0 != $pid->is_started, "is_started ok for daemon");            ### 12 ###
 
     #TODO:
-    ok(1);#ok(0 == $pid->is_active, "is_active==0 for completed daemon");
-
+    #ok(0 == $pid->is_active, "is_active==0 for completed daemon");
 }
 
 __END__

@@ -11,18 +11,18 @@ use warnings;
 # the "cmd" option to run a shell command.
 #
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 
-  # since v0.53 (daemon code) we call Cwd::abs_path or Cwd::getcwd and
-  # the default IPC directory is tainted ...
-  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-  }
-  ($ipc_dir) = $ipc_dir =~ /(.*)/;
-  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+    # since v0.53 (daemon code) we call Cwd::abs_path or Cwd::getcwd and
+    # the default IPC directory is tainted ...
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
 #######################################################
@@ -49,29 +49,33 @@ $fh_out = $Forks::Super::CHILD_STDOUT{$pid};
 $fh_err = $Forks::Super::CHILD_STDERR{$pid};
 (@out, @err) = ();
 while (time < $t+6) {
-  push @out, Forks::Super::read_stdout($pid);
-  push @err, Forks::Super::read_stderr($pid);
-  sleep 1;
+    push @out, Forks::Super::read_stdout($pid);
+    push @err, Forks::Super::read_stderr($pid);
+    sleep 1;
 }
 
 # this is a failure point on many systems
 # perhaps some warning message is getting in the output stream?
 if (@out != 3 || @err != 1) {
-  $Forks::Super::DONT_CLEANUP = 1;
-  print STDERR "\nbasic ipc test [exec]: failure imminent\n";
-  print STDERR "We expect three lines from stdout and one from stderr\n";
-  print STDERR "What we get is:\n";
-  print STDERR "--------------------------- \@out ------------------\n";
-  print STDERR @out,"\n";
-  print STDERR "--------------------------- \@err ------------------\n";
-  print STDERR @err,"\n----------------------------------------------------\n";
+    $Forks::Super::DONT_CLEANUP = 1;
+    print STDERR "\nbasic ipc test [exec]: failure imminent\n";
+    print STDERR "We expect three lines from stdout and one from stderr\n";
+    print STDERR "What we get is:\n";
+    print STDERR "--------------------------- \@out ------------------\n";
+    print STDERR @out,"\n";
+    print STDERR "--------------------------- \@err ------------------\n";
+    print STDERR @err,"\n---------------------------------------------------\n";
 }
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT [exec]");
 ok(@err == 1, scalar @err . " == 1 line from STDERR [exec]");
-ok($out[0] eq "$msg\n", "got Expected first line from child [exec]");
-ok($out[1] eq "$msg\n", "got Expected second line from child [exec]");
-ok($out[2] eq "\n", "got Expected third line from child [exec]");
-ok($err[0] =~ /received message $msg/, "got Expected msg on child stderr [exec]");
+ok($out[0] eq "$msg\n", "got Expected first line from child [exec]")
+    or diag("got $out[0], expected \"$msg\\n\"");
+ok($out[1] eq "$msg\n", "got Expected second line from child [exec]")
+    or diag("got $out[1] expected \"$msg\\n\"");
+ok($out[2] eq "\n", "got Expected third line from child [exec]")
+    or diag("got $out[2] expected \"\\n\"");
+ok($err[0] =~ /received message $msg/,
+   "got Expected msg on child stderr [exec]");
 waitall;
 

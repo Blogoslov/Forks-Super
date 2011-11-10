@@ -11,9 +11,9 @@ use warnings;
 # the "cmd" option to run a shell command.
 #
 if (${^TAINT}) {
-  $ENV{PATH} = "";
-  ($^X) = $^X =~ /(.*)/;
-  ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
+    $ENV{PATH} = "";
+    ($^X) = $^X =~ /(.*)/;
+    ($ENV{HOME}) = $ENV{HOME} =~ /(.*)/;
 }
 
 #######################################################
@@ -34,20 +34,20 @@ ok($z > 0, "print to child STDIN successful [exec]");
 $t = time;
 (@out, @err) = ();
 while (time < $t+6) {
-  push @out, $pid->read_stdout();
-  push @err, $pid->read_stderr();
-  sleep 1;
+    push @out, $pid->read_stdout();
+    push @err, $pid->read_stderr();
+    sleep 1;
 }
 
 if (@out != 3 || @err != 1) {
-  $Forks::Super::DONT_CLEANUP = 1;
-  print STDERR "\nbasic ipc test [exec]: failure imminent\n";
-  print STDERR "We expect three lines from stdout and one from stderr\n";
-  print STDERR "What we get is:\n";
-  print STDERR "--------------------------- \@out ------------------\n";
-  print STDERR @out,"\n";
-  print STDERR "--------------------------- \@err ------------------\n";
-  print STDERR @err,"\n----------------------------------------------------\n";
+    $Forks::Super::DONT_CLEANUP = 1;
+    print STDERR "\nbasic ipc test [exec]: failure imminent\n";
+    print STDERR "We expect three lines from stdout and one from stderr\n";
+    print STDERR "What we get is:\n";
+    print STDERR "--------------------------- \@out ------------------\n";
+    print STDERR @out,"\n";
+    print STDERR "--------------------------- \@err ------------------\n";
+    print STDERR @err,"\n--------------------------------------------------\n";
 }
 
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT [exec]");

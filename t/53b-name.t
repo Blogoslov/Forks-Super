@@ -22,7 +22,7 @@ $p2 = fork { sub => sub { sleep 3 },
 	depend_start => "simple2", queue_priority => 10 };
 $t = Time::HiRes::time() - $t;
 $p3 = fork { sub => sub {}, queue_priority => 5 };
-ok($t <= 1.5, "fast return for queued job ${t}s expected <= 1s"); ### 15 ###
+okl($t <= 1.5, "fast return for queued job ${t}s expected <= 1s"); ### 15 ###
 $j1 = Forks::Super::Job::get($p1);
 $j2 = Forks::Super::Job::get($p2);
 $j3 = Forks::Super::Job::get($p3);
@@ -49,7 +49,7 @@ my $t31 = Time::HiRes::time();
 waitall();
 my $t4 = Time::HiRes::time();
 ($t,$t2,$t3,$t31) = ($t4-$t,$t4-$t2,$t4-$t3,$t4-$t31);
-ok($t > 5.5 && $t31 < 9.08,          ### 6 ### was 8.0 obs 9.03
+okl($t > 5.5 && $t31 < 9.08,          ### 6 ### was 8.0 obs 9.03
    "Took ${t}s ${t2}s ${t3}s ${t31} for dependent jobs - expected ~6s"); 
 ok($j1->{end} <= $j2->{start} + $TOL,
    "handled circular dependency");

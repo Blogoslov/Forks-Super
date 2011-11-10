@@ -17,12 +17,12 @@ delete $Forks::Super::Config::CONFIG{"JSON"};
 $Forks::Super::Config::CONFIG{"YAML"} = 0;
 
 SKIP: {
-  if ($ENV{NO_JSON}) {
-    skip "NO_JSON specified, skipping bg_eval tests", 22;
-  }
-  if (!Forks::Super::Config::CONFIG_module("JSON")) {
-    skip "JSON module not available, skipping bg_eval tests", 22;
-  }
+    if ($ENV{NO_JSON}) {
+	skip "NO_JSON specified, skipping bg_eval tests", 22;
+    }
+    if (!Forks::Super::Config::CONFIG_module("JSON")) {
+	skip "JSON module not available, skipping bg_eval tests", 22;
+    }
 
-  require "./t/62b-bg_eval.tt";
+    require "./t/62b-bg_eval.tt";
 }

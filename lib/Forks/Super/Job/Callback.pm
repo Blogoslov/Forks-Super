@@ -18,7 +18,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(run_callback);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 sub run_callback {
     my ($job, $callback) = @_;
@@ -50,41 +50,42 @@ sub run_callback {
 }
 
 sub _preconfig_callbacks {
-  my $job = shift;
+    my $job = shift;
 
-  if (defined $job->{suspend}) {
-    $job->{suspend} = qualify_sub_name $job->{suspend};
-  }
-  if (!defined $job->{callback}) {
-    return;
-  }
-  if (ref $job->{callback} eq '' || ref $job->{callback} eq 'CODE') {
-    $job->{callback} = { finish => $job->{callback} };
-  }
-  if (defined $job->{callback}{finish} && $job->{daemon}) {
-      carp 'Forks::Super::_preconfig_callbacks: ',
-          "'finish' callback is not going to be called with a daemon process";
-  }
-  foreach my $callback_type (qw(finish start queue fail)) {
-    if (defined $job->{callback}{$callback_type}) {
-      $job->{'_callback_' . $callback_type}
-	= qualify_sub_name($job->{callback}{$callback_type});
-      if ($job->{debug}) {
-	debug("_preconfig_callbacks: registered callback type $callback_type");
-      }
+    if (defined $job->{suspend}) {
+	$job->{suspend} = qualify_sub_name $job->{suspend};
     }
-  }
-  return;
+    if (!defined $job->{callback}) {
+	return;
+    }
+    if (ref $job->{callback} eq '' || ref $job->{callback} eq 'CODE') {
+	$job->{callback} = { finish => $job->{callback} };
+    }
+    if (defined $job->{callback}{finish} && $job->{daemon}) {
+	carp 'Forks::Super::_preconfig_callbacks: ',
+              "'finish' callback is not going to be called with a daemon process";
+    }
+    foreach my $callback_type (qw(finish start queue fail)) {
+	if (defined $job->{callback}{$callback_type}) {
+	    $job->{'_callback_' . $callback_type} =
+		qualify_sub_name($job->{callback}{$callback_type});
+	    if ($job->{debug}) {
+		debug("_preconfig_callbacks: ",
+		      "registered callback type $callback_type");
+	    }
+	}
+    }
+    return;
 }
 
 sub Forks::Super::Job::_config_callback_child {
-  my $job = shift;
-  for my $callback (grep { /^callback/ || /^_callback/ } keys %$job) {
-    # this looks odd, but it clears up a SIGSEGV that was happening here
-    $job->{$callback} = '';
-    delete $job->{$callback};
-  }
-  return;
+    my $job = shift;
+    for my $callback (grep { /^callback/ || /^_callback/ } keys %$job) {
+	# this looks odd, but it clears up a SIGSEGV that was happening here
+	$job->{$callback} = '';
+	delete $job->{$callback};
+    }
+    return;
 }
 
 1;

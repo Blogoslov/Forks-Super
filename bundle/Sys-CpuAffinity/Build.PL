@@ -5,9 +5,7 @@ use Module::Build::ConfigData;
 use Carp;
 
 
-
-
-if ($ENV{AUTOMATED_TESTING}) {
+if ($ENV{AUTOMATED_TESTING} && !$ENV{BUILD_EVEN_IF_AUTOMATED_TESTING}) {
 
   # in general, it should be OK to install this distribution on 
   # a single-processor system. However many of the tests are
@@ -32,8 +30,10 @@ Aborting build because many tests in this distribution are skipped
 or dumbed down for single-processor systems, and the resulting
 PASS reports from the CPAN testers are not as helpful.
 
-Set \$ENV{AUTOMATED_TESTING} to a false value if you really wish to build
-and install this module as opposed to just testing it.
+Set \$ENV{AUTOMATED_TESTING} to a false value OR
+\$ENV{BUILD_EVEN_IF_AUTOMATED_TESTING} to a true value
+if you really wish to build and install this module as 
+opposed to just testing it.
 
 ___
   ;
@@ -209,7 +209,7 @@ my $builder = $builderclass->new(
 	module_name         => 'Sys::CpuAffinity',
 	license             => 'perl',
 	dist_author         => q[Marty O'Brien <mob@cpan.org>],
-        dist_version        => '1.04',
+        dist_version        => '1.05',
 	#dist_version_from   => 'lib/Sys/CpuAffinity.pm',
 	build_requires      => {
 		'Module::Build'      => 0.25,

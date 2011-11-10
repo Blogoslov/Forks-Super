@@ -11,15 +11,15 @@ use warnings;
 
 our $CWD = &Cwd::getcwd;
 if (${^TAINT}) {
-  my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-  if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-      $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-  }
-  ($ipc_dir) = $ipc_dir =~ /(.*)/;
-  Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
-  ($CWD) = $CWD =~ /(.*)/;
-  ($^X) = $^X =~ /(.*)/;
-  $ENV{PATH}='';
+    my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+    if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+	$ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+    }
+    ($ipc_dir) = $ipc_dir =~ /(.*)/;
+    Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+    ($CWD) = $CWD =~ /(.*)/;
+    ($^X) = $^X =~ /(.*)/;
+    $ENV{PATH}='';
 }
 
 # need a separate test for MSWin32
@@ -86,7 +86,7 @@ my $wait = CORE::wait;
 $t = Time::HiRes::time - $t;
 my $fail = 0;
 
-ok($t < 3.0, "child process finished quickly ${t}s, expected fast");  ### 1 ###
+okl($t < 3.0, "child process finished quickly ${t}s, expected fast");  ### 1 ###
 ok($wait == $child_pid, "CORE::wait captured child process");
 
 sleep 3;

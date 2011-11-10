@@ -15,23 +15,23 @@ our $_LOCK = 0;  # use same synchronization technique as F::S::Sighandler
 our %COMPLETE = ();
 
 sub child_signal_hijacker {
-  $_LOCK++;
-  if ($_LOCK>1) {
+    $_LOCK++;
+    if ($_LOCK>1) {
+	$_LOCK--;
+	return;
+    }
+
+    Forks::Super::Sigchld::handle_CHLD(@_);
+
+    for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
+	unless ($COMPLETE{$cj}++) {
+	    $LAST::COMPLETE = $cj;
+	    $LAST::COMPLETE{$cj}++;
+	    $SIGNAL::TIME = Time::HiRes::time();
+	}
+    }
     $_LOCK--;
     return;
-  }
-
-  Forks::Super::Sigchld::handle_CHLD(@_);
-
-  for my $cj (grep { $_->{state} eq "COMPLETE" } @Forks::Super::ALL_JOBS) {
-    unless ($COMPLETE{$cj}++) {
-      $LAST::COMPLETE = $cj;
-      $LAST::COMPLETE{$cj}++;
-      $SIGNAL::TIME = Time::HiRes::time();
-    }
-  }
-  $_LOCK--;
-  return;
 }
 
 ##################################################################
@@ -39,17 +39,18 @@ sub child_signal_hijacker {
 *Forks::Super::handle_CHLD = *child_signal_hijacker;
 $SIGNAL::TIME = Time::HiRes::time();
 
-# SIGCHLD will only interrupt sleep (tests 3 and 4) if a handler is defined
-$SIG{CHLD} = \&bogus;
+# SIGCHLD will only interrupt sleep (tests 3 and 4) if a handler is defined.
+# For now this is being set up in each &Forks::Super::fork call.
 
-my $pid = fork();
+my ($j,$pid);
+$pid = fork();
 if (defined($pid) && $pid == 0) {
-  sleep 2;
-  exit 0;
+    sleep 2;
+    exit 0;
 }
 
 ok(defined($pid) && isValidPid($pid), "$$\\valid pid $pid");
-my $j = Forks::Super::Job::get($pid);
+$j = Forks::Super::Job::get($pid);
 ok($j->{state} eq "ACTIVE", "active state");
 
 # Perl's sleep can _sometimes_ be interrupted by SIGCHLD.
@@ -59,29 +60,29 @@ ok($j->{state} eq "ACTIVE", "active state");
 
 my $t = Time::HiRes::time();
 SKIP: {
-  if ($^O eq "MSWin32") {
-    Forks::Super::pause(5);
-    skip "sleep call not interrupted on $^O", 2;
-  }
-  local $! = 0;
-  sleep 10;   # sleep should be interrupted by SIGCHLD
-  $t = Time::HiRes::time() - $t;
-  ok($t <= 5.05, "Perl sleep interrupted by CHLD signal ${t}s");
-  ok($! =~ /Interrupted/, "\$! indicates interrupted system call $!");
-  Forks::Super::pause();
+    if ($^O eq "MSWin32") {
+	Forks::Super::pause(5);
+	skip "sleep call not interrupted on $^O", 2;
+    }
+    local $! = 0;
+    sleep 10;   # sleep should be interrupted by SIGCHLD
+    $t = Time::HiRes::time() - $t;
+    okl($t <= 5.05, "Perl sleep interrupted by CHLD signal ${t}s");
+    ok($! =~ /Interrupted/, "\$! indicates interrupted system call $!");
+    Forks::Super::pause();
 }
 ok($j->{state} eq "COMPLETE", "job state is COMPLETE");
-SKIP: {
-  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
+ SKIP: {
+     skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
-  # XXX - pass test (1) and fail test (2) would be ok
-  ok(defined $LAST::COMPLETE{$j}, 
-     "job caught in SIGCHLD handler/$j/" . $j->{pid}); ### 5 ###
-  ok($LAST::COMPLETE eq $j, 
-     "job caught in SIGCHLD handler/$LAST::COMPLETE/"
-    . $LAST::COMPLETE->{pid});                         ### 6 ###
-  my $tt = $SIGNAL::TIME - $j->{end};
-  ok(abs($tt) < 2, "short delay ${tt}s in SIGCHLD HANDLER expected <2s");
+     # XXX - pass test (1) and fail test (2) would be ok
+     ok(defined $LAST::COMPLETE{$j}, 
+	"job caught in SIGCHLD handler/$j/" . $j->{pid}); ### 5 ###
+     ok($LAST::COMPLETE eq $j, 
+	"job caught in SIGCHLD handler/$LAST::COMPLETE/"
+	. $LAST::COMPLETE->{pid});                         ### 6 ###
+     my $tt = $SIGNAL::TIME - $j->{end};
+     okl(abs($tt) < 2, "short delay ${tt}s in SIGCHLD HANDLER expected <2s");
 }
 sleep 1;
 my $p = wait;
@@ -97,8 +98,8 @@ ok($j->{reaped} - $j->{end} > 0, "reap occurred after job completed");
 
 $pid = fork();
 if (defined($pid) && $pid == 0) {
-  sleep 2;
-  exit 0;
+    sleep 2;
+    exit 0;
 }
 ok(defined($pid) && isValidPid($pid), "valid pid $pid");
 $j = Forks::Super::Job::get($pid);
@@ -106,30 +107,30 @@ ok($j->{state} eq "ACTIVE", "active state");
 $t = Time::HiRes::time();
 Forks::Super::pause(6);   # ACK! sleep can be interrupted by CHLD signal!
 $t = Time::HiRes::time() - $t;
-ok($t > 5.7 && $t < 7.75,                           ### 13 ### was 7.1 obs 7.10
-   "Forks::Super::pause(6) took ${t}s expected 6");
+okl($t > 5.7 && $t < 7.75,                           ### 13 ### was 7.1 obs 7.10
+    "Forks::Super::pause(6) took ${t}s expected 6");
 ok($j->{state} eq 'COMPLETE', "complete state " . $j->{state});
 SKIP: {
-  skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
+    skip "No implicit SIGCHLD handling on Win32", 3 if $^O eq 'MSWin32';
 
-  # XXX - pass test (1) and fail test (2) would be ok
-  ok(defined $LAST::COMPLETE{$j}, 
-     "job in SIGCHLD handler/$j/" . $j->{pid});    ### 15 ###
-  ok($LAST::COMPLETE eq $j,
-     "job in SIGCHLD handler/$LAST::COMPLETE/"
-     . $LAST::COMPLETE->{pid});                    ### 16 ###
-  my $tt = $SIGNAL::TIME - $j->{end};
-  ok(abs($tt) < 2, "short delay ${tt}s in SIGCHLD handler, expected <2s");
+    # XXX - pass test (1) and fail test (2) would be ok
+    ok(defined $LAST::COMPLETE{$j}, 
+       "job in SIGCHLD handler/$j/" . $j->{pid});    ### 15 ###
+    ok($LAST::COMPLETE eq $j,
+       "job in SIGCHLD handler/$LAST::COMPLETE/"
+       . $LAST::COMPLETE->{pid});                    ### 16 ###
+    my $tt = $SIGNAL::TIME - $j->{end};
+    okl(abs($tt) < 2, "short delay ${tt}s in SIGCHLD handler, expected <2s");
 }
 $p = wait;
 ok($pid == $p, "wait reaped correct job");
 ok($j->{state} eq "REAPED", "job state changed to REAPED in wait");
 my $tt = $j->{reaped} - $j->{end};
-ok($tt > 1, 
-   "reaped at $j->{reaped}, ended at $j->{end} ${tt}s expected >1s");
+okl($tt > 1, 
+    "reaped at $j->{reaped}, ended at $j->{end} ${tt}s expected >1s");
 if ($tt <= 1) {
-  print STDERR "Job created at $j->{created}\n";
-  print STDERR "Job started at $j->{start}\n";
-  print STDERR "Job ended at $j->{end}\n";
-  print STDERR "Job reaped at $j->{reaped}\n";
+    print STDERR "Job created at $j->{created}\n";
+    print STDERR "Job started at $j->{start}\n";
+    print STDERR "Job ended at $j->{end}\n";
+    print STDERR "Job reaped at $j->{reaped}\n";
 }

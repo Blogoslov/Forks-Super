@@ -34,7 +34,7 @@ SKIP: {
        "launched $pid1,$pid2,$pid3 fork to cmd");
 
     my $y = Forks::Super::kill('TERM', $j1);
-    ok($y >= 1, "kill signal to $pid1 sent successfully $y==1 cmd");
+    ok($y == 1, "kill signal to $pid1 sent successfully $y==1 cmd");
     sleep 1;
 
     # sometimes the signal is delivered but the process doesn't end?
@@ -47,13 +47,13 @@ SKIP: {
     my $t = Time::HiRes::time();
     my $p = waitpid $pid1, 0, 20;
     $t = Time::HiRes::time() - $t;
-    ok($t < 6,                                                  ### 3 ###
+    okl($t < 6,                                                  ### 3 ###
        "process $pid1 took ${t}s to reap cmd, expected fast"); 
        # [sometimes it can take a while, though]
 
     ok($p == $pid1, "kill signal to $p==$pid1 successful cmd"); ### 4 ###
 
     my $z = Forks::Super::kill_all('KILL');
-    ok($z >= 2, "kill_all signal to $z==$pid2,$pid3 successful cmd"); ### 5 ###
+    ok($z == 2, "kill_all signal to $z==$pid2,$pid3 successful cmd"); ### 5 ###
     sleep 1;
 }  # end SKIP

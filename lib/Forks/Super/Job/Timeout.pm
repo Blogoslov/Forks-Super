@@ -18,7 +18,7 @@ use warnings;
 use constant FOREVER => 9E9;
 use constant LONG_TIME => 9E8;
 
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -34,8 +34,8 @@ our ($ORIG_PGRP, $NEW_PGRP, $NEW_SETSID, $NEWNEW_PGRP);
 our $TIMEOUT_SIG = $ENV{FORKS_SUPER_TIMEOUT_SIG} || (&IS_WIN32?'QUIT':'HUP');
 
 sub Forks::Super::Job::_config_timeout_parent {
-  my $job = shift;
-  return;
+    my $job = shift;
+    return;
 }
 
 #
@@ -46,7 +46,7 @@ sub Forks::Super::Job::_config_timeout_parent {
 sub Forks::Super::Job::_config_timeout_child {
     my $job = shift;
     my $timeout = &FOREVER;
-    
+
     if (exists $SIG{$TIMEOUT_SIG}) {
 	$SIG{$TIMEOUT_SIG} = 'DEFAULT';
     }
@@ -66,10 +66,11 @@ sub Forks::Super::Job::_config_timeout_child {
     $job->{_timeout} = $timeout;
     $job->{_expiration} = $timeout + Time::HiRes::time();
 
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	croak 'Forks::Super: alarm() not available on this system. ',
-	    "timeout,expiration options not allowed.\n";
-    }
+###  v0.55 can workaround
+#    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
+#	croak 'Forks::Super: alarm() not available on this system. ',
+#	    "timeout,expiration options not allowed.\n";
+#    }
 
     # Un*x systems - try to establish a new process group for
     # this child. If this process times out, we want to have
@@ -85,15 +86,29 @@ sub Forks::Super::Job::_config_timeout_child {
     if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
 	_change_process_group_child();
     }
-    
+
     if ($timeout < 1) {
 	croak 'Forks::Super::Job::_config_timeout_child(): quick timeout';
     }
 
     if ($job->{style} eq 'exec') {
-	carp "Forks::Super: exec option used, expiration option ignored\n";
-	# XXX - see &F::S::J::OS::totally_kludgy_process_monitor
-	#       for a possible workaround
+	# v0.55: workaround to exec/timeout incompatibility
+	if ($^O ne 'MSWin32') {
+	    Forks::Super::Job::OS::poor_mans_alarm($$, $timeout);
+	} else {
+	    # for $^O==MSWin32, run monitor after process launches ...
+	    $job->{_post_exec_timeout} = $timeout;
+	}
+	return;
+    }
+
+    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0
+	|| !$Forks::Super::SysInfo::CONFIG{'alarm'}
+	|| $job->{use_alternate_alarm}) {
+
+	# can't/shouldn't use alarm for timeout. 
+	# use process monitor workaround
+	Forks::Super::Job::OS::poor_mans_alarm($$, $timeout);
 	return;
     }
 
@@ -221,11 +236,7 @@ sub _child_timeout_Win32 {
     if (defined $proc) {
 	if ($proc eq '__open3__' || $proc eq '__system1__') {
 	    # Win32::Process nice to have but not required.
-	    # TASKKILL is pretty standard on Windows systems, isn't it?
-	    # Maybe not completely standard :-(
-
 	    # kill -9, $pid is suitable, right? (see perlport#kill)
-#	    my $result = system("TASKKILL /F /T /PID $pid > nul");
 	    my $result = CORE::kill -9, $pid;
 
 	} elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
@@ -248,7 +259,6 @@ sub _child_timeout_Win32 {
 	if ($job->{debug}) {
 	    debug("trying to terminate $job->{signal_pid}");
 	}
-	# XXX - use FSJ::OS::Win32::terminate_process instead ?
 	my $result = system("TASKKILL /F /T /PID $pid > nul");
 	debug("Win32::terminate_process result was $result") 
 	    if $job->{debug};
@@ -304,39 +314,39 @@ sub _cleanup_child {
 
 sub warm_up {
 
-  # force loading of some modules in the parent process
-  # so that fast fail (see t/40-timeout.t, tests #8,17)
-  # aren't slowed down when they encounter the croak call.
+    # force loading of some modules in the parent process
+    # so that fast fail (see t/40-timeout.t, tests #8,17)
+    # aren't slowed down when they encounter the croak call.
 
-  eval { croak "preload.\n" } or do {};
-  return $@;
+    eval { croak "preload.\n" } or do {};
+    return $@;
 }
 
 sub _time_from_natural_language {
-  my ($time,$isInterval) = @_;
-  if ($time !~ /[A-Za-z]/) {
-    return $time;
-  }
+    my ($time,$isInterval) = @_;
+    if ($time !~ /[A-Za-z]/) {
+	return $time;
+    }
 
-  if (Forks::Super::Config::CONFIG('DateTime::Format::Natural')) {
-    my $now = DateTime->now;
-    my $dt_nl_parser = DateTime::Format::Natural->new(datetime => $now,
+    if (Forks::Super::Config::CONFIG('DateTime::Format::Natural')) {
+	my $now = DateTime->now;
+	my $dt_nl_parser = DateTime::Format::Natural->new(datetime => $now,
 						   lang => 'en',
 						   prefer_future => 1);
-    if ($isInterval) {
-      my ($dt) = $dt_nl_parser->parse_datetime_duration($time);
-      return $dt->epoch - $now->epoch;
-    } else {
-      my $dt = $dt_nl_parser->parse_datetime($time);
-      return $dt->epoch;
+	if ($isInterval) {
+	    my ($dt) = $dt_nl_parser->parse_datetime_duration($time);
+	    return $dt->epoch - $now->epoch;
+	} else {
+	    my $dt = $dt_nl_parser->parse_datetime($time);
+	    return $dt->epoch;
+	}
+    } else{
+	carp 'Forks::Super::Job::Timeout: ',
+		"time spec $time may contain natural language. ",
+		'Install the  DateTime::Format::Natural  module ',
+		"to use this feature.\n";
+	return $time;
     }
-  } else{
-    carp 'Forks::Super::Job::Timeout: ',
-	"time spec $time may contain natural language. ",
-	'Install the  DateTime::Format::Natural  module ',
-	"to use this feature.\n";
-    return $time;
-  }
 }
 
 1;

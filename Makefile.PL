@@ -25,12 +25,12 @@ if ($^O eq 'MSWin32') {
 
 # files that may exist and be nice to clean up with a  make clean
 our $FILES_TO_CLEAN 
-  = join " ", qw(Forks-Super-* system-limits system-limits.lock
-		 lib/Forks/Super/SysInfo.pm t/out/spawn*
-		 t/out/sigchld.debug t/out/test* t/out/.lock-*
-		 t/out/49.* t/out/debug1-* t/out/limits.*
-		 t/out/ipc* t/out/new-ipc* t/out/66* t/dir* t/out/24*
-                 t/out/daemon* lib/_Inline *.stackdump _Inline);
+    = join " ", qw(Forks-Super-* system-limits system-limits.lock
+		   lib/Forks/Super/SysInfo.pm t/out/spawn*
+		   t/out/sigchld.debug t/out/test* t/out/.lock-*
+		   t/out/48b.* t/out/debug1-* t/out/limits.*
+		   t/out/ipc* t/out/new-ipc* t/out/66* t/dir* t/out/24*
+                   t/out/daemon* lib/_Inline *.stackdump);
 
 our %META_MERGE
     = (recommends => \%RECOMMENDED,
@@ -69,6 +69,8 @@ if (defined($ENV{BUNDLE}) && $ENV{BUNDLE} eq "0") {
 }
 probe_system();
 
+my $MM_VERSION = eval $ExtUtils::MakeMaker::VERSION;
+
 WriteMakefile(
 
     NAME                => 'Forks::Super',
@@ -78,10 +80,8 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => \%REQUIRED,
 
-    (eval $ExtUtils::MakeMaker::VERSION >= 6.46
-     ? ('META_MERGE' => \%META_MERGE ) : ()),
-    (eval $ExtUtils::MakeMaker::VERSION >= 6.3002
-     ? ('LICENSE'    => 'perl')        : ()),
+    ($MM_VERSION >= 6.46   ? ('META_MERGE' => \%META_MERGE ) : ()),
+    ($MM_VERSION >= 6.3002 ? ('LICENSE'    => 'perl')        : ()),
 
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => $FILES_TO_CLEAN },
@@ -115,7 +115,7 @@ sub install_bundled_modules {
 	    next if $submod eq '.';
 	    next if $submod eq '..';
 	    next if ! -d $submod;
-	    
+
 	    if (-f "$submod/bundle.pl") {
 		print "--------------------------------------------------\n";
 		print "Running builder for submodules/$submod\n";
@@ -149,13 +149,13 @@ package MY;
 
 sub MY::postamble {
 
-  my $stresstestargs = "-r 20 -x 5 -s -q";
-  if ($^O =~ /solaris/i) {
-    $stresstestargs = "-r 25 -x 4 -s -q";
-  }
-  # $(PERLRUN) not avail in 5.6.1, ExtUtils::MakeMaker 5.45
-  my $PERLEXE = '$(FULLPERL)';  
-  my $postamble = <<"__END_POSTAMBLE__";
+    my $stresstestargs = "-r 20 -x 5 -s -q";
+    if ($^O =~ /solaris/i) {
+	$stresstestargs = "-r 25 -x 4 -s -q";
+    }
+    # $(PERLRUN) not avail in 5.6.1, ExtUtils::MakeMaker 5.45
+    my $PERLEXE = '$(FULLPERL)';  
+    my $postamble = <<"__END_POSTAMBLE__";
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #
@@ -175,5 +175,5 @@ stresstest :: pure_all
 
 __END_POSTAMBLE__
 
-  return $postamble;
+    return $postamble;
 }

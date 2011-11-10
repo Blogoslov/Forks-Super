@@ -4,8 +4,8 @@ use strict;
 use warnings;
 
 sub _read_socket {
-  my $handle = shift;
-  return $Forks::Super::Job::Ipc::USE_TIE_SH
+    my $handle = shift;
+    return $Forks::Super::Job::Ipc::USE_TIE_SH
 	? <$handle>
 	: Forks::Super::Job::Ipc::_read_socket($handle, undef, 0);
 }
@@ -26,30 +26,30 @@ sub _read_socket {
 #
 
 sub compute_checksums_in_child {
-  binmode STDOUT;
-  my $count = 0;
-  for (;;) {
-    $_ = _read_socket(*STDIN);
-    if (!defined($_) || $_ eq '') {
-      Forks::Super::pause(1.0E-3);
-      next;
+    binmode STDOUT;
+    my $count = 0;
+    for (;;) {
+	$_ = _read_socket(*STDIN);
+	if (!defined($_) || $_ eq '') {
+	    Forks::Super::pause(1.0E-3);
+	    next;
+	}
+	s/\s+$//;
+	last if $_ eq "__END__";
+	print "$_\\", unpack("%32C*",$_)%65535,"\n";
     }
-    s/\s+$//;
-    last if $_ eq "__END__";
-    print "$_\\", unpack("%32C*",$_)%65535,"\n";
-  }
 }
 
 
 my @pids = ();
 for (my $i=0; $i<4; $i++) {
-  # v0.33: list context may be supported
-  push @pids, 
-	scalar fork { 
-	  sub => \&compute_checksums_in_child,
-	  timeout => 30,
-	  child_fh => "in,out,socket"
-	};
+    # v0.33: list context may be supported
+    push (@pids, 
+	  scalar fork { 
+	      sub => \&compute_checksums_in_child,
+	      timeout => 30,
+	      child_fh => "in,out,socket"
+	  });
 }
 
 # there is a SIGPIPE somewhere here that causes intermittent failures 
@@ -59,20 +59,21 @@ for (my $i=0; $i<4; $i++) {
 my @data = (@INC,%INC,keys(%!),keys(%ENV),0..99)[0 .. 99];
 my (@pdata, @cdata);
 for (my $i=0; $i<@data; $i++) {
-  my $zzz = $pids[$i % 4]->write_stdin("$data[$i]\n");
-  push @pdata, sprintf("%s\\%d\n", $data[$i], unpack("%32C*",$data[$i])%65535);
+    my $zzz = $pids[$i % 4]->write_stdin("$data[$i]\n");
+    push @pdata, sprintf("%s\\%d\n", 
+			 $data[$i], unpack("%32C*",$data[$i])%65535);
 }
 
 for my $pid (@pids) {
-  Forks::Super::write_stdin($pid, "__END__\r\n");
-  Forks::Super::write_stdin($pid, "__END__\r\n");
-  $pid->close_fh('stdin');
+    Forks::Super::write_stdin($pid, "__END__\r\n");
+    Forks::Super::write_stdin($pid, "__END__\r\n");
+    $pid->close_fh('stdin');
 }
 
 waitall;
 
 foreach (@pids) {
-  push @cdata, Forks::Super::read_stdout($_);
+    push @cdata, Forks::Super::read_stdout($_);
 }
 ok(@pdata > 0 && @pdata == @cdata,                         ### 1 ###
    "$$\\parent & child processed " .(scalar @pdata)

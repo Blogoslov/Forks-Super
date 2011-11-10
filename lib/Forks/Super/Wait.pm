@@ -20,9 +20,10 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 my ($productive_waitpid_code);
+my $respect_SIGCHLD_ignore = 1;
 
 tie our $WAIT_ACTION_ON_SUSPENDED_JOBS, 
     'Forks::Super::Tie::Enum', qw(wait fail resume);
@@ -141,7 +142,8 @@ sub _reap_return {
     }
 
     my $pid = $job->{real_pid};
-    return $OVERLOAD_RETURN ? Forks::Super::Job::get($pid) : $pid;
+    $pid = $OVERLOAD_RETURN ? Forks::Super::Job::get($pid) : $pid;
+    return $pid;
 }
 
 #
@@ -251,6 +253,18 @@ sub _waitpid_any {
 	}
 	$? = $job->{status};
     }
+    return __waitpid_result($pid);
+}
+
+sub __waitpid_result {
+    my $pid = shift;
+    if ($respect_SIGCHLD_ignore &&
+	'IGNORE' eq ($Signals::XSIG::XSIG{CHLD}[0] || '') &&
+	defined $Forks::Super::SysInfo::IGNORE_WAITPID_RESULT) {
+
+	$? = $Forks::Super::SysInfo::IGNORE_WAITPID_STATUS;
+	$pid = $Forks::Super::SysInfo::IGNORE_WAITPID_RESULT;
+    }
     return $pid;
 }
 
@@ -312,7 +326,7 @@ sub _waitpid_target {
 	debug("_waitpid_target: job $job is complete, reaping ...")
 	    if $job->{debug} & 2;
 	$job->_mark_reaped;
-	return _reap_return($job);
+	return __waitpid_result(_reap_return($job));
     }
 
     if ($job->{daemon}) {
@@ -343,7 +357,7 @@ sub _waitpid_target {
     debug("_waitpid_target: job $job is complete now, reaping ...")
 	if $job->{debug} & 2;
     $job->_mark_reaped;
-    return _reap_return($job);
+    return __waitpid_result(_reap_return($job));
 }
 
 sub _block_until_job_completes {
@@ -370,7 +384,7 @@ sub _waitpid_name {
     foreach my $job (@jobs) {
 	if ($job->{state} eq 'COMPLETE') {
 	    $job->_mark_reaped;
-	    return _reap_return($job);
+	    return __waitpid_result(_reap_return($job));
 	} elsif ($job->{state} ne 'REAPED' 
 		 && $job->{state} ne 'DEFERRED'
 		 && !$job->{daemon}) {
@@ -401,7 +415,7 @@ sub _waitpid_name {
 			   || $_->{state} eq 'REAPED'} @jobs_to_wait_for;
     }
     $jobs[0]->_mark_reaped;
-    return _reap_return($jobs[0]);
+    return __waitpid_result(_reap_return($jobs[0]));
 }
 
 # wait on any process from a specific process group
@@ -432,7 +446,7 @@ sub _waitpid_pgrp {
     if (defined $ALL_JOBS{$pid}) {
 	$? = $ALL_JOBS{$pid}{status};
     }
-    return $pid;
+    return __waitpid_result($pid);
 }
 
 sub __run_productive_waitpid_code {

@@ -8,7 +8,7 @@ use warnings;
 # the CPAN testers' configuration.
 
 if (${^TAINT}) {
-  $ENV{PATH} = "";
+    $ENV{PATH} = "";
 }
 
 
@@ -24,9 +24,9 @@ Forks::Super::Config::CONFIG_external_program("/uptime");
 
 print STDERR "\%SysInfo::CONFIG includes:";
 foreach my $key (sort keys %Forks::Super::SysInfo::CONFIG) {
-  if ($Forks::Super::SysInfo::CONFIG{$key}) {
-    print STDERR " $key";
-  }
+    if ($Forks::Super::SysInfo::CONFIG{$key}) {
+	print STDERR " $key";
+    }
 }
 print STDERR "\n";
 

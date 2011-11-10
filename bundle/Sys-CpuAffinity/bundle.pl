@@ -15,6 +15,8 @@ if ($^O =~ /solaris/i) {
   $TargetModuleMinVersion = '1.01';
 } elsif ($^O =~ /darwin/i || $^O =~ /irix/i) {
   $TargetModuleMinVersion = '1.01';
+} elsif ($^O =~ /linux/i) {
+  $TargetModuleMinVersion = '1.04';
 }
 
 my $TargetModulePitch = qq[

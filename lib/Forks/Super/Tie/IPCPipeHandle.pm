@@ -24,118 +24,118 @@ use IO::Pipe;
 use IO::Handle;
 
 our @ISA = qw(IO::Pipe IO::Handle);
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 sub TIEHANDLE {
-  my ($class, $real_pipe, $glob) = @_;
-  $$glob->{DELEGATE} = $real_pipe;
-  eval {
-    bless $glob, 'Forks::Super::Tie::IPCPipeHandle::Delegator';
-  } or carp 'Forks::Super::Tie::IPCPipeHandle: ',
-	  "failed to bless tied obj as a Delegator\n";
+    my ($class, $real_pipe, $glob) = @_;
+    $$glob->{DELEGATE} = $real_pipe;
+    eval {
+	bless $glob, 'Forks::Super::Tie::IPCPipeHandle::Delegator';
+    } or carp 'Forks::Super::Tie::IPCPipeHandle: ',
+	    "failed to bless tied obj as a Delegator\n";
 
-  # any attributes that the real pipe had should be passed
-  # on to the glob.
-  foreach my $attr (keys %$$real_pipe) {
-      $$glob->{$attr} = $$real_pipe->{$attr};
-  }
+    # any attributes that the real pipe had should be passed
+    # on to the glob.
+    foreach my $attr (keys %$$real_pipe) {
+	$$glob->{$attr} = $$real_pipe->{$attr};
+    }
 
-  # apply PerlIO layers to the real pipe here
-  my $job = $$glob->{job} || Forks::Super::Job->this;
-  if (defined($job) && $job->{fh_config}{layers}) {
-      my @io_layers = @{$job->{fh_config}{layers}};
-      if ($$real_pipe->{is_read}) {
-	  @io_layers = reverse @io_layers;
-      }
-      foreach my $layer (@io_layers) {
-	  local $! = 0;
-	  if (binmode $real_pipe, $layer) {
-	      if ($job->{debug}) {
-		  debug("applied PerlIO layer $layer to pipe $real_pipe");
-	      }
-	  } else {
-	      carp 'Forks::Super::Tie::IPCPipeHandle: ',
-	          "failed to apply PerlIO layer $layer to $real_pipe: $!";
-	  }
-      }
-  }
+    # apply PerlIO layers to the real pipe here
+    my $job = $$glob->{job} || Forks::Super::Job->this;
+    if (defined($job) && $job->{fh_config}{layers}) {
+	my @io_layers = @{$job->{fh_config}{layers}};
+	if ($$real_pipe->{is_read}) {
+	    @io_layers = reverse @io_layers;
+	}
+	foreach my $layer (@io_layers) {
+	    local $! = 0;
+	    if (binmode $real_pipe, $layer) {
+		if ($job->{debug}) {
+		    debug("applied PerlIO layer $layer to pipe $real_pipe");
+		}
+	    } else {
+		carp 'Forks::Super::Tie::IPCPipeHandle: ',
+			"failed to apply PerlIO layer $layer to $real_pipe: $!";
+	    }
+	}
+    }
 
-  my $self = { PIPE => $real_pipe, GLOB => $glob };
-  $self->{_FILENO} = CORE::fileno($real_pipe);
+    my $self = { PIPE => $real_pipe, GLOB => $glob };
+    $self->{_FILENO} = CORE::fileno($real_pipe);
 
-  bless $self, $class;
-  return $self;
+    bless $self, $class;
+    return $self;
 }
 
 #############################################################################
 
 sub OPEN {
-  Carp::confess "Can't call 'open' on a pipe handle\n";
+    Carp::confess "Can't call 'open' on a pipe handle\n";
 }
 
 sub BINMODE {
-  my ($self, $layer) = @_;
-  $self->{BINMODE}++;
-  return binmode $self->{PIPE}, $layer || ':raw';
+    my ($self, $layer) = @_;
+    $self->{BINMODE}++;
+    return binmode $self->{PIPE}, $layer || ':raw';
 }
 
 sub GETC {
-  my $self = shift;
-  $self->{GETC}++;
+    my $self = shift;
+    $self->{GETC}++;
 
-  my $buffer = '';
-  my $n = sysread $self->{PIPE}, $buffer, 1;
-  if ($n == 0) {
-    return;
-  }
-  return $buffer;
+    my $buffer = '';
+    my $n = sysread $self->{PIPE}, $buffer, 1;
+    if ($n == 0) {
+	return;
+    }
+    return $buffer;
 }
 
 sub FILENO {
-  my $self = shift;
-  $self->{FILENO}++;
-  return $self->{_FILENO};
+    my $self = shift;
+    $self->{FILENO}++;
+    return $self->{_FILENO};
 }
 
 sub PRINT {
-  my ($self, @list) = @_;
-  $self->{PRINT}++;
-  my $bytes = join(defined $, ? $, : '', @list)
+    my ($self, @list) = @_;
+    $self->{PRINT}++;
+    my $bytes = join(defined $, ? $, : '', @list)
                   . (defined $\ ? $\ : '');
 
-  my $z = print {$self->{PIPE}} @list;
-  return $z;
+    my $z = print {$self->{PIPE}} @list;
+    return $z;
 }
 
 sub PRINTF {
-  my ($self, $template, @list) = @_;
-  $self->{PRINTF}++;
-  return $self->PRINT(sprintf $template, @list);
+    my ($self, $template, @list) = @_;
+    $self->{PRINTF}++;
+    return $self->PRINT(sprintf $template, @list);
 }
 
 sub WRITE {
-  my ($self, $string, $length, $offset) = @_;
-  $self->{WRITE}++;
-  $length ||= length $string;
-  $offset ||= 0;
+    my ($self, $string, $length, $offset) = @_;
+    $self->{WRITE}++;
+    $length ||= length $string;
+    $offset ||= 0;
 
-  my $n = syswrite $self->{PIPE}, $string, $length, $offset;
-  return $n;
+    my $n = syswrite $self->{PIPE}, $string, $length, $offset;
+    return $n;
 }
 
 sub READLINE {
-  my $self = shift;
-  $self->{READLINE}++;
-  my $glob = $self->{GLOB};
-  if ($$glob->{job} || ref($$glob->{job})) {
-    return Forks::Super::Job::Ipc::_read_pipe(
+    my $self = shift;
+    $self->{READLINE}++;
+    my $glob = $self->{GLOB};
+    if ($$glob->{job} || ref($$glob->{job})) {
+	return Forks::Super::Job::Ipc::_read_pipe(
 
-	# XXX - block should be determined by the $job settings
-	# read pipe is blocking by default
-	$self->{PIPE}, $$glob->{job}, wantarray, block => 1);
-  }
+	    # XXX - block should be determined by the $job settings
+	    # read pipe is blocking by default
+	    $self->{PIPE}, $$glob->{job}, wantarray, block => 1);
+    }
 
-  return readline($self->{PIPE});
+    return readline($self->{PIPE});
 }
 
 sub TELL {
@@ -162,13 +162,13 @@ sub READ {
 }
 
 sub SEEK {
-  my ($self, $position, $whence) = @_;
-  $self->{SEEK}++;
-  return sysseek $self->{PIPE}, $position, $whence;
+    my ($self, $position, $whence) = @_;
+    $self->{SEEK}++;
+    return sysseek $self->{PIPE}, $position, $whence;
 }
 
 sub is_pipe {
-  return 0;
+    return 0;
 }
 
 sub opened {
@@ -185,7 +185,7 @@ sub CLOSE {
 	}
 	close *{$self->{GLOB}};
     }
-    
+
     if (!$self->{CLOSE}++) {
 	${$self->{GLOB}}->{closed}++;
 	return close delete $self->{PIPE};
@@ -199,46 +199,35 @@ sub DESTROY {
     return;
 }
 
-sub ___UNTIE {
-    my ($self, $existing_inner_references) = @_;
-    if ($existing_inner_references > 1) {
-	if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
-	    warn 'untie attempted while ', $existing_inner_references,
-	    	' still exist';
-	}
-    }
-    return;
-}
-
 #
 # when you call a method on a glob that is tied to a 
 # Forks::Super::Tie::IPCSocketHandle , the method should be invoked
 # on the tied object's real underlying socket handle
 #
 sub Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD {
-  return if $Forks::Super::Job::INSIDE_END_QUEUE;
-  my $method = $Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD;
-  $method =~ s/.*:://;
-  my $delegator = shift;
-  return if !$delegator;
+    return if $Forks::Super::Job::INSIDE_END_QUEUE;
+    my $method = $Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD;
+    $method =~ s/.*:://;
+    my $delegator = shift;
+    return if !$delegator;
 
-  my $delegate = $$delegator->{DELEGATE};
-  return if !$delegate;
+    my $delegate = $$delegator->{DELEGATE};
+    return if !$delegate;
 
-  ## no critic (StringyEval)
-  if (wantarray) {
-    my @r = eval "\$delegate->$method(\@_)";
-    if ($@) {
-      Carp::cluck "IPCPipeHandle delegate fail: $method @_; error=$@\n";
+    ## no critic (StringyEval)
+    if (wantarray) {
+	my @r = eval "\$delegate->$method(\@_)";
+	if ($@) {
+	    Carp::cluck "IPCPipeHandle delegate fail: $method @_; error=$@\n";
+	}
+	return @r;
+    } else {
+	my $r = eval "\$delegate->$method(\@_)";
+	if ($@) {
+	    Carp::cluck "IPCPipeHandle delegate fail: $method @_; error=$@\n";
+	}
+	return $r;
     }
-    return @r;
-  } else {
-    my $r = eval "\$delegate->$method(\@_)";
-    if ($@) {
-      Carp::cluck "IPCPipeHandle delegate fail: $method @_; error=$@\n";
-    }
-    return $r;
-  }
 }
 
 sub Forks::Super::Tie::IPCPipeHandle::Delegator::DESTROY {

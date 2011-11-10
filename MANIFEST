@@ -12,6 +12,7 @@ lib/Forks/Super/Job/Timeout.pm
 lib/Forks/Super/LazyEval.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
+lib/Forks/Super/Tie/IPCDupSTDIN.pm
 lib/Forks/Super/Tie/IPCFileHandle.pm
 lib/Forks/Super/Tie/IPCSocketHandle.pm
 lib/Forks/Super/Tie/IPCPipeHandle.pm
@@ -19,9 +20,9 @@ lib/Forks/Super/Queue.pm
 lib/Forks/Super/Sigchld.pm
 lib/Forks/Super/Util.pm
 lib/Forks/Super/Wait.pm
-lib/Signals/XSIG.pm                       # v0.13 bundled with v0.54
-lib/Signals/XSIG/Default.pm               # v0.13 bundled with v0.54
-lib/Signals/XSIG/TieArray56.pm            # v0.13 bundled with v0.54
+lib/Signals/XSIG.pm                       # v0.13 bundled since F::S v0.54
+lib/Signals/XSIG/Default.pm               # v0.13 bundled since F::S v0.54
+lib/Signals/XSIG/TieArray56.pm            # v0.13 bundled since F::S v0.54
 Makefile.PL
 MANIFEST
 README
@@ -32,7 +33,8 @@ t/00-use.t
 t/01a-import.t
 t/01b-import.t
 t/01c-import.t
-t/02-tie-on_busy.t
+t/02a-tie-enum.t
+t/02b-tie-on_busy.t
 t/03a-queue-ties.t
 t/03b-queue-func.t
 t/04-ipc-dir.t
@@ -58,6 +60,7 @@ t/24b-kill.t
 t/24c-kill.t
 t/24d-kill.t
 t/24e-kill.t
+t/24f-kill.t
 t/25-open.t
 t/30a-fork-from-child.t
 t/30b-fork-from-child.t
@@ -79,6 +82,7 @@ t/41d-filehandles.t
 t/41f-filehandles.t
 t/41g-filehandles.t
 t/41j-filehandles.t
+t/41k-filehandles.t
 t/42a-filehandles.t
 t/42b-filehandles.t
 t/42c-filehandles.t
@@ -141,6 +145,9 @@ t/65c-daemon.t
 t/65d-daemon.t
 t/65e-daemon.t
 t/66a-daemon.t
+t/66b-daemon.t
+t/66c-daemon.t
+t/70-cleanse.t
 t/external-command.pl
 t/external-daemon.pl
 t/forked_harness.pl

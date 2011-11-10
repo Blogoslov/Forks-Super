@@ -15,12 +15,12 @@ my $launch_after_nap = sub { sleep 10; return 1 };
 my $sleepy = sub { return sleep 30 };
 
 sub dont_launch_external {
-  # block jobs that invoke external commands
-  # but use the default handler for other jobs
-  my $job = shift;
-  bless $job, "Forks::Super::Job";
-  return 0 if defined $job->{cmd};
-  return $job->_can_launch;
+    # block jobs that invoke external commands
+    # but use the default handler for other jobs
+    my $job = shift;
+    bless $job, "Forks::Super::Job";
+    return 0 if defined $job->{cmd};
+    return $job->_can_launch;
 }
 
 $Forks::Super::MAX_PROC = 1;
@@ -36,7 +36,7 @@ my $t = Time::HiRes::time();
 my $pid4 = fork { sub => $sleepy , can_launch => $launch_after_nap };
 $t = Time::HiRes::time() - $t;
 ok(isValidPid($pid4), "successful delayed fork");
-ok($t >= 9.0, "fork was delayed ${t}s expected >10s");
+okl($t >= 9.0, "fork was delayed ${t}s expected >10s");
 
 $Forks::Super::MAX_PROC = 50;
 my $pid5 = fork { sub => $sleepy };

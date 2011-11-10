@@ -6,17 +6,17 @@ use warnings;
 # exercise fork { retries => ... } function
 
 BEGIN {
-  *Forks::Super::Job::_CORE_fork = *mockfork;
+    *Forks::Super::Job::_CORE_fork = *mockfork;
 }
 
 our $TIMES_TO_FAIL = 0;
 
 sub mockfork {
-  if ($TIMES_TO_FAIL-- > 0) {
-    sleep 1;
-    return undef;
-  }
-  return CORE::fork();
+    if ($TIMES_TO_FAIL-- > 0) {
+	sleep 1;
+	return undef;
+    }
+    return CORE::fork();
 }
 
 

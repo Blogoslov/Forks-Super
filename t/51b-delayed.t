@@ -16,7 +16,7 @@ my $now = Time::HiRes::time();
 my $t = Time::HiRes::time();
 my $p1 = fork { sub => sub { sleep 3 } , delay => 5, on_busy => 'block' };
 $t = Time::HiRes::time() - $t;
-ok($t >= 4, "delayed job blocked took ${t}s expected >=5s");
+okl($t >= 4, "delayed job blocked took ${t}s expected >=5s");
 ok(isValidPid($p1), "delayed job blocked and ran");
 my $j1 = Forks::Super::Job::get($p1);
 ok($j1->{state} eq "ACTIVE", "state of delayed job is ACTIVE");
@@ -26,7 +26,7 @@ $t = Time::HiRes::time();
 my $p2 = fork { sub => sub { sleep 3 } , start_after => $future, 
 	on_busy => 'block' };
 $t = Time::HiRes::time() - $t;
-ok($t >= 4, "start_after job blocked took ${t}s expected ~10s");
+okl($t >= 4, "start_after job blocked took ${t}s expected ~10s");
 ok(isValidPid($p2), "start_after job blocked and ran");
 my $j2 = Forks::Super::Job::get($p2);
 ok($j2->{state} eq "ACTIVE", "job ACTIVE after delay");

@@ -1,5 +1,5 @@
 use Forks::Super::Job;
-use Test::More tests => 58;
+use Test::More tests => 57;
 use strict;
 use warnings;
 
@@ -54,6 +54,7 @@ ok(!$job->is_deferred, 'suspended job is not deferred');
 ok(!$job->{end}, 'incomplete job no end time');
 ok(!$job->{elapsed}, 'incomplete job no end time');
 
+$job->{status} = 0;
 $job->_mark_complete;
 ok($job->is_complete, 'complete job is complete');
 ok($job->is_started, 'complete job is started');
@@ -93,9 +94,14 @@ ok(scalar $job->exit_status == 9, 'scalar exit status returns >>8');
 
 $job->{pid} = $job->{real_pid} = 999;
 $job->dispose;
-ok(!$job->{pid}, 'dispose cleanses the job object');
-my $keys = "@{[keys %$job]}";
-ok($keys  eq 'disposed', 'only dispose attr left') or diag($keys);
+ok($job->{disposed}, 'dispose sets disposed attribute');
+
+if (0) {
+    # obsolete tests after v0.55
+    ok(!$job->{pid}, 'dispose cleanses the job object');
+    my $keys = "@{[keys %$job]}";
+    ok($keys  eq 'disposed', 'only dispose attr left') or diag($keys);
+}
 
 
 
