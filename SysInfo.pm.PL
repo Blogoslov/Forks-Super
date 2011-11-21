@@ -36,7 +36,7 @@ use warnings;
 
 ## no critic (ProhibitMagicNumbers)
 
-our \$VERSION = '0.55';
+our \$VERSION = '0.56';
 
 ____;
 

@@ -11,7 +11,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(bg_eval bg_qx);
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 sub _choose_protocol {
     if (CONFIG_module('YAML')) {

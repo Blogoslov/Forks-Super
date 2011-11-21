@@ -24,7 +24,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -1878,7 +1878,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.55
+0.56
 
 =head1 SYNOPSIS
 

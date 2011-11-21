@@ -107,6 +107,7 @@ my $builder = $builderclass->new(
 				 'lib/Sys/CpuLoadX.o',
 				 'lib/Sys/CpuLoadX.xs',
                                  'contrib/ok/*.*', 'contrib/fail/*.*',
+                                 'pod2htm*.*',
 				 ],
 	create_makefile_pl  => 'passthrough',
         include_dirs => ['include'],

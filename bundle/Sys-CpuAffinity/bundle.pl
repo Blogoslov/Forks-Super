@@ -19,6 +19,8 @@ if ($^O =~ /solaris/i) {
   $TargetModuleMinVersion = '1.04';
 }
 
+$ENV{BUILD_EVEN_IF_AUTOMATED_TESTING} = 1;
+
 my $TargetModulePitch = qq[
 
 Sys::CpuAffinity is a module for manipulating the CPU affinities

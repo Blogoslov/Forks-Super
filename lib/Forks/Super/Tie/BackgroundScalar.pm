@@ -67,7 +67,7 @@ use overload
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 # "protocols" for serializing data and the methods used
 # to carry out the serialization

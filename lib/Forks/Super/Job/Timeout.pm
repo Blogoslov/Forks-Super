@@ -18,7 +18,7 @@ use warnings;
 use constant FOREVER => 9E9;
 use constant LONG_TIME => 9E8;
 
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;

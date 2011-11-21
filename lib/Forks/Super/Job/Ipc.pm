@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);

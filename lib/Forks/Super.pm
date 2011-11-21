@@ -48,7 +48,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -642,7 +642,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.55
+Version 0.56
 
 =head1 SYNOPSIS
 
