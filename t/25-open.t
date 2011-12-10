@@ -49,7 +49,8 @@ ok($pid == waitpid($pid,0), "job reaped");
 ######################################################
 
 my $fh_err;
-$cmd[4] = "-y=3";
+@cmd = ($^X, "t/external-command.pl",
+	   "-e=Hello", "-s=4", "-y=3", "-e=whirled");
 ($fh_in, $fh_out, $fh_err, $pid, $job) = Forks::Super::open3(@cmd);
 ok(defined($fh_in) && defined($fh_out) && defined($fh_err),
    "open3: child fh available");
@@ -95,7 +96,7 @@ ok($pid == waitpid($pid,0), "job reaped");
 
 #############################################################################
 
-SKIP: {
+# SKIP: {
 
 =begin XXXXXX workaround in v0.55
 
@@ -110,43 +111,45 @@ SKIP: {
 
 =cut
 
-    $cmd[3] = "-s=15";
-    ($fh_in, $fh_out, $fh_err, $pid, $job) 
-	= Forks::Super::open3(@cmd, {timeout => 10});
+@cmd = ($^X, "t/external-command.pl",
+	   "-e=Hello", "-s=17", "-y=3", "-e=whirled");
+($fh_in, $fh_out, $fh_err, $pid, $job) 
+    = Forks::Super::open3(@cmd, {timeout => 7});
 
-    Forks::Super::Debug::use_Carp_Always();
+Forks::Super::Debug::use_Carp_Always();
 
-    ok(defined($fh_in) && defined($fh_out) && defined($fh_err),    ### 22 ###
-       "open3: child fh available");
-    ok(defined($job), "open3: received job object");
-    ok($job->{state} eq 'ACTIVE', "open3: respects additional options");
-    sleep 1;
-    $msg = sprintf "%05x", rand() * 99999;
-    $z = print $fh_in "$msg\n";
-    Forks::Super::close_fh($pid,'stdin');
-    ok($z > 0, "open3: print to input handle ok = $z");
+ok(defined($fh_in) && defined($fh_out) && defined($fh_err),    ### 22 ###
+   "open3: child fh available");
+ok(defined($job), "open3: received job object");
+ok($job->{state} eq 'ACTIVE', "open3: respects additional options");
+sleep 1;
+$msg = sprintf "%05x", rand() * 99999;
+$z = print $fh_in "$msg\n";
+Forks::Super::close_fh($pid,'stdin');
+ok($z > 0, "open3: print to input handle ok = $z");
 
-    for (1..20) {
-	Forks::Super::Util::pause(1.0);
-	last if $job->is_complete;
-    }
-
-    @out = <$fh_out>;
-    Forks::Super::close_fh($pid, 'stdout');
-    @err = <$fh_err>;
-    Forks::Super::close_fh($pid, 'stderr');
-    if (!Forks::Super::Config::CONFIG('filehandles')) {
-	@err = grep { !/set_signal_pid/ } @err;
-    }
-
-    ok(@out == 1 && $out[0] =~ /^Hello/, 
-       "open3: time out  \@out='@out'" . scalar @out);
-    ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out")
-	or diag("error was @err\n");
-    waitpid $pid,0;
-    ok($job->{status} != 0, 
-       "open3: job timed out status $job->{status}!=0")  ### 28 ###
-	or diag("status was $job->{status}, expected ! 0");
+for (1..30) {
+    Forks::Super::Util::pause(1.0);
+    last if $job->is_complete;
 }
+
+@out = <$fh_out>;
+Forks::Super::close_fh($pid, 'stdout');
+@err = <$fh_err>;
+Forks::Super::close_fh($pid, 'stderr');
+if (!Forks::Super::Config::CONFIG('filehandles')) {
+    @err = grep { !/set_signal_pid/ } @err;
+}
+
+ok(@out == 1 && $out[0] =~ /^Hello/, 
+   "open3: time out  \@out='@out'" . scalar @out);   ### 26 ###
+ok(@err == 0 || $err[0] =~ /timeout/, "open3: job timed out")
+    or diag("error was @err\n");
+waitpid $pid,0;
+ok($job->{status} != 0, 
+   "open3: job timed out status $job->{status}!=0")  ### 28 ###
+    or diag("status was $job->{status}, expected ! 0");
+
+# }
 
 #############################################################################

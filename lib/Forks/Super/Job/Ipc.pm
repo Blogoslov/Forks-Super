@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -818,8 +818,7 @@ sub _choose_fh_filename {
 	$file =~ s!/!\\!g;
     }
 
-    push @IPC_FILES, $file;
-    $IPC_FILES{$file} = [ @debug_info ];
+    _register_ipc_file($file, [ @debug_info ]);
 
     if (!$IPC_DIR_DEDICATED && -f $file) {
 	carp 'Forks::Super::Job::_choose_fh_filename: ',
@@ -827,6 +826,14 @@ sub _choose_fh_filename {
 	debug("$file already exists ...") if $DEBUG;
     }
     return $file;
+}
+
+sub _register_ipc_file {
+    my ($file, $info) = @_;
+    push @IPC_FILES, $file;
+    if (defined $info) {
+	$IPC_FILES{$file} = $info;
+    }
 }
 
 #
@@ -934,8 +941,8 @@ and any other IPC litter.
 ____
             #';
             close $readme_fh;
-	    push @IPC_FILES, $readme;
-	    $IPC_FILES{$readme} = [ purpose => 'README' ];
+	    _register_ipc_file( $readme,
+				[ purpose => 'README' ] );
 	} else {
 	    carp 'Forks::Super::set_ipc_dir: ',
 	        "Cannot create annotation file $readme: $!\n"; 
@@ -2543,7 +2550,7 @@ sub Forks::Super::Job::write_stdin {
 sub _read_socket {
     my ($sh, $job, $wantarray, %options) = @_;
 
-    return if !__sanitize_readline_inputs($sh, $job, $wantarray, %options);
+    return if !__sanitize_read_inputs($sh, $job, $wantarray, %options);
 
     my $zz = eval { $sh->opened };
     if ($@) {
@@ -2558,8 +2565,7 @@ sub _read_socket {
 
     # is socket is blocking, then we need to test whether
     # there is input to be read before we read on the socket
-    my ($expire, $blocking_desired) 
-	= __extract_readline_options($sh, \%options);
+    my ($expire, $blocking_desired) = __extract_read_options($sh, \%options);
 
     while ($sh->blocking() || &IS_WIN32 || $blocking_desired) {
 	my $fileno = fileno($sh);
@@ -2590,6 +2596,7 @@ sub _read_socket {
 		      "[shouldn't reach this block]");
 	    }
 	    if ($nfound == -1) {
+		next if $!{EINTR}; # interrupted system call -- this is usually ok.
 		warn "Forks::Super:_read_socket: Error in select4(): $! $^E.\n";
 	    }
 	    last;
@@ -2658,31 +2665,31 @@ sub _read_pipe {
     my ($rin,$rout);
     $rin = '';
     vec($rin, $fileno, 1) = 1;
-    my $timeout = __get_option(
-	'timeout', $Forks::Super::SOCKET_READ_TIMEOUT || 1.0, %options);
 
-    local $! = undef;
-    my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+  SELECT4: {
+        my $timeout = __get_option(
+	    'timeout', $Forks::Super::SOCKET_READ_TIMEOUT || 1.0, %options);
+    
+	local $! = undef;
+	my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
 
-    if ($nfound == 0) {
-	if ($DEBUG) {
-	    debug("no input found on $sh/$fileno");
+	if ($nfound == 0) {
+	    if ($DEBUG) {
+		debug("no input found on $sh/$fileno");
+	    }
+	    return;
 	}
-	return;
-    }
-    if ($nfound < 0) {
-	# warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
-	return; # return ''?
-    }
+	if ($nfound < 0) {
+	    redo SELECT4  if $!{EINTR}; 
+	    warn "Forks::Super::_read_pipe: error in select4(): $! $^E\n";
+	    return; # return ''?
+	}
 
-    # perldoc select: warns against mixing select4
-    # (unbuffered input) with readline (buffered input).
-    # Do I have to do my own buffering? Don't look.
-
-    if ($wantarray) {
-	return _emulate_readline_array($sh, $nfound, $rin);
-    } else {
-	return _emulate_readline_scalar($sh, $nfound, $rin);
+	if ($wantarray) {
+	    return _emulate_readline_array($sh, $nfound, $rin);
+	} else {
+	    return _emulate_readline_scalar($sh, $nfound, $rin);
+	}
     }
 }
 
@@ -2739,6 +2746,178 @@ sub Forks::Super::Job::read_stderr {
     return _readline($job->{child_stderr}, $job, wantarray, %options);
 }
 
+sub Forks::Super::Job::getc_stdout {
+    my ($job, %options) = @_;
+    Forks::Super::Job::_resolve($job);
+    return _getc($job->{child_stdout}, $job, %options);
+}
+
+sub Forks::Super::Job::getc_stderr {
+    my ($job, %options) = @_;
+    Forks::Super::Job::_resolve($job);
+    return _getc($job->{child_stderr}, $job, %options);
+}
+
+sub _getc {
+    my ($fh, $job, %options) = @_;
+    return if !__sanitize_read_inputs($fh, $job, 0, %options);
+
+    if ($$fh->{is_socket}) {
+	return _getc_socket($fh, $job, %options);
+    } elsif ($$fh->{is_pipe}) {
+	return _getc_pipe($fh, $job, %options);
+    }
+
+    my ($expire, $blocking_desired) = __extract_read_options($fh, \%options);
+    GETC: {
+	local $! = undef;
+	my $c = getc($fh);
+	if (defined $c) {
+	    return $c;
+	}
+
+	last if _check_if_job_is_complete_and_close_io($job, $fh);
+	seek $fh, 0, 1;
+	if ($blocking_desired) {
+	    if ($expire > 0 && Time::HiRes::time() >= $expire) {
+		$blocking_desired = 0;
+	    } else {
+		Forks::Super::Util::pause(
+		    $Forks::Super::Util::DEFAULT_PAUSE_IO);
+	    }
+	}
+	if (!$blocking_desired) {
+	    if ($job->{is_child}) {
+		return;
+	    } else {
+		return '';
+	    }
+	}
+	redo GETC;
+    }
+}
+
+sub _getc_socket {
+    my ($sh, $job, %options) = @_;
+
+    local $Devel::DumpTrace::TRACE = 1;
+
+    return if !__sanitize_read_inputs($sh, $job, 0, %options);
+    my $zz = eval { $sh->opened };
+    if ($@) {
+	carp 'Forks::Super::_getc_socket: read on unopened, unopenable ',
+	    "socket $sh, ref=", ref($sh), ", error=$@\n";
+	return;
+    } elsif (!$zz) {
+	carp "Forks::Super::_getc_socket: read on unopened socket $sh ",
+	    $job->toString(), "\n";
+	return;
+    }
+
+    my ($expire, $blocking_desired) = __extract_read_options($sh, \%options);
+    while ($sh->blocking() || &IS_WIN32 || $blocking_desired) {
+	my $fileno = fileno($sh);
+	if (not defined $fileno) {
+	    $fileno = Forks::Super::Job::Ipc::fileno($sh);
+	    Carp::cluck "Cannot determine FILENO for socket handle $sh!";
+	}
+
+	my ($rin,$rout);
+	my $timeout = $Forks::Super::SOCKET_READ_TIMEOUT || 1.0;
+	($timeout, $blocking_desired)
+	    = __get_select_timeout($timeout, $expire, $blocking_desired);
+
+	$rin = '';
+	vec($rin, $fileno, 1) = 1;
+
+	# perldoc select: warns against mixing select4
+	# (unbuffered input) with readline (buffered input).
+	# Do I have to do my own buffering? That would be weak.
+	# Or are sockets already unbuffered?
+
+	local $! = undef;
+	my ($nfound,$timeleft) = select $rout=$rin, undef, undef, $timeout;
+
+	if ($nfound) {
+	    if ($rin ne $rout && $DEBUG) {
+		debug("No input found on $sh/$fileno ",
+		      "[shouldn't reach this block]");
+	    }
+	    if ($nfound == -1) {
+		warn "Forks::Super:_read_socket: Error in select4(): $! $^E.\n";
+	    }
+	    last;
+	}
+	if ($DEBUG) {
+	    debug("no input found on $sh/$fileno");
+	}
+	return if ! $blocking_desired;
+    }
+
+    # prefer recv/sysread to getc, as the latter is susceptible to
+    # buffering compatibility problems with 4-arg select.
+    if (ref($sh) eq 'Forks::Super::Tie::IPCSocketHandle::Delegator') {
+	$sh = $$sh->{DELEGATE};
+    }
+    my ($n,$c);
+    $n = recv $sh, $c, 1, 0;
+    return $c;
+}
+
+sub _getc_pipe {
+    my ($sh, $job, %options) = @_;
+
+    if (!defined $sh) {
+	if (!defined($options{'warn'}) || $options{'warn'}) {
+	    carp 'Forks::Super::_getc_pipe: ',
+	        'read on undefined handle for ',$job->toString(),"\n";
+	}
+	return;
+    }
+
+    if (defined $$sh->{std_delegate}) {
+	$sh = $$sh->{std_delegate};
+    }
+
+    my $blocking_desired = __get_option(
+	'block', $$sh->{emulate_blocking} || 0, %options);
+
+    # pipes are blocking by default.
+    if ($blocking_desired) {
+	# XXX - prefer  sysread  to  getc  here?
+	return getc($sh);
+    }
+
+    my $fileno = fileno($sh);
+    if (! defined $fileno) {
+	$fileno = Forks::Super::Job::Ipc::fileno($sh);
+	Carp::cluck "Cannot determine FILENO for pipe $sh!";
+    }
+
+    my ($rin,$rout);
+    $rin = '';
+    vec($rin, $fileno, 1) = 1;
+    my $timeout = __get_option(
+	'timeout', $Forks::Super::SOCKET_READ_TIMEOUT || 1.0, %options);
+
+    local $! = undef;
+    my ($nfound, $timeleft) = select $rout=$rin, undef, undef, $timeout;
+
+    if ($nfound == 0) {
+	if ($DEBUG) {
+	    debug("no input found on $sh/$fileno");
+	}
+	return;
+    }
+    if ($nfound < 0) {
+	# warn "Forks::Super::_getc_pipe: error in select4(): $! $^E\n";
+	return; # return ''?
+    }
+
+    # XXX - prefer  sysread  to  getc  here ?
+    return getc($sh);
+}
+
 #
 # called from the parent process,
 # attempts to read a line from standard output filehandle
@@ -2757,7 +2936,7 @@ sub Forks::Super::Job::read_stderr {
 sub _readline {
     my ($fh,$job,$wantarray,%options) = @_;
 
-    return if !__sanitize_readline_inputs($fh,$job,$wantarray,%options);
+    return if !__sanitize_read_inputs($fh, $job, $wantarray, %options);
 
     if ($$fh->{is_socket}) {
 	return _read_socket($fh,$job,$wantarray,%options);
@@ -2766,8 +2945,7 @@ sub _readline {
     }
 
     # WARNING: blocking read on a filehandle can lead to deadlock
-    my ($expire, $blocking_desired) 
-	= __extract_readline_options($fh, \%options);
+    my ($expire, $blocking_desired) = __extract_read_options($fh, \%options);
 
     local $! = undef;
     if ($wantarray) {
@@ -2777,7 +2955,7 @@ sub _readline {
     }
 }
 
-sub __sanitize_readline_inputs {
+sub __sanitize_read_inputs {
     my ($fh, $job, $wantarray, %options) = @_;
     if (!defined $fh) {
 	if ($job->{debug} && (!defined($options{'warn'}) || $options{'warn'})) {
@@ -2808,7 +2986,7 @@ sub __sanitize_readline_inputs {
     return 1;
 }
 
-sub __extract_readline_options {
+sub __extract_read_options {
     my ($fh, $options) = @_;
     my ($expire, $blocking_desired) = (0, $$fh->{emulate_blocking});
     if (defined $options->{block}) {

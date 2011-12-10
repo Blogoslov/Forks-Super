@@ -74,24 +74,24 @@ $pid = fork {
     child_fh => "out,err,pipe",
     sub => sub {
 	print STDERR "foo\n";
-	sleep 5;
+	sleep 8;
 	print STDOUT "bar\n";
 	sleep 5;
 	print STDOUT "baz\n";
     }
 };
-my $x = $pid->read_stderr(timeout => 1);
+my $x = $pid->read_stderr(timeout => 3);
 okl($x, "read avail stderr with timeout");          ### 15 ###
-$x = $pid->read_stdout(timeout => 2);
+$x = $pid->read_stdout(timeout => 1);
 ok(!$x, "read unavail stdout with timeout");
-$x = $pid->read_stdout(timeout => 5);
+$x = $pid->read_stdout(timeout => 8);
 ok($x, "read avail stdout with timeout");
 $x = $pid->read_stdout(timeout => 1);
 ok(!$x, "read unavail stdout with timeout");
 $x = $pid->read_stdout(block => 1);
 ok($x, "read stdout with block");
 $x = $pid->read_stderr();
-okl(!$x, "read unavail stderr")
+okl(!$x, "read unavail stderr")                     ### 20 ###
     or diag("got '$x', expected nothing");
 
 # waitall;

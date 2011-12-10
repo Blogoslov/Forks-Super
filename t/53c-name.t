@@ -7,7 +7,7 @@ use warnings;
 # Job::get, Job::getByName, and waitpid
 
 my ($pid,$pid1,$pid2,$pid3,$j1,$j2,$j3,$p,$q,$t,@j,$p1,$p2,$p3);
-our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
+our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 1.0E-6;
 
 $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";
@@ -28,5 +28,7 @@ ok($j3->{start} + $TOL >= $j1->{start}
 	"resepected depend_start by name");
 ok($j2->{start} + $TOL >= $j1->{start} + 1.5,
    "respected depend_start+delay");
-ok($j3->{start} + $TOL >= $j2->{end},
-   "resepected depend_on with depend_start");
+ok($j3->{start} + $TOL >= $j2->{end},                    ### 4 ###
+   "resepected depend_on with depend_start")
+    or diag("Expected $j3->{start}/", $j3->{start}-$^T,
+	    ' >= ', $j2->{end}-$^T, "/$j2->{end}");

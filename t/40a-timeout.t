@@ -15,7 +15,7 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-SKIP: {
+#SKIP: {
 
 =begin XXXXXX workaround in v0.55
 
@@ -40,7 +40,7 @@ my $p = wait;
 $t = Time::HiRes::time() - $t;
 ok($p == $pid, "$$\\wait successful");
 ok($? != 0, "job expired with non-zero exit STATUS");
-okl($t < 8.0, "Timed out in ${t}s, expected ~3s"); ### 3 ### was 5.1 obs 5.98
+ok($t < 10.0, "Timed out in ${t}s, expected ~3s"); ### 3 ### was 5.1 obs 5.98
                                                    ### obs 7.79
 
-} # end SKIP
+#} # end SKIP

@@ -38,7 +38,7 @@ $| = 1;
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
-			bg_eval bg_qx open2 open3);
+			getc_stdout getc_stderr bg_eval bg_qx open2 open3);
 my @export_ok_vars = qw(%CHILD_STDOUT %CHILD_STDERR %CHILD_STDIN);
 our @EXPORT_OK = (@export_ok_func, @export_ok_vars);
 our %EXPORT_TAGS =
@@ -48,7 +48,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -370,6 +370,14 @@ sub read_stderr {
     return Forks::Super::Job::read_stderr(@_);
 }
 
+sub getc_stdout {
+    return Forks::Super::Job::getc_stdout(@_);
+}
+
+sub getc_stderr {
+    return Forks::Super::Job::getc_stderr(@_);
+}
+
 sub close_fh {
     return Forks::Super::Job::close_fh(@_);
 }
@@ -642,7 +650,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.56
+Version 0.57
 
 =head1 SYNOPSIS
 
@@ -1789,6 +1797,74 @@ need to pass an C<< untaint => 1 >> option to the C<fork> call.
 
 =back
 
+=head3 sync
+
+=over 4
+
+=item C<< fork { sync => $n } >>
+
+=item C<< fork { sync => 'string' } >>
+
+=item C<< fork { sync => \@list } >>
+
+Creates one or more synchronization objects that will be accessible
+to both the parent and child processes. 
+
+The argument to the C<sync> option is either a number,
+a string consisting of C<'C'>, C<'P'>, and C<'N'> characters,
+or a list reference consisting of C<'C'>, C<'P'>, and C<'N'> elements.
+For a string or list reference input, the number of synchronization 
+objects created will be the length of the string or length of the list.
+The values 'C', 'P', and 'N' determine which process initially has
+exclusive access to each synchronization object after the fork.
+C<'C'> means that the child process should begin with exclusive access
+to the resource, C<'P'> means that the parent process should begin with
+exclusive access to the resource, and C<'N'> means that neither process
+should have access to the resource after the fork.
+
+Both of these calls create 3 synchronization objects to be shared 
+between a parent and child process. The first resource is initially
+held by the parent, the second resource is initially held by the
+child, and the third resource is not held by either process:
+
+    $pid = fork { sync => 'PCN' };
+    $pid = fork { sync => ['P','C','N'] };
+
+Using the C<sync> option with a numeric value will create that number
+of synchornization objects, with none of the objects initially held by
+either the parent or child process. That is, these three uses of the
+C<sync> option are equivalent:
+
+    $pid = fork { sync => 2 };
+    $pid = fork { sync => 'NN' };
+    $pid = fork { sync => ['N','N'] };
+
+After the fork, the parent and child processes can acquire
+and release exclusive access to these objects with the
+L<acquire|Forks::Super::Job/"acquire"> and
+L<release|Forks::Super::Job/"release"> methods of the
+L<Forks::Super::Job> object.
+
+Synchronization objects are useful for coordinating activity 
+between a parent and child processes. You could use a synchronization
+object to coordinate appending to a common file, for example.
+
+    # in parent:
+    $job->acquire(0);
+    open my $fh, '>>', $common_file;
+    print $fh $some_message_from_parent;
+    close $fh;
+    $job->release(0);
+
+    # in child:
+    Forks::Super->acquire(0);
+    open my $fh, '>>', $common_file;
+    print $fh $some_message_from_child;
+    close $fh;
+    Forks::Super->release(0);
+
+=back
+
 =head3 os_priority
 
 =over 4
@@ -2219,6 +2295,22 @@ On an otherwise non-blocking filehandle, waits up to the
 specified number of seconds for input to become available.
 
 =back
+
+=back
+
+=head3 getc_stdout
+
+=head3 getc_stderr
+
+=over 4
+
+=item C<< $char = $job->getc_stdout( [%options] ) >>
+
+=item C<< $char = $job->getc_stderr( [%options] ) >>
+
+Retrieves a single character from a child process output stream,
+if available. Supports the same C<block>, C<timeout>, and
+C<warn> options as the L<"read_stdout"> and L<"read_stderr"> functions.
 
 =back
 

@@ -805,7 +805,7 @@ forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.56
+0.57
 
 =head1 SYNOPSIS
 

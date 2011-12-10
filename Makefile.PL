@@ -28,7 +28,7 @@ our $FILES_TO_CLEAN
     = join " ", qw(Forks-Super-* system-limits system-limits.lock
 		   lib/Forks/Super/SysInfo.pm t/out/spawn*
 		   t/out/sigchld.debug t/out/test* t/out/.lock-*
-		   t/out/48b.* t/out/debug1-* t/out/limits.*
+		   t/out/48b.* t/out/debug1-* t/out/limits.* t/poorsort.pl
 		   t/out/ipc* t/out/new-ipc* t/out/66* t/dir* t/out/24*
                    t/out/daemon* lib/_Inline *.stackdump);
 

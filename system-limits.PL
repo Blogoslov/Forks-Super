@@ -5,7 +5,8 @@
 # number of simultaneous child processes and the maximum number
 # of open filehandles.
 #
-# this information is used in t/32-stress-test.t
+# this information is used in t/32-stress-test.t and to create
+# the  Forks/Super/SysInfo.pm  file
 #
 ###############################################################
 #
@@ -110,6 +111,7 @@ $LIMITS{version} = $];
 &find_socket_capacity;
 &find_pipe_capacity;            # on some systems:  512 * ulimit -p
 &wait_waitpid_results;
+&explore_sync_options;
 
 &find_max_fork(300);  # run last because it might crash the program
 print "Created system limitations file in: $limits_file\n";
@@ -145,19 +147,24 @@ sub get_Time_HiRes_tolerance {
     #
     # Even on Windows 7/Cygwin, it can be 0.0005s
     #
+    # www.cpantesters.org/cpan/report/df00514e-153d-11e1-b03e-8398e1de4735:
+    # this value is 0.89s ?!?!?!
+    #
 
     # Ideally, this subroutine is run on a lightly loaded system.
 
     unless (eval { use Time::HiRes (); 1 }) {
-	write_limits(TimeHiRes_tol => 0.0);
+	write_limits(TimeHiRes_tol => '0E0');
     }
-    my ($max,$t,$u) = (0, Time::HiRes::time());
-    my $v = $t + 10;
+    my ($max,$t,$u,$diff) = (0, Time::HiRes::time());
+    my $v = $t + 15;
     while ($t < $v) {
 	($u,$t) = ($t,Time::HiRes::time());
-	if ($u-$t > $max) {
-	    $max = $u-$t;
-	}
+	$diff = $u-$t;
+	$max=$diff if $max<$diff;
+    }
+    if ($max > 0) {
+	print STDERR "Observed time on this system skipping backwards by ${max}s.\n";
     }
     write_limits(TimeHiRes_tol => $max * 1.1);
 }
@@ -326,6 +333,66 @@ sub wait_waitpid_results {
     }
 
     write_limits( %info );
+}
+
+#
+# what options are available to this system for interprocess synchronization?
+#
+sub explore_sync_options {
+    my @sync = ();
+
+    if ($^O eq 'MSWin32' || $^O =~ /cygwin/i) {
+	if (eval { require Win32::Semaphore; 1 }) {
+	    print STDERR "Win32 semaphores are available for ",
+	    	"ipc synchronization\n";
+	    push @sync, "Win32";
+	}
+
+	if (eval { require Win32::Mutex; 1 }) {
+	    print STDERR "Win32 mutexes are available for ",
+	    	"ipc synchronization\n";
+	    push @sync, "Win32Mutex";
+	}
+    }
+
+    if (eval { 
+	# exercise IPC::Semaphore
+	require IPC::Sempahore;
+	require IPC::SysC;
+	IPC::SysV->import(qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_NOWAIT));
+	my $sem = IPC::Semaphore->new(&IPC_PRIVATE, 2,
+				      &S_IRUSR | &S_IWUSR | &IPC_CREAT);
+	$sem->setall(1,0);
+	$sem->setval(1,1);
+	$sem->remove;
+	1
+	} ) {
+	print STDERR "SysV semaphores are available for ipc synchornization\n";
+	push @sync, "IPCSemaphore";
+    }
+        
+    # advisory file locking ? I expect this to work almost everywhere
+    my $file = "foo.$$";
+    if (fork() == 0) {
+	open my $fh, ">>", $file;
+	flock $fh, 2;
+	sleep 5;
+	close $fh;
+	exit;
+    }
+    sleep 2;
+    open my $fh, '>>', $file;
+    my $t = time;
+    eval { flock $fh, 2 };
+    $t = time - $t;
+    close $fh;
+    if ($t > 1) {
+	print STDERR "advisory filelocking available for ipc synchornization\n";
+	push @sync, "Semaphlock";
+    }
+    unlink $file;
+
+    write_limits( sync_options => join('/', @sync) );
 }
 
 #

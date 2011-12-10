@@ -10,6 +10,8 @@ use strict;
 use warnings;
 
 my $limits_file = "t/out/limits.$^O.$]";
+print STDERR "Creating  Forks/Super/SysInfo.pm  file\n";
+
 
 if (! -r $limits_file) {
     print STDERR "$0: creating system-limits file.\n";
@@ -36,7 +38,7 @@ use warnings;
 
 ## no critic (ProhibitMagicNumbers)
 
-our \$VERSION = '0.56';
+our \$VERSION = '0.57';
 
 ____;
 
@@ -63,6 +65,12 @@ printF('IGNORE_WAITPID_STATUS', $info{ignore_waitpid_status}, '-1');
 if (defined $info{ncpu}) {
     printF('NUM_PROCESSORS', $info{ncpu}, '1');
 }
+
+my $sync = $info{sync_options};
+$sync =~ s{/}{ }g;
+print F "\n";
+print F "our \@SYNC_IMPLS = qw($sync);\n";
+
 
 # See what core and core module functionality is available
 # on this system.

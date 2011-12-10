@@ -1,4 +1,4 @@
-use Forks::Super ':test_CA';
+use Forks::Super ':test';
 use Test::More tests => 26;
 use strict;
 use warnings;

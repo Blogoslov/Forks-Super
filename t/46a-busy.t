@@ -3,8 +3,6 @@ use Test::More tests => 10;
 use strict;
 use warnings;
 
-$Devel::Trace::TRACE=0;
-
 #
 # test that jobs don't launch when the system is
 # "too busy" (which so far means that there are
@@ -79,7 +77,6 @@ my $pid = fork { sub =>
 	  }
 	} };
 
-$Devel::Trace::TRACE=1;
 $Forks::Super::MAX_LOAD = 0.001;
 sleep 1;
 SKIP: {

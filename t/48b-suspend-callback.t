@@ -5,8 +5,12 @@ use strict;
 use warnings;
 no warnings 'once';
 
-# v0.55 - think I fixed the race condition that could make
-#         this test hang/timeout
+# This test has an intermittent race condition in which the child
+# can get and stay suspended, causing the test to hang or time out.
+# That is more a feature of this test than of the Forks::Super module,
+# so if that happens, run the test again.
+
+
 
 my $file = "t/out/48b.$$.out";
 $Forks::Super::Util::DEFAULT_PAUSE = 0.5;

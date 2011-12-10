@@ -4,7 +4,7 @@ use Carp;
 use strict;
 use warnings;
 
-our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0;
+our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 1.0E-6;
 
 #
 # test that jobs respect their dependencies.
@@ -33,8 +33,10 @@ my $j3 = Forks::Super::Job::get($pid3);
 ok($j1->{state} eq "ACTIVE", "first job active");
 ok($j2->{state} eq "DEFERRED", "second job deferred");
 waitall;
-ok($j1->{end} <= $j2->{start} + $TOL, "job 2 did not start before job 1 ended")
-  or diag("j1 end $j1->{end} > $j2->{start} j2 start");
-ok($j3->{start} < $j2->{start} + $TOL, "job 3 started before job 2")
+ok($j1->{end} <= $j2->{start} + $TOL,                                ### 4 ###
+   "job 2 did not start before job 1 ended")
+  or diag("j1 end $j1->{end} > $j2->{start} j2 start; ",
+	  $j1->{end}-$^T, ' > ', $j2->{start}-$^T);
+ok($j3->{start} < $j2->{start} + $TOL, "job 3 started before job 2") ### 5 ###
   or diag("j3 start $j3->{start} > $j2->{start} j2 start");
 

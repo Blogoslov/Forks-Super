@@ -42,7 +42,13 @@ print STDERR "Using tied IPC filehandles: ",
 	" $Forks::Super::Job::Ipc::USE_TIE_FH",
 	" $Forks::Super::Job::Ipc::USE_TIE_SH",
 	" $Forks::Super::Job::Ipc::USE_TIE_PH\n";
+
+print STDERR "Max fork: $Forks::Super::SysInfo::MAX_FORK\n";
+
 print STDERR "Time_HiRes_TOL: $Forks::Super::SysInfo::TIME_HIRES_TOL\n";
+if ($Forks::Super::SysInfo::TIME_HIRES_TOL >= 0.5) {
+    print STDERR "     are you serious?\n";
+}
 
 print STDERR "\n";
 

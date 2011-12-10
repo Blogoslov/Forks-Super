@@ -24,7 +24,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -466,14 +466,14 @@ sub launch {
 
 
     my $pid = _robust_fork($job);
-
-
-
-
     if (!defined $pid) {
 	debug('launch(): CORE::fork() returned undefined!')
 	    if $job->{debug};
 	return;
+    }
+
+    if ($job->{_sync}) {
+	$job->{_sync}->releaseAfterFork($pid || $$);
     }
 
 
@@ -1277,6 +1277,30 @@ sub _preconfig2 {
 	    debug('Job will use ', $job->{signal_ipc}, ' to get signal pid.');
 	}
     }
+    if ($job->{sync}) {
+	require Forks::Super::Sync;
+	my ($count, @initial);
+	if (ref $job->{sync} eq 'ARRAY') {
+	    $count = @initial = @{$job->{sync}};
+	} elsif ($job->{sync} !~ /\D/) {
+	    $count = $job->{sync};
+	    @initial = ('N') x $count;
+	} else {
+	    $count = @initial = split //, $job->{sync};
+	}
+
+	if ($job->{sync_impl}) {
+	    $job->{_sync} = Forks::Super::Sync->new( 
+	        implementation => $job->{sync_impl},
+		count => $count,
+		initial => \@initial );
+	} else {
+	    $job->{_sync} = Forks::Super::Sync->new( 
+#	    implementation => 'Semaphlock',
+		count => $count,
+		initial => \@initial );
+	}
+    }
     return;
 }
 
@@ -1560,6 +1584,29 @@ END {
 	}
 	Forks::Super::Job::Timeout::_cleanup_child();
     }
+}
+
+sub acquire {
+    my ($job, $n, $timeout) = @_;
+    $job = &this if $job eq __PACKAGE__;
+    if ($job->{_sync}) {
+	return $job->{_sync}->acquire($n, $timeout);
+    }
+    return;
+}
+
+sub release {
+    my ($job, $n) = @_;
+    $job = &this if $job eq __PACKAGE__;
+    if ($job->{_sync}) {
+	return $job->{_sync}->release($n);
+    }
+    return;
+}
+
+sub acquireAndRelease {
+    my ($job, $n, $timeout) = @_;
+    return $job->acquire($n,$timeout) && $job->release($n);
 }
 
 #############################################################################
@@ -1878,7 +1925,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.56
+0.57
 
 =head1 SYNOPSIS
 
@@ -2317,8 +2364,24 @@ and C<""> (empty string) if there is no input available on
 an active process.
 
 Reading from a closed handle, or calling these methods on a
-process that has not been configured for IPC will result in
-a warning.
+process that has not been configured for interprocess
+communication will result in a warning.
+
+=back
+
+=head3 getc_stdout
+
+=head3 getc_stderr
+
+=over 4
+
+=item C<< $char = $job->getc_stdout() >>
+
+=item C<< $char = $job->getc_stderr() >>
+
+Attempts to read a single character from a child process's standard
+output or standard error stream. See also L<"read_stdout"> and
+L<"read_stderr">.
 
 =back
 
@@ -2402,6 +2465,82 @@ not completed.
 =item C<< $job->toShortString() >>
 
 Outputs a string description of the important features of the job.
+
+=back
+
+=head3 acquire
+
+=over 4
+
+=item C<< $success = $job->acquire($n) >>
+
+=item C<< $success = $job->acquire($n, $timeout) >>
+
+=item C<< $success = Forks::Super::Job->acquire($n) >>
+
+=item C<< $success = Forks::Super::Job->acquire($n, $timeout) >>
+
+Attempts to obtain access to a synchronization resource, for jobs
+that were launched with the C<< L<"sync"|Forks::Super/"sync"> >> 
+option. On success, including the case where the process is already
+in possession of the specified resource, this method returns true.
+It returns false if the resource cannot be acquired.
+
+C<$n> must be nonnegative and less than the number of synchronization
+objects created in the original C<< fork { sync => ... } >> call. 
+If a C<$timeout> argument is included, the method will return false
+if the synchronization resource cannot be obtained in the specified
+number of seconds. If the C<$timeout> is not specified, the method
+will block until the resource can be acquried.
+
+The instance method syntax (C<< $job->acquire(...) >>)
+is for use by a parent process, coordinating with the child process
+(represented by C<< $job >>). The package indirect syntax
+(C<< Forks::Super::Job->acquire(...) >>) is for use by the child process.
+
+The C<acquire> and L<"release"> interface is portable, though
+the underlying synchronization implementation may be very different
+on different platforms.
+
+=back
+
+=head3 release
+
+=over 4
+
+=item C<< $success = $job->release($n) >>
+
+=item C<< $success = Forks::Super::Job->release($n) >>
+
+Releases a synchronization object, allowing another process
+to acquire it (see L<"acquire">).
+Returns true on success, false on failure (for example,
+if the calling process did not already possess the specified resource).
+
+Parent processes should use the instance method syntax
+(C<< $job->release(...) >>) with the job object for the child process
+it is trying to coordinate with. The package indirect syntax
+(C<< Forks::Super::Job->release(...) >>) is for use by the child process.
+
+=back
+
+=head3 acquireAndRelease
+
+=over 4
+
+=item C<< $success = $job->acquireAndRelease($n) >>
+
+=item C<< $success = $job->acquireAndRelease($n, $timeout) >>
+
+=item C<< $success = Forks::Super::Job->acquireAndRelease($n) >>
+
+=item C<< $success = Forks::Super::Job->acquireAndRelease($n, $timeout) >>
+
+Roughly equivalent to
+
+    $success = $job->acquire($n) && $job->release($n)
+
+although it may be performed atomically, depending on the implementation.
 
 =back
 

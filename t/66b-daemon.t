@@ -1,4 +1,3 @@
-BEGIN { $Devel::Trace::TRACE = 0 };
 use Forks::Super ':test';
 use Test::More tests => 10;
 use strict;
@@ -33,27 +32,45 @@ my $base_priority = get_os_priority($pid);
 my $np = Forks::Super::Config::CONFIG_module("Sys::CpuAffinity")
     ? Sys::CpuAffinity::getNumCpus() : 0;
 
-print "base priority is $base_priority ...\n";
-
 my $daemon = fork {
-    sub => sub { sleep 5 },
+    sub => sub { sleep 10 },
     daemon => 1,
     os_priority => $base_priority + 1,
     cpu_affinity => $np > 1 ? 2 : 1
 };
-sleep 2; # give FS time to update priority
-my $new_priority = get_os_priority($daemon);
+
+# it may take a second or three after the background process is launched
+# for F::S to update its priority and CPU affinity
+
+my ($new_priority, $affinity);
+for (1..6) {
+
+    $new_priority = get_os_priority($daemon);
+    if ($np > 1 && Forks::Super::Config::CONFIG('Sys::CpuAffinity')) {
+	$affinity = Sys::CpuAffinity::getAffinity($daemon);
+	last if $new_priority != $base_priority && $affinity == 2;
+    } else {
+	last if $new_priority != $base_priority;
+    }
+    sleep 1;
+}
+
 ok($new_priority == $base_priority + 1,
-   "set os priority on daemon process");
+   "set os priority on daemon process")
+    or diag("failed to update priority $base_priority => $new_priority");
 
 SKIP: {
     if ($np <= 1) {
 	skip "one processor, can't test set CPU affinity", 1;
     }
-    sleep 2; # give FS a couple seconds to update CPU affinity
-    my $affinity = Sys::CpuAffinity::getAffinity($daemon);
-    ok($affinity == 2, "set CPU affinity on daemon process");
+    if (!Forks::Super::Config::CONFIG('Sys::CpuAffinity')) {
+	skip 'Sys::CpuAffinity not avail. Skip CPU affinity test', 1;
+    }
+    ok($affinity == 2, "set CPU affinity on daemon process")
+	or diag("affinity of $daemon was $affinity, expected 2; ",
+	        "Sys::CpuAffinity v. $Sys::CpuAffinity::VERSION");
 }
+$daemon->kill('KILL');
 
 
 my $t = Time::HiRes::time();
@@ -81,7 +98,6 @@ my $n1 = fork {
 };
 sleep 1;
 
-$Devel::Trace::TRACE = 0;
 my $d2 = fork {
     daemon => 1,
     name => 'daemon2',
@@ -91,14 +107,13 @@ my $d2 = fork {
     debug => 0,
 };
 
-$Devel::Trace::TRACE = 0;
-
 ok($d2->{state} eq 'DEFERRED', '2nd daemon is deferred');
 Forks::Super::Util::pause(6);
 
 ok($d1 && $d2, "daemon procs launched") or diag("d1=$d1, d2=$d2");
 ok($d1->{start} > $t + 2, "daemon1 launch was delayed");
-ok($d2->{start} >= $n1->{end}, "daemon2 launch waited for daemon1");
+ok($d2->{start} >= $n1->{end}, "daemon2 launch waited for daemon1")  ### 10 ###
+    or diag("expected d2 start $d2->{start} >= $n1->{end} d1 monitor end");
 
 
 #############################################################################

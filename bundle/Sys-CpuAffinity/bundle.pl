@@ -17,9 +17,9 @@ if ($^O =~ /solaris/i) {
   $TargetModuleMinVersion = '1.01';
 } elsif ($^O =~ /linux/i) {
   $TargetModuleMinVersion = '1.04';
+} elsif ($^O =~ /freebsd/i) {
+  $TargetModuleMinVersion = '1.05';
 }
-
-$ENV{BUILD_EVEN_IF_AUTOMATED_TESTING} = 1;
 
 my $TargetModulePitch = qq[
 
@@ -82,6 +82,8 @@ sub run_auto_generated_Makefile_PL {
     Module::Build::Compat->write_makefile(build_class => $buildClass);
 
 }
+
+$ENV{BUILD_EVEN_IF_AUTOMATED_TESTING} = 1;
 
 do '../conditionally-install-submodule.pl';
 

@@ -10,6 +10,11 @@ lib/Forks/Super/Job/OS/Cygwin.pm
 lib/Forks/Super/Job/OS/Win32.pm
 lib/Forks/Super/Job/Timeout.pm
 lib/Forks/Super/LazyEval.pm
+lib/Forks/Super/Sync.pm
+lib/Forks/Super/Sync/IPCSemaphore.pm
+lib/Forks/Super/Sync/Semaphlock.pm
+lib/Forks/Super/Sync/Win32.pm
+lib/Forks/Super/Sync/Win32Mutex.pm
 lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
 lib/Forks/Super/Tie/IPCDupSTDIN.pm
@@ -40,6 +45,7 @@ t/03b-queue-func.t
 t/04-ipc-dir.t
 t/05-util.t
 t/06-job.t
+t/07-sync.t
 t/09-show-config.t
 t/10-to-natural.t
 t/11-to-command.t
@@ -92,6 +98,7 @@ t/42f-filehandles.t
 t/42g-filehandles.t
 t/42h-filehandles.t
 t/42i-filehandles.t
+t/42j-filehandles.t
 t/42l-filehandles.t
 t/43a-sockethandles.t
 t/43b-sockethandles.t
@@ -101,6 +108,7 @@ t/43e-sockethandles.t
 t/43f-sockethandles.t
 t/43g-sockethandles.t
 t/43h-sockethandles.t
+t/43j-sockethandles.t
 t/43l-sockethandles.t
 t/44a-pipes.t
 t/44b-pipes.t
@@ -109,6 +117,7 @@ t/44d-pipes.t
 t/44f-pipes.t
 t/44g-pipes.t
 t/44h-pipes.t
+t/44j-pipes.t
 t/44l-pipes.t
 t/45-no-filehandles.t
 t/46a-busy.t
@@ -130,6 +139,7 @@ t/54-reuse.t
 t/55-dispose.t
 t/56a-dir.t
 t/56b-env.t
+t/57-sync.t
 t/60-os.t
 t/61-callbacks.t
 t/62b-bg_eval.tt
@@ -203,3 +213,4 @@ bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
 TODO-1.0                                 # roadmap for major release
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

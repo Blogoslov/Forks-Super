@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -274,6 +274,7 @@ sub _get_number_of_processors_from_dmesg {
 #
 # But sometimes it is the only way if
 #   * alarm() is not implemented on your system
+#   * SIGALRM might not get delivered during a system call
 #   * alarm() and sleep() are not compatible on your system
 #   * you want to timeout a process that you will start with exec()
 #

@@ -18,7 +18,7 @@ use warnings;
 use constant FOREVER => 9E9;
 use constant LONG_TIME => 9E8;
 
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -177,6 +177,9 @@ sub _child_timeout {
     # but any other active processes that it has spawned.
     # There are several ways to do this.
     my $job = Forks::Super::Job->this;
+    if ($job->{_sync}) {
+	$job->{_sync}->remove;
+    }
 
     if (Forks::Super::Config::CONFIG('Proc::ProcessTable')) {
 	my @to_kill = 

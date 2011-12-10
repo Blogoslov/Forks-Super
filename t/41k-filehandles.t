@@ -3,8 +3,6 @@ use Test::More tests => 5;
 use strict;
 use warnings;
 
-$Devel::Trace::TRACE = 0;
-
 my $job = fork {
     sub => sub {
 	while (my $x = <STDIN>) {

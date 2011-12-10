@@ -1,4 +1,4 @@
-Forks::Super version 0.56
+Forks::Super version 0.57
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -46,7 +46,8 @@ and managing them, including:
 
       Parent process can access a child process's standard
       input, output, and error streams to facilitate
-      interprocess communication.
+      interprocess communication. Parent and child processes
+      can share mutex objects to coordinate their activities.
 
    *  timeouts on wait,waitpid calls
 

@@ -85,7 +85,7 @@ $t = Time::HiRes::time();
 $y = $pid->read_stdout();
 $t = Time::HiRes::time() - $t;
 ok($y eq "hELLO\n", "\$obj->read_stdout() ok");
-okl($t <= 1, "fast return [11] ${t}s expected <=1s");
+okl($t <= 1, "fast return [11] ${t}s expected <=1s");   ### 17 ###
 
 $t = Time::HiRes::time();
 $y = $pid->read_stdout(block => 0);

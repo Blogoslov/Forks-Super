@@ -5,6 +5,8 @@ use warnings;
 
 ### exercise some of the methods and attributes of Forks::Super::Job
 
+my $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 1.0E-6;
+
 my $job = Forks::Super::Job->new( {abc => 'def', ghi => 'jkl'} );
 ok(defined $job, 'F::S::Job created');
 ok($job->{created}, 'job has creation timestamp');
@@ -61,7 +63,7 @@ ok($job->is_started, 'complete job is started');
 ok(!$job->is_active, 'complete job is not active');
 ok(!$job->is_suspended, 'complete job is not suspended');
 ok(!$job->is_deferred, 'complete job is not deferred');
-ok($job->{end} > $job->{created}, 'complete job has end time');
+ok($job->{end} + $TOL > $job->{created}, 'complete job has end time');
 ok(!$job->{reaped}, 'complete job has no reap time');
 
 $job->_mark_reaped;
@@ -70,7 +72,7 @@ ok($job->is_started, 'reaped job is started');
 ok(!$job->is_active, 'reaped job is not active');
 ok(!$job->is_suspended, 'reaped job is not suspended');
 ok(!$job->is_deferred, 'reaped job is not deferred');
-ok($job->{reaped} >= $job->{end}, 'reaped job has an end time');
+ok($job->{reaped} + $TOL >= $job->{end}, 'reaped job has an end time');
 
 $Forks::Super::MAX_PROC = 4;
 $Forks::Super::MAX_LOAD = 0.50;
