@@ -1,5 +1,6 @@
 # trivial external command to wait and then exit
+# see  t/24c-kill.t  and  t/24d-kill.t
 $SIG{QUIT} = sub { 
-    die "$$ received SIGQUIT\n";
+    exit 255;
 };
 sleep 15;

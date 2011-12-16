@@ -26,8 +26,7 @@ ok(isValidPid($pid), "fork to \@command successful");
 my $p = Forks::Super::wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child STATUS \$? == 0");
-my $z = do { my $fh; open($fh, "<", $output); 
-	     my $zz = join '', <$fh>; close $fh; $zz };
+my $z = do { my $fh; open($fh, "<", $output); join '', <$fh> };
 $z =~ s/\s+$//;
 my $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z, 
@@ -43,8 +42,7 @@ ok(isValidPid($pid), "fork to \$command successful");
 $p = wait;
 ok($pid == $p, "wait reaped child $pid == $p");
 ok($? == 0, "child STATUS \$? == 0");
-$z = do { my $fh; open($fh, "<", $output); 
-	  my $zz = join '', <$fh>; close $fh; $zz };
+$z = do { my $fh; open($fh, "<", $output); join '', <$fh> };
 $z =~ s/\s+$//;
 $target_z = "Hello, Whirled $pid";
 ok($z eq $target_z,

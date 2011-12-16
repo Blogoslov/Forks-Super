@@ -11,7 +11,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(bg_eval bg_qx);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 sub _choose_protocol {
     if (CONFIG_module('YAML')) {
@@ -46,23 +46,6 @@ sub bg_eval (&;@) {
 	    'daemon option not allowed on bg_eval call';
     }
 
-=begin XXXXXX workaround v0.55
-
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	# timeout, expiration are incompatible with bg_eval
-	foreach (keys %other_options) {
-	    if ($_ eq 'timeout' || $_ eq 'expiration') {
-		croak 'Forks::Super::bg_eval: ',
-		"$_ option not allowed because ",
-		"alarm/sleep are not compatible on this system.\n";
-	    }
-	}
-    }
-
-=end XXXXXX
-
-=cut
-
     my $p = $$;
     my ($result, @result);
 
@@ -91,23 +74,6 @@ sub bg_qx {
     if (defined($other_options{daemon}) && $other_options{daemon}) {
 	croak 'Forks::Super::bg_qx: daemon option not allowed on bg_qx call';
     }
-
-=begin XXXXXX workaround v0.55
-
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	# timeout, expiration are incompatible with bg_qx
-	foreach (keys %other_options) {
-	    if ($_ eq 'timeout' || $_ eq 'expiration') {
-		croak 'Forks::Super::bg_qx: ',
-		"$_ option not allowed because ",
-		"alarm/sleep are not compatible on this system.\n";
-	    }
-	}
-    }
-
-=end XXXXXX
-
-=cut
 
     my $p = $$;
     my (@result, $result);

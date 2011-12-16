@@ -51,7 +51,6 @@ t/10-to-natural.t
 t/11-to-command.t
 t/12-to-sub.t
 t/13-to-exec.t
-t/14-to-run.t
 t/15-debug.t
 t/16-overload.t
 t/17-retries.t
@@ -213,4 +212,3 @@ bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
 TODO-1.0                                 # roadmap for major release
 META.yml                                 Module meta-data (added by MakeMaker)
-META.json                                Module JSON meta-data (added by MakeMaker)

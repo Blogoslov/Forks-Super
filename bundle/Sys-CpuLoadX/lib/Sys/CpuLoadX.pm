@@ -15,7 +15,7 @@ our @ISA = qw(Exporter AutoLoader DynaLoader);
 
 our @EXPORT = qw();
 our @EXPORT_OK = qw(load get_cpu_load);
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 our $WIN32_INTERVAL = 1000; # milliseconds to run to get CPU usage
 
 {
@@ -80,7 +80,7 @@ sub get_cpu_load {
 	my @bsdload = xs_getbsdload();
 	_debug("load from bsdload: @bsdload");
 	if (@bsdload >= 3) {
-	    return $bsdload[0];
+	    return sprintf '%.2f', $bsdload[0];
 	}
     }
 

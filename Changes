@@ -1,5 +1,10 @@
 Revision history for Forks-Super
 
+0.58    2011-12-15
+        Added Java-style dump of program information in response to SIGQUIT
+        or other signal. See  Forks::Super::Debug::enable_dump.
+        Minor fixes and test tweaks for solaris and openbsd
+
 0.57    2011-12-09
         Added sync =>  option for mutexs to coordinate parent and child procs.
         New getc_XXX methods for interprocess communication.

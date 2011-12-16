@@ -18,21 +18,6 @@ if (${^TAINT}) {
 
 SKIP: {
 
-=begin XXXXXX workaround in v0.55
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-        skip "alarm function unavailable on this system ($^O,$]), "
-          . "can't test timeout feature", 6;
-    }
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-        skip "alarm not compatible with sleep on this system ($^O,$]), "
-          . "can't test timeout feature", 6;
-    }
-
-=end XXXXXX
-
-=cut
-
 if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
     if (!($^O eq 'MSWin32' 
 	  && Forks::Super::Config::CONFIG_module("Win32::Process"))) {

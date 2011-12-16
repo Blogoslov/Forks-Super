@@ -47,6 +47,7 @@ $Forks::Super::Util::DEFAULT_PAUSE = 0.1;
 $t3 = Forks::Super::Util::pause(3.8);
 $t1 = time - $t1;
 $t2 = Time::HiRes::time() - $t2;
+# failure point on freebsd/openbsd - often $t1==5 instead of $t1==4
 okl($t1 <= 4 && abs($t1-$t2) < 1, 'pause #4');                      ### 22 ###
 okl($THR_avail ? $t2 >= 3.75 && $t2 <= 4.25 : $t2 >= 3 && $t2 <= 5, ### 23 ###
    "pause #5 $t1/$t2");

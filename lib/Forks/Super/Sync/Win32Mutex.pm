@@ -8,15 +8,15 @@ use strict;
 use warnings;
 
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.57';
-our $NOWAIT_YIELD_DURATION = 50; # ms
+our $VERSION = '0.58';
+our $NOWAIT_YIELD_DURATION = 50; # milliseconds
 
 # Something we have to watch out for is a process dying without
 # releasing the resources that it possessed. We have three
 # defences against this issue below.
 #
 # 1. call CORE::kill 0, ... to see if other proc is still alive
-# 2. 
+# 2. check $! to see if/how the  Win32::Mutex::wait  call failed
 # 3. release resources in a DESTROY block (and  remove  func, though that
 #    probably doesn't help that much)
 
@@ -119,22 +119,6 @@ sub acquire {
 	$self->{acquired}[$n] = 0;
 	return 0;
     }
-
-=deprecated
-
-    if (defined $timeout) {
-	$z = $self->{mutex}[$n]->wait(1000 * $timeout);
-    } else {
-	$z = $self->{mutex}[$n]->wait;
-    }
-    if ($z) {
-
-	$self->{acquired}[$n] = 1;
-    }
-    return $z;
-
-=cut
-
 }
 
 sub release {
@@ -143,7 +127,7 @@ sub release {
     return 0 unless $self->{acquired}[$n];
 
 
-    my $z = $self->{mutex}[$n]->release;
+    my $z = eval { $self->{mutex}[$n]->release };
     if ($z) {
 	$self->{acquired}[$n] = 0;
     } else {
@@ -167,7 +151,12 @@ sub DESTROY {
 
 =head1 NAME
 
-Forks::Super::Sync::Win32::Mutex
+Forks::Super::Sync::Win32Mutex
+- Forks::Super sync object based on Win32::Mutex
+
+=head1 VERSION
+
+0.58
 
 =head1 SYNOPSIS
 

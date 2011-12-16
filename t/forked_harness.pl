@@ -43,7 +43,10 @@ BEGIN {
 	push @ARGV, '-e', 'IPC_DIR=undef';
     }
 }
-use Forks::Super MAX_PROC => 10, ON_BUSY => 'queue';
+use Forks::Super 
+    MAX_PROC => 10, 
+    ON_BUSY => 'queue', 
+    ENABLE_DUMP => $ENV{FORKS_SUPER_ENABLE_DUMP} || 'QUIT';
 use IO::Handle;
 use Getopt::Long;
 use POSIX ':sys_wait_h';
@@ -422,7 +425,7 @@ sub process_test_output {
 	    @stdout = @stdout2;
 	} elsif (grep { m/All tests successful./ } @stdout) {
 	    @stdout = @stdout2;
-	} elsif (grep { m/child process timeout/ } @stderr) {
+	} elsif (grep { 0 && m/child process timeout/ } @stderr) {
 	    $fail{$test_file}{'TIMEOUT'}++;
 	    $not_ok = 1;
 	    $status = 255 + 127 * 256;
@@ -445,6 +448,11 @@ sub process_test_output {
 	    unless ($really_quiet) {
 		color_print STDERR => "Abnormal result for $test_file: ",
 		                      $j->toString(), "\n";
+
+		sleep 3;
+		push @stdout, Forks::Super::read_stdout($pid); 
+		push @stderr, Forks::Super::read_stderr($pid); 
+
 		color_print STDERR => 'OUTPUT: ', @stdout, "\n";
 		color_print STDERR => 'ERROR: ', @stderr, "\n";
 	    }
@@ -805,7 +813,7 @@ forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.57
+0.58
 
 =head1 SYNOPSIS
 

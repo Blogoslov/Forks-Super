@@ -48,7 +48,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -134,6 +134,10 @@ sub _import_common_vars {
     }
     if (uc $arg eq 'OVERLOAD') {
 	_init_overload($val);
+	return 1;
+    }
+    if (uc $arg eq 'ENABLE_DUMP') {
+	Forks::Super::Debug::enable_dump($val);
 	return 1;
     }
     return;
@@ -576,20 +580,6 @@ sub open2 {
     $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
     $options->{'child_fh'} = 'in,out';
 
-=begin XXXXXX workaround 0.55
-
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	if (defined($options->{'timeout'})||defined($options->{'expiration'})) {
-	    croak 'Forks::Super::open2: ',
-	    "can't use timeout/expiration option because sleep/alarm ",
-	    "are incompatible on this system\n";
-	}
-    }
-
-=end XXXXXX
-
-=cut
-
     my $pid = Forks::Super::fork( $options );
     if (!defined $pid) {
 	return;
@@ -609,20 +599,6 @@ sub open3 {
     }
     $options->{'cmd'} = @cmd > 1 ? \@cmd : $cmd[0];
     $options->{'child_fh'} = 'in,out,err';
-
-=begin XXXXXX workaround 0.55
-
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	if (defined($options->{'timeout'})||defined($options->{'expiration'})) {
-	    croak 'Forks::Super::open2: ',
-	    "can't use timeout/expiration option because sleep/alarm ",
-	    "are incompatible on this system\n";
-	}
-    }
-
-=end XXXXXX
-
-=cut
 
     my $pid = Forks::Super::fork( $options );
     if (!defined $pid) {
@@ -650,7 +626,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.57
+Version 0.58
 
 =head1 SYNOPSIS
 
@@ -3035,6 +3011,22 @@ identifier. See L<Forks::Super::Job/"OVERLOADING">.
 B<< Since v0.41 overloading is enabled by default. >>
 If the C<FORKS_SUPER_JOB_OVERLOAD> variable is set, it will
 override this default.
+
+=item FORKS_SUPER_ENABLE_DUMP
+
+If set, will invoke L<Forks::Super::Debug/"enable_dump"> and enable
+a Java Virtual Machine-like feature to report the status of all
+the background jobs your program has created. If this variable contains
+the name of a signal, then that signal will be trapped by your program
+to produce the process dump. If the variable value is not a signal name
+but is a true value, then the program will produce a process dump in
+response to a C<SIGQUIT>. See L<Forks::Super::Debug>.
+
+This feature can also be enabled on import of C<Forks::Super> by 
+passing an C<ENABLE_DUMP> parameter on import, like
+
+    use Forks::Super ENABLE_DUMP => 1;    # same as ENABLE_DUMP => 'QUIT'
+    use Forks::Super ENABLE_DUMP => 'USR1';
 
 =item IPC_DIR
 

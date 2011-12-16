@@ -39,7 +39,7 @@ $count = waitall 5 + ($t5 - $t);
 $t = Time::HiRes::time() - $t5;
 okl($count == 0, "waitall reaped $count==0 processes in next 1 sec") ### 3 ###
     or diag("t is ${t}s, should be ~5");
-okl($t >= 4.85 && $t <= 6.25,                ### 4 ### was 5.25 obs 
+okl($t >= 4.85 && $t <= 7.25,                ### 4 ### was 5.25 obs 7.01
    "waitall respected timeout ${t}s expected ~5s");
 
 $t = Time::HiRes::time();

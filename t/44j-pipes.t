@@ -26,12 +26,18 @@ my $t = Time::HiRes::time();
 $c = $pid->getc_stdout(timeout => 2);
 my $tt = Time::HiRes::time() - $t;
 ok(!defined($c) || $c eq '', 'still nothing to read');
-okl($tt >= 1.0 && $tt <= 3.0, 'timeout on getc_stdout respected');
+okl($tt >= 1.0 && $tt <= 4.5,             ### 4 ###
+    "timeout on getc_stdout respected, took ${tt}s expected ~2s");
 
 $c = $pid->getc_stdout(block => 1);
 $t = Time::HiRes::time() - $t;
 ok($c eq 'f', 'got first char from stdout');
-ok($t >= 3.5 && $t <= 6.5, "took ${t}s, expected ~5s");
+# this should take ~5s. openbsd consistently comes in around 7.48-7.49?
+if ($^O =~ /openbsd/i) {
+    diag("took ${t}s for first getc from stdout, expected ~5s");
+}
+ok($t >= 3.5 && $t <= 7.65,                          ### 6 ### was 6.5, obs 7.49
+   "took ${t}s, expected ~5s");
 
 $t = Time::HiRes::time();
 $c = $pid->getc_stderr(timeout => 2);
@@ -42,9 +48,13 @@ ok($pid->getc_stdout eq 'o', 'read another char from stdout');
 ok($pid->read_stdout eq "o\n", 'read_stdout returns the rest of the line');
 $c = $pid->getc_stderr(block => 1);
 $t = Time::HiRes::time() - $t;
-ok(defined($c) && $c eq 'O', 'got first char from stderr');
+ok(defined($c) && $c eq 'O',                         ### 11 ###
+   'got first char from stderr');
 ok($t >= 3.5 && $t <= 6.5, "took ${t}s, expected ~5s");
 $pid->wait;
-ok($pid->getc_stderr eq 'P', 'getc_stderr works after child expires');
-ok($pid->getc_stderr() . $pid->getc_stderr() . $pid->getc_stderr() eq "Q\n",
+ok($pid->getc_stderr eq 'P',                         ### 13 ###
+   'getc_stderr works after child expires');
+ok($pid->getc_stderr() . $pid->getc_stderr()
+   . ($pid->getc_stderr() || '') eq "Q\n",                   ### 14 ###
    'got remaining chars from stderr');
+

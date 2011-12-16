@@ -28,7 +28,7 @@ use IO::Socket;
 use IO::Handle;
 
 our @ISA = qw(IO::Socket IO::Handle);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
@@ -102,6 +102,8 @@ sub BINMODE {
 sub GETC {
     my $self = shift;
     $self->{GETC}++;
+
+    # XXX - handle undef/$! ?
     return getc($self->{SOCKET});
 }
 

@@ -17,21 +17,6 @@ Forks::Super::Job::Timeout::warm_up();
 
 #SKIP: {
 
-=begin XXXXXX workaround in v0.55
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-        skip "alarm function unavailable on this system ($^O,$]), "
-          . "can't test timeout feature", 3;
-    }
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-        skip "alarm/sleep incompatible on this system ($^O,$]), "
-          . "can't test timeout feature", 3;
-    }
-
-=end XXXXXX
-
-=cut
-
 #######################################################
 
 my $now = Time::HiRes::time();

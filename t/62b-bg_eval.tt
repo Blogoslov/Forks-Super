@@ -45,17 +45,6 @@ ok($x == 19, "result is not read only");
 
 SKIP: {
 
-=begin XXXXXX workaround v0.55
-
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	skip "alarm and sleep are incompatible on this system; "
-	    . "can't test bg_eval with a timeout", 2;
-    }
-
-=end XXXXXX
-
-=cut
-
     $x = bg_eval { sleep 10; return 19 } { timeout => 2, untaint => $untaint };
     $t = Time::HiRes::time();
     ok(!defined($x->_fetch) || $x eq '',

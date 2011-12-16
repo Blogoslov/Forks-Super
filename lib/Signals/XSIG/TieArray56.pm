@@ -7,7 +7,7 @@ use warnings;
 ############################################################
 #
 # Signals::XSIG::TieArray
-# for Perl >v5.6.
+# for Perl <=v5.6.
 #
 # Applied to @{$XSIG{signal}}.
 # On update, refreshes the handler for the signal.

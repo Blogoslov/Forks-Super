@@ -23,21 +23,6 @@ if (${^TAINT}) {
 
 SKIP: {
 
-=begin XXXXXX workaround in v0.55
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	skip "alarm function unavailable on this system ($^O,$]), "
-	    . "can't test timeout feature", 2;
-    }
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	skip "alarm incompatible with sleep on this system ($^O,$]), "
-	    . "can't test timeout feature", 2;
-    }
-
-=end XXXXXX
-
-=cut
-
 ##########################################################
 
     my $t0 = Time::HiRes::time();

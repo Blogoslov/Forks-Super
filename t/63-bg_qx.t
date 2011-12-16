@@ -38,17 +38,6 @@ ok($x == 19, "result is not read only");
 
 SKIP: {
 
-=begin XXXXXX workaround v0.55
-
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	skip "alarm/sleep incompatible on this system. "
-	    . "can't use bg_qx with timeout.", 5;
-    }
-
-=end XXXXXX
-
-=cut
-
     my $j = $Forks::Super::LAST_JOB;
     $y = "";
     $z = sprintf "B%05d", 100000 * rand();

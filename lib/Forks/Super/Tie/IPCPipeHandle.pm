@@ -24,7 +24,7 @@ use IO::Pipe;
 use IO::Handle;
 
 our @ISA = qw(IO::Pipe IO::Handle);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 sub TIEHANDLE {
     my ($class, $real_pipe, $glob) = @_;
@@ -84,9 +84,22 @@ sub GETC {
     $self->{GETC}++;
 
     my $buffer = '';
-    my $n = sysread $self->{PIPE}, $buffer, 1;
-    if ($n == 0) {
-	return;
+
+    # sysread returns undef on solaris in t/44j. 
+    # Is the SIGCHLD causing an interruption?
+    {
+	local $!;
+	my $n = sysread $self->{PIPE}, $buffer, 1;
+	if (!defined $n) {
+	    if ($!{EINTR}) {
+		redo;
+	    }
+	    carp "IPCPipeHandle::GETC: $!";
+	    return;
+	}
+	if ($n == 0) {
+	    return;
+	}
     }
     return $buffer;
 }
@@ -149,6 +162,9 @@ sub EOF {
     return eof $self->{PIPE};
 }
 
+
+# we will almost always use select4 before reading, so
+# we prefer to use sysread and sysseek
 sub READ {
     my ($self, undef, $length, $offset) = @_;
     $self->{READ}++;
@@ -156,8 +172,6 @@ sub READ {
     # XXX - blocking ? timeout ?
 
 
-    # we will almost always use select4 before reading, so
-    # we need to use sysread, sysseek
     return sysread $self->{PIPE}, $_[1], $length, $offset || 0;
 }
 
@@ -166,6 +180,8 @@ sub SEEK {
     $self->{SEEK}++;
     return sysseek $self->{PIPE}, $position, $whence;
 }
+
+
 
 sub is_pipe {
     return 0;

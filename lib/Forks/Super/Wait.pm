@@ -20,7 +20,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 my ($productive_waitpid_code);
 my $respect_SIGCHLD_ignore = 1;

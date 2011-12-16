@@ -180,7 +180,8 @@ sub checkif_sleep_alarm_compatible {
 	alarm 0;
     };
     if ($compatible > 0) {
-	print STDERR "$compatible: sleep and alarm are compatible on this system\n";
+	print STDERR "$compatible: sleep and alarm are ",
+		"compatible on this system\n";
     } else {
 	# either "alarm" isn't implemented, or
 	# "alarm" or "sleep" are implemented in terms of each other,
@@ -346,16 +347,18 @@ sub explore_sync_options {
 	    print STDERR "Win32 semaphores are available for ",
 	    	"ipc synchronization\n";
 	    push @sync, "Win32";
+	    write_limits( sync_options => join('/', @sync) );
 	}
 
 	if (eval { require Win32::Mutex; 1 }) {
 	    print STDERR "Win32 mutexes are available for ",
 	    	"ipc synchronization\n";
 	    push @sync, "Win32Mutex";
+	    write_limits( sync_options => join('/', @sync) );
 	}
     }
 
-    if (eval { 
+    if (eval {
 	# exercise IPC::Semaphore
 	require IPC::Sempahore;
 	require IPC::SysC;
@@ -365,10 +368,12 @@ sub explore_sync_options {
 	$sem->setall(1,0);
 	$sem->setval(1,1);
 	$sem->remove;
+	eval { alarm 0 };
 	1
 	} ) {
 	print STDERR "SysV semaphores are available for ipc synchornization\n";
 	push @sync, "IPCSemaphore";
+	write_limits( sync_options => join('/', @sync) );
     }
         
     # advisory file locking ? I expect this to work almost everywhere
@@ -383,12 +388,13 @@ sub explore_sync_options {
     sleep 2;
     open my $fh, '>>', $file;
     my $t = time;
-    eval { flock $fh, 2 };
+    eval { eval { alarm 30 }; flock $fh, 2; alarm 0; };
     $t = time - $t;
     close $fh;
-    if ($t > 1) {
+    if ($t > 1 && $t < 20) {
 	print STDERR "advisory filelocking available for ipc synchornization\n";
 	push @sync, "Semaphlock";
+	write_limits( sync_options => join('/', @sync) );
     }
     unlink $file;
 

@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 sub new {
     my ($pkg, %args) = @_;
@@ -132,7 +132,7 @@ Forks::Super::Sync - portable interprocess synchronization object
 
 =head1 VERSION
 
-0.57
+0.58
 
 =head1 SYNOPSIS
 
@@ -288,5 +288,26 @@ Implementations use and abuse subsets of features of file locking
 and semaphores for the narrow purposes of the L<Forks::Super>
 distribution. It is probably not a good idea to try to use or 
 extend this module for other purposes.
+
+=head1 SEE ALSO
+
+L<Forks::Super>
+
+Various implementations based on L<perlfunc/"flock">, L<IPC::Semaphore>,
+L<Win32::Semaphore>, or L<Win32::Mutex>.
+
+=head1 AUTHOR
+
+Marty O'Brien, E<lt>mob@cpan.orgE<gt>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2009-2011, Marty O'Brien.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
 
 =cut

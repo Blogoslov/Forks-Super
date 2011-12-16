@@ -208,11 +208,12 @@ Possible TODOs:
 	___ must test. Solaris 8 is like this?
         _X_ test with mock
 
-    _x_ In Java, you can send SIGQUIT to a virtual machine and the JVM will
+    _X_ In Java, you can send SIGQUIT to a virtual machine and the JVM will
         dump the stack trace for every thread with some other data about the
         program. Can we do something similar for Forks::Super? 
-	___ not enabled by default
-	___ install sighandler in every natural/sub child to write stack trace
+	_X_ not enabled by default
+	_X_ install sighandler in every natural/sub child to write stack trace
+	___ How to test?
 
     ___ timeout feature tries to use alarm, SIGALRM handler, but it could
         use FSJ::OS::poor_mans_alarm if the caller wants to use alarm's
@@ -242,7 +243,7 @@ Possible TODOs:
 
     ___ encryption layers on IO channels
 
-    ___ getc_stdout/getc_stderr methods like read_stdout/read_stderr?
+    _X_ getc_stdout/getc_stderr methods like read_stdout/read_stderr?
 
     ___ parent_dump enhancements:
         ___ get and display stack trace of natural/sub-style children
@@ -253,4 +254,3 @@ Possible TODOs:
 	sent/received?
 
     _X_ system-limits.pl discover which mutexes work for FS::Sync
-

@@ -7,7 +7,7 @@ use POSIX ':sys_wait_h';
 use Win32::Semaphore;
 
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 our $NOWAIT_YIELD_DURATION = 50;
 my @RELEASE_ON_EXIT = ();
 
@@ -142,27 +142,6 @@ sub acquire {
     }
 }
 
-=deprecated 
-
-    if (defined $timeout) {
-	if ($self->{sem}[$n]->wait($timeout * 1000)) {
-	    $self->{acquired}[$n] = 1;
-	    return 1;
-	} else {
-	    $self->{acquired}[$n] = 0;
-	    return 0;
-	}
-    }
-    if ($self->{sem}[$n]->wait()) {
-	$self->{acquired}[$n] = 1;
-	return 1;
-    } else {
-	$self->{acquired}[$n] = 0;
-    }
-    return 0;
-
-=cut
-
 sub release {
     my ($self, $n) = @_;
     if ($n < 0 || $n >= $self->{count}) {
@@ -192,6 +171,7 @@ sub DESTROY {
 =head1 NAME
 
 Forks::Super::Sync::Win32
+- Forks::Super sync object using Win32::Semaphore
 
 =head1 SYNOPSIS
 

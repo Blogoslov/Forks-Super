@@ -1,3 +1,8 @@
+/*
+ * -- XS code from Win32::SystenInfo::CpuUsage
+ * -- this code is apparently not under any explict copyright
+ */
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"

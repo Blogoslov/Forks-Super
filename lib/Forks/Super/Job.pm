@@ -24,7 +24,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -960,15 +960,14 @@ sub _postlaunch_child_to_sub {
 sub _launch_from_child {
     my $job = shift;
     if ($Forks::Super::CHILD_FORK_OK == 0) {
-	carp "Forks::Super::fork() not allowed\n",
-	        "in child process $$ while \$Forks::Super::CHILD_FORK_OK ",
-		"is not set!\n";
+	carp "Forks::Super::fork() not allowed in child process $$ ",
+	        "while \$Forks::Super::CHILD_FORK_OK is not set!";
 
 	return;
     } elsif ($Forks::Super::CHILD_FORK_OK < 0) {
-	carp "Forks::Super::fork() call not allowed\n",
-		"in child process $$ while \$Forks::Super::CHILD_FORK_OK <= 0.\n",
-		"Will create child of child with CORE::fork()\n";
+	carp "Forks::Super::fork() call not allowed in child process $$ ",
+		"while \$Forks::Super::CHILD_FORK_OK <= 0.\n",
+		"Will use CORE::fork() to create child of child.";
 
 	my $pid = _CORE_fork();
 	if (defined($pid) && $pid == 0) {
@@ -1277,6 +1276,14 @@ sub _preconfig2 {
 	    debug('Job will use ', $job->{signal_ipc}, ' to get signal pid.');
 	}
     }
+
+    if ($Forks::Super::Debug::DUMPSIG) {
+	if ($job->{style} eq 'natural' || $job->{style} eq 'sub') {
+	    $job->{_enable_dump} =
+		Forks::Super::Job::Ipc::_choose_fh_filename(
+		    '.dump', purpose => 'stack trace ipc', job => $job);
+	}
+    }
     if ($job->{sync}) {
 	require Forks::Super::Sync;
 	my ($count, @initial);
@@ -1541,6 +1548,14 @@ sub _config_debug_child {
 	$Forks::Super::Debug::DEBUG = 0;
 	$Forks::Super::DEBUG = 0;
 	$job->{debug} = 0;
+    }
+    if ($job->{_enable_dump}) {
+	if ($job->{style} eq 'natural' || $job->{style} eq 'sub') {
+	    $SIG{ $Forks::Super::Debug::DUMPSIG } =
+		\&Forks::Super::Debug::child_dump;
+	} else {
+	    $SIG{ $Forks::Super::Debug::DUMPSIG } = 'IGNORE';
+	}
     }
     return;
 }
@@ -1925,7 +1940,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.57
+0.58
 
 =head1 SYNOPSIS
 

@@ -6,6 +6,7 @@
 package Forks::Super::Debug;
 use Forks::Super::Util 'IS_WIN32';
 use IO::Handle;
+# use Signals::XSIG;
 use Exporter;
 use Carp;
 use strict;
@@ -14,10 +15,17 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
+our $DUMPSIG;
 
 our ($DEBUG, $DEBUG_FH, %_CARPED, 
      $OLD_SIG__WARN__, $OLD_SIG__DIE__, $OLD_CARP_VERBOSE);
+
+
+if (defined $ENV{FORKS_SUPER_ENABLE_DUMP}) {
+    enable_dump($ENV{FORKS_SUPER_ENABLE_DUMP});
+}
+
 
 ## no critic (BriefOpen,TwoArgOpen)
 
@@ -87,6 +95,28 @@ sub no_Carp_Always {
 
 #############################################################################
 
+sub enable_dump {
+    my $sig = shift;
+    if ($sig =~ /\D/) {
+	if (exists $SIG{uc $sig}) {
+	    $DUMPSIG = uc $sig;
+	} else {
+	    carp "Forks::Super::Debug::enable_dump: ",
+	    	"$sig is not a valid signal name. Using 'QUIT'";
+	    $DUMPSIG = 'QUIT';
+	}
+    }
+    if ($sig) {
+	$DUMPSIG ||= 'QUIT';
+	$SIG{$DUMPSIG} = \&parent_dump;
+    } else {
+	if ($DUMPSIG) {
+	    $SIG{$DUMPSIG} = 'DEFAULT';
+	}
+	$DUMPSIG = '';
+    }
+}
+
 my $parent_dumps = 0;
 sub parent_dump {
     # do something like what a Java virtual machine does when it gets
@@ -96,8 +126,13 @@ sub parent_dump {
     # XXX - this subroutine is not ready for prime time, yet but you can
     # preview it by setting  $SIG{QUIT} = \&Forks::Super::Debug::parent_dump
     # in your script and sending  SIGQUIT's  to it.
+    # Forks::Super will do this for you if you set
+    # $ENV{FORKS_SUPER_ENABLE_DUMP}.
 
     # what would we want to know?
+    #
+    #   parent: current stack trace
+    #
     #   all jobs
     #   --------
     #     job id
@@ -131,22 +166,45 @@ sub parent_dump {
     #     total active jobs
     #     total completed jobs
     #     completed job distribution of run times
-    return unless $$ == $Forks::Super::MAIN_PID;
+
+    if ($$ != $Forks::Super::MAIN_PID) {
+	# this is not the main fork, so we should do the
+	# default SIGQUIT behavior. i.e., QUIT.
+	exit 21 if &IS_WIN32;
+	exec $^X, '-e', 'kill "QUIT",$$; sleep 1; die';
+    }
+
     $parent_dumps++;
 
     open my $TTY, '>>', &IS_WIN32 ? 'CON' : '/dev/tty';
 
     print $TTY scalar localtime(time), "\n";
-    print $TTY "Full Forks::Super v$Forks::Super::VERSION job dump process $$\n";
-    print $TTY "Default maximum background processes: $Forks::Super::MAX_PROC\n";
+    print $TTY "Full Forks::Super v$Forks::Super::VERSION ",
+    	"job dump process $$\n";
+    print $TTY "Default maximum background procs:  $Forks::Super::MAX_PROC\n";
     print $TTY "Default maximum CPU load:          $Forks::Super::MAX_LOAD\n";
-    print $TTY "Child fork ok:                     $Forks::Super::CHILD_FORK_OK\n";
+    print $TTY "Child fork ok:                     ",
+    	"$Forks::Super::CHILD_FORK_OK\n";
     print $TTY "Default busy system busy behavior: $Forks::Super::ON_BUSY\n";
     if (defined($Forks::Super::IPC_DIR) && $Forks::Super::IPC_DIR ne '') {
 	print $TTY "Default IPC directory:  $Forks::Super::IPC_DIR\n";
     }
     
     print $TTY "\n";
+
+    # parent process
+    print $TTY "PARENT PROCESS\n--------------\n";
+    print $TTY &Carp::longmess, "\n\n";
+
+    # signal active jobs to give us their stack traces, if applicable
+    my $children_signalled = 0;
+    foreach my $job (@Forks::Super::ALL_JOBS) {
+	if ($job->is_active && $job->{_enable_dump}
+	    && ($job->{style} eq 'natural' || $job->{style} eq 'sub')) {
+
+	    $children_signalled += $job->kill($DUMPSIG);
+	}
+    }
 
     # active jobs
     my $header = 0;
@@ -279,7 +337,40 @@ sub _dump_job {
 	print $fh "\tReaped  : ", scalar localtime($job->{reaped}), "\n";
 	print $fh "\tExit status: ", $job->{status}, "\n";
     }
+
+    if ($job->is_active && $job->{_enable_dump}
+	&& ($job->{style} eq 'natural' || $job->{style} eq 'sub')) {
+
+	# try to load stacktrace
+	my $f = $job->{_enable_dump};
+	my $st_h;
+	if (open $st_h, '<', $job->{_enable_dump}) {
+	    local $_;
+	    print $fh "\tStack trace:\n";
+	    while (<$st_h>) {
+		next if /Forks::Super::Debug::child_dump/; 
+		next if /^$DUMPSIG at /;
+		print $fh "\t$_";
+	    }
+	    close $st_h;
+	}
+	unlink $job->{_enable_dump};
+    }
+
+
     print $fh "\n";
+    return;
+}
+
+sub child_dump {
+    my $job = &Forks::Super::Job::this;
+    if ($job->{_enable_dump}) {
+	if (open my $fh, '>', $job->{_enable_dump} . '.tmp') {
+	    print $fh &Carp::longmess;
+	    close $fh;
+	    rename $job->{_enable_dump} . '.tmp', $job->{_enable_dump};
+	}
+    }
     return;
 }
 
@@ -328,7 +419,7 @@ Forks::Super::Debug - debugging and logging routines for Forks::Super distro
 
 =head1 VERSION
 
-0.57
+0.58
 
 =head1 VARIABLES
 
@@ -392,23 +483,34 @@ value of C<$!> that can be produced.
         }
     }
 
-=head2 parent_dump
+=head2 enable_dump
 
-Writes information about all known jobs to the console.
+Writes information about all known jobs to the console in response
+to an OS signal.
 
 Many implementations of the Java Virtual Machine have a useful debugging
 feature where it will dump a list of all thread stacks when the JVM
-receives a C<SIGQUIT> signal. 
+receives a C<SIGQUIT> signal.
 
-C<Forks::Super::Debug::parent_dump> is this module's attempt to
-emulate this feature. When this subroutine is invoked, it will dump
-information about all known jobs to the console.
+C<Forks::Super::Debug::enable_dump> is this module's attempt to
+emulate this feature. When the program receives the specified signal,
+it will dump information about all known jobs to the console.
 
-To enable this feature in your program, you must explicitly set a 
-signal handler that points to this subroutine. You do not necessarily have to
-set a signal handler for C<SIGQUIT>.
+C<enable_dump> takes one argument. If the argument evaluates to false,
+the process dump will be disabled and all signals will revert to
+their default behavior. If the argument is a signal name, the program
+will respond to that signal by dumping information about all processes
+to the console. If the argument is a true value but not a signal name,
+the program will respond to C<SIGQUIT> signals.
 
-    $SIG{USR2} = \&Forks::Super::Debug::parent_dump;
+This feature may also be enabled upon import of L<Forks::Super> using
+the C<ENABLE_DUMP> arg. For example,
+
+    use Forks::Super ENABLE_DUMP => 'USR1';
+
+will configure the program to respond to C<SIGUSR1> events. The module
+can also enable this feature based on the value of the
+C<< $ENV{FORKS_SUPER_ENABLE_DUMP} >> environment variable.
 
 =head1 EXPORTS
 

@@ -29,7 +29,7 @@ use strict;
 use warnings;
 
 our @ISA = qw(Exporter IO::Handle);
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 
 sub TIEHANDLE {
     my ($class, %props) = @_;
@@ -106,6 +106,8 @@ sub SEEK {
 sub GETC {
     my $self = shift;
     $$self->{GETC}++;
+
+    # XXX - handle undef/$! ?
     return getc($self);
 }
 

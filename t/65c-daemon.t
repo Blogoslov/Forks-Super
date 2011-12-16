@@ -44,8 +44,8 @@ SKIP: {
 
     my $k = Forks::Super::kill 'ZERO', $pid;
     ok($k, "SIGZERO on daemon successful");
-    ok($pid->{intermediate_pid}, "intermediate pid set on job");
-    diag("intermediate pid was $pid->{intermediate_pid}");
+    ok($pid->{intermediate_pid},
+       "intermediate pid $pid->{intermediate} set on job");
 
     if (Forks::Super::Util::IS_WIN32ish &&
 	!Forks::Super::Config::CONFIG_module('Win32::API')) {

@@ -136,7 +136,8 @@ if ($job->{state} eq 'COMPLETE') {
 
 
 my $w = read_value();
-ok($w > 0 && $w < 5, "job is incrementing value, expect 0 < val:$w < 5");
+ok($w > 0 && $w < 5,                                          ### 2 ###
+   "job is incrementing value, expect 0 < val:$w < 5");
 
 my $pause_time = $t1 + 8.0 - Time::HiRes::time();
 while ($pause_time > 2) {
@@ -156,7 +157,7 @@ if (!defined $w) {
     $w = read_value();
 }
 
-ok($w >= 3, "job is incrementing value, expect val:$w >= 4");  ### 4 ###
+ok($w >= 3, "job is incrementing value, expect val:$w >= 4"); ### 4 ###
 
 Forks::Super::Util::pause($t1 + 11.0 - Time::HiRes::time());
 ok($job->{state} eq 'SUSPENDED', "job is still suspended")    ### 5 ###

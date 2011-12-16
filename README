@@ -1,4 +1,4 @@
-Forks::Super version 0.57
+Forks::Super version 0.58
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -91,7 +91,7 @@ failures are more likely on a heavily loaded
 system. If "make test" fails, it will often work
 if you run it a second time.
 
-It will take about 10 minutes to run the test suite
+It will take about 15 minutes to run the test suite
 of the Forks::Super module with "make test". An
 alternative is to run
 
@@ -99,7 +99,7 @@ alternative is to run
 
 which will run the Forks::Super module tests in
 parallel, using the Forks::Super module. Running
-"make fasttest" will take about 1-2 minutes.
+"make fasttest" will take about 1-3 minutes.
 
 
 DEPENDENCIES

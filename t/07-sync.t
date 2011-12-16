@@ -2,10 +2,14 @@ use Forks::Super::Sync;
 use Test::More tests => 24;
 use strict;
 use warnings;
+$| = 1;
+
+# eval { use Carp::Always };
 
 {
     no warnings 'once';
-    $Forks::Super::IPC_DIR = "t/out";
+    mkdir "t/out/07.$$";
+    $Forks::Super::IPC_DIR = "t/out/07.$$";
 }
 
 sub test_implementation {
@@ -24,7 +28,7 @@ sub test_implementation {
 	my $t = Time::HiRes::time();
 	$sync->acquire(0); # blocks
 	$t = Time::HiRes::time()-$t;
-	print STDERR "Child took ${t}s to acquire resource 0\n";
+#	print STDERR "Child took ${t}s to acquire resource 0\n";
 	$sync->acquire(2);
 	$sync->release(0);
 	$sync->release(1);
@@ -50,7 +54,9 @@ sub test_implementation {
 
     $z = $sync->release(2);
     $z = $sync->acquireAndRelease(0);
-    ok($z, 'acquired 0 in parent');
+
+    # failure point on MSWin32, Win32Mutex impl
+    ok($z, "acquired 0 in parent ($impl)");
     $z = $sync->release(0);
     ok(!$z, ' and released 0 in parent');
 
@@ -81,5 +87,8 @@ SKIP: {
 }
 
 wait for 1..3;
+
+unlink "t/out/07.$$/.sync*";
+rmdir "t/out/07.$$";
 
 1;

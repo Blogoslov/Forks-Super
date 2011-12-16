@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Carp;
 use Time::HiRes;
-our $VERSION = '0.57';
+our $VERSION = '0.58';
 our @ISA = qw(Forks::Super::Sync);
 
 my $ipc_seq = 0;
@@ -183,6 +183,7 @@ __END__
 =head1 NAME
 
 Forks::Super::Sync::Semaphlock
+- Forks::Super sync object using advisory file locking
 
 =head1 SYNOPSIS
 
