@@ -15,19 +15,6 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-SKIP: {
-
-=begin XXXXXX workaround 0.55
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	skip "alarm function unavailable on this system ($^O,$]), "
-	    . "can't test timeout feature", 3;
-    }
-
-=end XXXXXX
-
-=cut
-
 #######################################################
 
 my $future = Time::HiRes::time() - 5;
@@ -46,4 +33,3 @@ ok($? != 0, "job expired with non-zero exit STATUS");
 
 #######################################################
 
-} # end SKIP

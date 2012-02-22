@@ -16,7 +16,7 @@ use constant IS_CYGWIN => $^O =~ /cygwin/i;
 use constant IS_WIN32ish => &IS_WIN32 || &IS_CYGWIN;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN okl);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -259,23 +259,6 @@ sub is_socket {
 	return 0 if $th->isa('Forks::Super::Tie::IPCFileHandle');
 	return 0 if $th->isa('Forks::Super::Tie::IPCPipeHandle');
     }
-
-=begin XXXXXX refactored 0.55
-
-    if (ref tied *$handle eq 'Forks::Super::Tie::IPCFileHandle') {
-	return 0;
-    }
-    if (ref tied *$handle eq 'Forks::Super::Tie::IPCSocketHandle') {
-	return 1;
-    }
-    if (ref tied *$handle eq 'Forks::Super::Tie::IPCPipeHandle') {
-	return 0;
-    }
-
-=end XXXXXX
-
-=cut
-
     if (defined $$handle->{is_socket}) {
 	return $$handle->{is_socket};
     }
@@ -294,26 +277,6 @@ sub is_pipe {
 	return 0 if $th->isa('Forks::Super::Tie::IPCSocketHandle');
 	return 1 if $th->isa('Forks::Super::Tie::IPCPipeHandle');
     }
-
-=begin XXXXXX refactored 0.55
-
-    if (ref tied *$handle eq 'Forks::Super::Tie::IPCFileHandle') {
-	return 0;
-    }
-    if (ref tied *$handle eq 'Forks::Super::Tie::IPCSocketHandle') {
-	return 0;
-    }
-    if (ref tied *$handle eq 'Forks::Super::Tie::IPCPipeHandle') {
-	return 1;
-    }
-    if ($$handle->{is_socket} || $$handle->{is_file} || 0) {
-	return 0;
-    }
-
-=end XXXXXX
-
-=cut
-
     if (defined $handle->{std_delegate}) {
 	$handle = $handle->{std_delegate};
     }
@@ -393,7 +356,7 @@ Forks::Super::Util - utility routines for Forks::Super module
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 SYNOPSIS
 
@@ -559,7 +522,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2011, Marty O'Brien.
+Copyright (c) 2009-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

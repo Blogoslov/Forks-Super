@@ -15,7 +15,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 our $DUMPSIG;
 
 our ($DEBUG, $DEBUG_FH, %_CARPED, 
@@ -123,12 +123,6 @@ sub parent_dump {
     # a SIGQUIT signal -- print out some information about the
     # currently running jobs. It will help users identify "stuck" jobs
 
-    # XXX - this subroutine is not ready for prime time, yet but you can
-    # preview it by setting  $SIG{QUIT} = \&Forks::Super::Debug::parent_dump
-    # in your script and sending  SIGQUIT's  to it.
-    # Forks::Super will do this for you if you set
-    # $ENV{FORKS_SUPER_ENABLE_DUMP}.
-
     # what would we want to know?
     #
     #   parent: current stack trace
@@ -209,6 +203,7 @@ sub parent_dump {
     # active jobs
     my $header = 0;
     my ($num_active, $num_deferred, $num_complete, $num_other) = (0,0,0,0);
+    my $num_reaped = 0;
     foreach my $job (@Forks::Super::ALL_JOBS) {
 	if ($job->is_active || $job->{state} eq 'SUSPENDED') {
 	    print $TTY "ACTIVE JOBS\n-----------\n\n" unless $header++;
@@ -237,6 +232,7 @@ sub parent_dump {
 	    _dump_job($TTY, $job);
 	    push @run_times, $job->{end} - $job->{start};
 	    $num_complete++;
+	    $num_reaped++ if $job->is_reaped;
 	}
     }
 
@@ -264,8 +260,9 @@ sub parent_dump {
 	    $x2 /= @run_times;
 	    $x2 -= $x*$x;
 	    $x2 = $x2 > 0 ? sqrt($x2) : 0.0;  # stdev of run times
-	    printf $TTY ("Completed jobs: %d  Run time: %.3fs +/- %.3fs\n",
-			 $num_complete, $x, $x2);
+	    printf $TTY ("Completed jobs: %d (%d reaped)  "
+			 . "Run time: %.3fs +/- %.3fs\n",
+			 $num_complete, $num_reaped, $x, $x2);
 	}
 	print $TTY "Other jobs    : $num_other\n" if $num_other;
 	print $TTY "\n";
@@ -419,7 +416,7 @@ Forks::Super::Debug - debugging and logging routines for Forks::Super distro
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 VARIABLES
 
@@ -488,9 +485,9 @@ value of C<$!> that can be produced.
 Writes information about all known jobs to the console in response
 to an OS signal.
 
-Many implementations of the Java Virtual Machine have a useful debugging
-feature where it will dump a list of all thread stacks when the JVM
-receives a C<SIGQUIT> signal.
+This feature is inspired by the many implementations of the Java
+Virtual Machine that can dump a list of all thread stack traces
+when the JVM receives a C<SIGQUIT> signal.
 
 C<Forks::Super::Debug::enable_dump> is this module's attempt to
 emulate this feature. When the program receives the specified signal,
@@ -528,7 +525,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2011, Marty O'Brien.
+Copyright (c) 2009-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

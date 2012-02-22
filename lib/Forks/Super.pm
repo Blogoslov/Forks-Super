@@ -48,7 +48,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -626,7 +626,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.58
+Version 0.59
 
 =head1 SYNOPSIS
 
@@ -3242,7 +3242,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2011, Marty O'Brien.
+Copyright (c) 2009-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

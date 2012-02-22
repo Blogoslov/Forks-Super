@@ -15,19 +15,6 @@ Forks::Super::Job::Timeout::warm_up();
 # "expiration" options
 #
 
-SKIP: {
-
-=begin XXXXXX workaround 0.55
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	skip "alarm function unavailable on this system ($^O,$]), "
-	    . "can't test timeout feature", 3;
-    }
-
-=end XXXXXX
-
-=cut
-
 #######################################################
 
 my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 0 };
@@ -40,4 +27,3 @@ ok($? != 0, "job failed with non-zero STATUS $?");
 
 #######################################################
 
-} # end SKIP

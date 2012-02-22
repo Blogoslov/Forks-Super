@@ -30,7 +30,7 @@ my $t2 = Time::HiRes::time();
 $p = wait 3;
 my $t3 = Time::HiRes::time();
 ($t,$t2) = ($t3-$t,$t3-$t2);
-okl($t2 >= 2.95 && $t2 <= 4.05,        ### 6 ###
+okl($t2 >= 2.95 && $t2 <= 4.5,         ### 6 ###
    "wait with short timeout returns at end of timeout ${t}s ${t2}s "
    . "expected ~3s");
 

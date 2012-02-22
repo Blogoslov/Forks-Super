@@ -24,7 +24,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -117,6 +117,12 @@ sub _check_daemon_state {
 	$job->{state} = 'DAEMON-COMPLETE';
     }
     return;
+}
+
+sub is_reaped {
+    my $job = shift;
+    my $state = $job->state;
+    return defined($state) && $state eq 'REAPED';
 }
 
 sub is_complete {
@@ -1940,7 +1946,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 SYNOPSIS
 
@@ -2737,7 +2743,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2011, Marty O'Brien.
+Copyright (c) 2009-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.8.8 or,

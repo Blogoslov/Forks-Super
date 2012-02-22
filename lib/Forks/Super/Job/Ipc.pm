@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -1029,34 +1029,6 @@ sub _cleanup {
     }
     return;
 }
-
-=begin XXXXXX removed 0.53
-
-#
-# if cleanup is desired, trap signals that would normally terminate
-# the program.
-#
-sub _trap_signals {
-    return if $SIGNALS_TRAPPED++;
-
-    my $cleanup = \&__cleanup__;
-    foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
-	$XSIG{$sig}[-1] = $cleanup;
-    }
-    return;
-}
-
-sub _untrap_signals {
-    foreach my $sig (qw(INT TERM HUP QUIT PIPE)) {
-	$XSIG{$sig}[-1] = undef;
-    }
-    return;
-}
-
-=end XXXXXX
-
-=cut
-
 
 sub __cleanup__ {
     my $SIG = shift;

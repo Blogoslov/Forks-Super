@@ -395,7 +395,8 @@ sub process_test_output {
 		warn "Status $status from test $test_file does not match ",
 		    "reported exit status $expected_status\n";
 	    }
-	    $fail{$test_file} ||= {"NZEC_$expected_status" => 1};
+	    $fail{$test_file}{"NZEC_$expected_status"}++;
+#	    $fail{$test_file} ||= {"NZEC_$expected_status" => 1};
 	    $not_ok++;
 	}
 	elsif ($s =~ /Non-zero wait status: (\d+)/) {
@@ -813,7 +814,7 @@ forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 SYNOPSIS
 
@@ -1162,7 +1163,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2010-2011, Marty O'Brien.
+Copyright (c) 2010-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

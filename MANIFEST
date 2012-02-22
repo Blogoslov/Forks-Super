@@ -212,3 +212,4 @@ bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
 TODO-1.0                                 # roadmap for major release
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

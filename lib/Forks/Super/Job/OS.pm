@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -307,41 +307,6 @@ sub poor_mans_alarm {
 	return $pm_pid;
     }
 }
-
-=begin XXXXXX removed 0.55 NOT USED
-
-sub kill_Win32_process_tree {
-    my (@pids) = @_;
-    my $count = 0;
-    foreach my $pid (@pids) {
-	next if !defined($pid) || $pid == 0;
-
-	# How many ways are there to kill a process in Windows?
-	# How many do you need?
-
-	my $c1 = () = grep { /ERROR/ } qx(TASKKILL /PID $pid /F /T 2>&1);
-	if ($c1) {
-	    $c1 = system("TASKILL $pid /A > nul");
-	}
-	if ($c1 && CONFIG('Win32::Process::Kill')) {
-	    $c1 = !Win32::Process::Kill::Kill($pid);
-	}
-
-	if ($c1) {
-	    my $c2 = () = qx(TASKLIST /FI \"pid eq $pid\" 2> nul);
-	    if ($c2 == 0) {
-		warn 'Forks::Super::Job::OS::kill_Win32_process_tree: ',
-		"$pid: no such process?\n";
-	    }
-	}
-	$count += !$c1;
-    }
-    return $count;
-}
-
-=end XXXXXX
-
-=cut
 
 1;
 

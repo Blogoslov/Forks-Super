@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 sub new {
     my ($pkg, %args) = @_;
@@ -93,11 +93,30 @@ sub release {
 sub acquireAndRelease {
     my ($self, $resource, $timeout) = @_;
     if (defined($timeout) && $timeout ne '') {
-	my $z = $self->acquire($resource,$timeout) && $self->release($resource);
-	return $z;
+	my $z1 = $self->acquire($resource,$timeout);
+	if ($z1) {
+	    my $z2 = $self->release($resource);
+	    if (!$z2) {
+		$! = 502;
+	    }
+	    return $z2;
+	} else {
+	    $! = 501;
+	    return $z1;
+	}
     }
-    my $z2 = $self->acquire($resource) && $self->release($resource);
-    return $z2;
+
+    my $z1 = $self->acquire($resource);
+    if ($z1) {
+	my $z2 = $self->release($resource);
+	if (!$z2) {
+	    $! = 504;
+	}
+	return $z2;
+    } else {
+	$! = 503;
+	return $z1;
+    }
 }
 
 sub releaseAfterFork {
@@ -132,7 +151,7 @@ Forks::Super::Sync - portable interprocess synchronization object
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 SYNOPSIS
 
@@ -302,7 +321,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2011, Marty O'Brien.
+Copyright (c) 2009-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

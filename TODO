@@ -246,11 +246,13 @@ Possible TODOs:
     _X_ getc_stdout/getc_stderr methods like read_stdout/read_stderr?
 
     ___ parent_dump enhancements:
-        ___ get and display stack trace of natural/sub-style children
+        _X_ get and display stack trace of natural/sub-style children
 	___ measure input and output for IPCxxxHandle classes
 
     ___ CPAN testers find lots of timeout failures in FreeBSD that I can't
-        reproduce. Are there circumstances where the SIGALRM isn't 
-	sent/received?
+        reproduce. Are there circumstances/configurations where the
+	SIGALRM isn't sent or received?
 
     _X_ system-limits.pl discover which mutexes work for FS::Sync
+
+    _X_ waitall is slow when there are a lot of jobs to reap

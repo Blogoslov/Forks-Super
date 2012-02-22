@@ -1,12 +1,12 @@
 ---
-abstract: 'a module to retrieve system load averages.'
+abstract: a module to retrieve system load averages.
 author:
   - "Marty O'Brien <mob@cpan.org>"
 build_requires:
   Module::Build: 0.25
   Test::More: 0
 dynamic_config: 0
-generated_by: 'Module::Build version 0.38, CPAN::Meta::Converter version 2.112621'
+generated_by: 'Module::Build version 0.3901, CPAN::Meta::Converter version 2.112621'
 keywords:
   - cpu
   - load

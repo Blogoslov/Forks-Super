@@ -7,8 +7,8 @@ use POSIX ':sys_wait_h';
 use Win32::Semaphore;
 
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.58';
-our $NOWAIT_YIELD_DURATION = 50;
+our $VERSION = '0.59';
+our $NOWAIT_YIELD_DURATION = 250;
 my @RELEASE_ON_EXIT = ();
 
 # Something we have to watch out for is a process dying without
@@ -37,10 +37,12 @@ sub new {
     # initial value of 0 means that resource is locked.
     # after fork (in &releaseAfterFork), parent will release {parent_sync}
     # and child will release {child_sync}
-    $self->{parent_sync} = Win32::Semaphore->new(0,1);
-    $self->{child_sync} = Win32::Semaphore->new(0,1);
+
+    $self->{parent_sync} = Win32::Semaphore->new(0,1,"$^T-$$-p");
+    $self->{child_sync} = Win32::Semaphore->new(0,1,"$^T-$$-c");
     $self->{ppid} = $$;
     $self->{acquired} = [];
+    $self->{invalid} = [];
 
     return $self;
 }
@@ -151,7 +153,40 @@ sub release {
 	return 0;
     }
     $self->{acquired}[$n] = 0;
-    return $self->{sem} && $self->{sem}[$n] && $self->{sem}[$n]->release();
+    if ($self->{sem} && $self->{sem}[$n]) {
+
+	local ($!,$^E) = (0,0);
+
+	my $z = eval { $self->{sem}[$n]->release() };
+	if ($z) { return $z; }
+
+	# does carp clear $! or $^E?  that's inconvenient
+	my ($e,$E) = (0+$!,0+$^E);
+	carp "Forks::Super::Sync::Win32::release[$n] failed: $!/$^E/$@ // ",
+		"$e/$E";
+
+	if ($E == 6 || $E == 126) { # The handle is invalid
+				      # The specified module could not be found
+	    # XXX - why does this happen?
+	    $self->{invalid}[$n] = 1;
+	    return -1;
+	}
+
+print STDERR "sem[$n] exists but \$!,\$^E are $!,$^E,$e,$E\n";	
+
+	return;
+
+    } elsif ($self->{DESTROYING}) {
+	return -1;
+    } elsif ($self->{invalid}[$n]) {
+	return -1;
+    } else {
+	carp "Forks::Super::Sync::Win32: ",
+		"release [$n] called on undefined semaphore";
+	$self->{invalid}[$n] = 1;
+	return -1;
+    }
+#   return $self->{sem} && $self->{sem}[$n] && $self->{sem}[$n]->release();
 }
 
 sub remove {
@@ -162,6 +197,7 @@ sub remove {
 
 sub DESTROY {
     my $self = shift;
+    $self->{DESTROYING} = 1;
     $self->release($_) for 0 .. $self->{count}-1;
     $self->{sem} = [];
 }

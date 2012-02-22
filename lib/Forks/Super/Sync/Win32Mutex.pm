@@ -8,7 +8,7 @@ use strict;
 use warnings;
 
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 our $NOWAIT_YIELD_DURATION = 50; # milliseconds
 
 # Something we have to watch out for is a process dying without
@@ -33,7 +33,9 @@ sub new {
 	count => "0E0", initial => [],
 	);
 
-    $self->{mutex} = [ map { Win32::Mutex->new(0) } 1 .. $count ];
+    # does creating a unique name help?
+    $self->{mutex} = [ map { Win32::Mutex->new(0, "$$-$^T-$_") } 1 .. $count ];
+    $self->{invalid} = [ (0) x $count ];
 
     return $self;
 }
@@ -51,9 +53,7 @@ sub releaseAfterFork {
 
     $self->{isync}->releaseAfterFork;
 
-    if (0) {
-
-
+    if (0) {  # 0  here 
     if ($label eq 'P') {
 	$self->{isync}->release(0);
 	$self->{isync}->acquireAndRelease(1);
@@ -81,7 +81,9 @@ sub _wait_on {
 	    return 3;
 	}
 
-	my $z = $self->{mutex} && $self->{mutex}[$n]->wait($NOWAIT_YIELD_DURATION);
+	my $z = $self->{mutex} && 
+	    $self->{mutex}[$n]->wait($NOWAIT_YIELD_DURATION);
+
 	if ($z) {
 	    return 1;
 	}
@@ -106,6 +108,7 @@ sub acquire {
     my ($self, $n, $timeout) = @_;
     return if $n < 0 || $n >= $self->{count};
     return -1 if $self->{acquired}[$n];
+    return -2 if $self->{invalid}[$n];
 
     my $expire = -1;
     if (defined $timeout) {
@@ -125,11 +128,24 @@ sub release {
     my ($self, $n) = @_;
     return unless $n >= 0 && $n < $self->{count};
     return 0 unless $self->{acquired}[$n];
+    return -1 if $self->{invalid}[$n];
 
+    local($!,$^E) = (0,0);
 
     my $z = eval { $self->{mutex}[$n]->release };
     if ($z) {
 	$self->{acquired}[$n] = 0;
+    } elsif ($@ && !($self->{mutex} && $self->{mutex}[$n])) {
+	carp "Win32Mutex release error [$n] - $@\n" unless $self->{DESTROYING};
+	$self->{invalid}[$n]++;
+	$self->{acquired}[$n] = 0;
+	return -1;
+    } elsif ($^E == 6) { # The handle is invalid
+	# XXX why does this happen?
+	carp "Win32Mutex release error [$n]: $^E\n" unless $self->{DESTROYING};
+	$self->{invalid}[$n]++;
+	$self->{acquired}[$n] = 0;
+	return -1;
     } else {
 	carp "Win32Mutex release error: $^E";
     }
@@ -142,6 +158,7 @@ sub remove {
 
 sub DESTROY {
     my $self = shift;
+    $self->{DESTROYING} = 1;
     $self->release($_) for 0 .. $self->{count}-1;
     $self->{mutex} = [];
 }
@@ -156,7 +173,7 @@ Forks::Super::Sync::Win32Mutex
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 SYNOPSIS
 
@@ -188,4 +205,3 @@ releasing its locks.
 L<Forks::Super::Sync>
 
 =cut
-

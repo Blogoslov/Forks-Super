@@ -20,7 +20,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 my ($productive_waitpid_code);
 my $respect_SIGCHLD_ignore = 1;
@@ -117,9 +117,16 @@ sub waitall {
     my $waited_for = 0;
     my $expire = Time::HiRes::time() + $timeout ;
     debug('waitall: waiting on all procs') if $DEBUG;
+
+    foreach my $job (@Forks::Super::Job::ALL_JOBS) {
+	if ($job->state eq 'COMPLETE') {
+	    $job->_mark_reaped;
+	    ++$waited_for;
+	}
+    }
+
     my $pid;
     do {
-	# $productive_waitpid_code->() if $productive_waitpid_code;
 	$pid = Forks::Super::Wait::wait($expire - Time::HiRes::time());
 	if ($DEBUG) {
 	    debug("waitall: caught pid $pid");

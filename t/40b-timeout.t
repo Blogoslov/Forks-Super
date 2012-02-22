@@ -22,32 +22,18 @@ if (${^TAINT}) {
 # "expiration" options
 #
 
-SKIP: {
+#######################################################
 
-=begin XXXXXX workaround 0.55
+my $u = Time::HiRes::time();
+my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
+my $t = Time::HiRes::time();
+my $p = wait;
+my $v = Time::HiRes::time();
+($t,$u)=($v-$t,$v-$u);
+ok($p == $pid, "wait successful; Expected $pid got $p");
+okl($t > 3.9 && $u <= 8.75,                 ### 2b ### was 7, obs 8.57
+    "job completed before timeout ${t}s ${u} expected ~5s");
+ok($? == 0, "job completed with zero exit STATUS");
 
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	skip "alarm function unavailable on this system ($^O,$]), "
-	    . "can't test timeout feature", 3;
-    }
+#######################################################
 
-=end XXXXXX
-
-=cut
-
-    #######################################################
-
-    my $u = Time::HiRes::time();
-    my $pid = fork { sub => sub { sleep 5; exit 0 }, timeout => 10 };
-    my $t = Time::HiRes::time();
-    my $p = wait;
-    my $v = Time::HiRes::time();
-    ($t,$u)=($v-$t,$v-$u);
-    ok($p == $pid, "wait successful; Expected $pid got $p");
-    okl($t > 3.9 && $u <= 8.75,                 ### 2b ### was 7, obs 8.57
-	"job completed before timeout ${t}s ${u} expected ~5s");
-    ok($? == 0, "job completed with zero exit STATUS");
-
-    #######################################################
-
-} # end SKIP

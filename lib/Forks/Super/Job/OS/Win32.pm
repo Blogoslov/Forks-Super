@@ -27,7 +27,7 @@ if (!&Forks::Super::Util::IS_WIN32ish) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 ##################################################################
@@ -933,28 +933,5 @@ sub system1_win32_process {
     $Forks::Super::Job::WIN32_PROC = undef;
     return $c1;
 }
-
-=begin XXXXXX removed 0.55
-
-# called from Forks::Super::Job::_postlaunch_daemon_Win32
-#
-# if job has daemon option AND timeout option, then we want to
-# kill off a daemon process after the timeout expires.
-#
-# one way to do this is to launch a separate small program
-# that does nothing but enforce the timeout.
-#
-sub poor_mans_alarm {
-    my ($pid, $timeout) = @_;
-
-    # program to monitor a pid:
-    #     sleep 1,kill 0,$pid or exit for 1..$timeout;kill -9,$pid
-    my $prog = "sleep 1,kill(0,$pid)||exit for 1..$timeout;kill -9,$pid";
-    return system 1, qq[$^X -e "$prog"];
-}
-
-=end XXXXXX
-
-=cut
 
 1;

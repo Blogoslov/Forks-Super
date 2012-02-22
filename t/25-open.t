@@ -96,21 +96,6 @@ ok($pid == waitpid($pid,0), "job reaped");
 
 #############################################################################
 
-# SKIP: {
-
-=begin XXXXXX workaround in v0.55
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	skip "no alarm(), can't test additional option", 7;
-    }
-    if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0) {
-	skip "alarm(), sleep() incompatible, can't test additional options", 7;
-    }
-
-=end XXXXXX
-
-=cut
-
 @cmd = ($^X, "t/external-command.pl",
 	   "-e=Hello", "-s=17", "-y=3", "-e=whirled");
 ($fh_in, $fh_out, $fh_err, $pid, $job) 
@@ -149,7 +134,5 @@ waitpid $pid,0;
 ok($job->{status} != 0, 
    "open3: job timed out status $job->{status}!=0")  ### 28 ###
     or diag("status was $job->{status}, expected ! 0");
-
-# }
 
 #############################################################################

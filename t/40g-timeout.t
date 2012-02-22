@@ -92,40 +92,32 @@ waitall;
 
 SKIP: {
 
-=workaround 0.55 XXXXXX
-
-    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-	skip "alarm function unavailable on this system ($^O,$]), "
-	    . "can't test timeout feature", 4;
+    if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+	skip "setpgrp() unavailable, can't test process group manipulation", 4;
     }
 
-=cut
+    my ($job, $pgid, $ppgid);
 
-if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-    skip "setpgrp() unavailable, can't test process group manipulation", 4;
-}
-my ($job, $pgid, $ppgid);
+    # job without expiration
+    $ppgid = getpgrp();
+    my $pid = fork { sub => sub { sleep 5 } };
+    $job = Forks::Super::Job::get($pid);
+    $pgid = $job->{pgid};
+    my $p = waitpid -$ppgid, 0;
+    ok($p == $pid && $pgid == $ppgid, 
+       "child pgid set to parent pgid")
+	or diag("Expect waitpid output $p == pid $pid, ",
+		"pgid $pgid == ppgid $ppgid");
 
-# job without expiration
-$ppgid = getpgrp();
-my $pid = fork { sub => sub { sleep 5 } };
-$job = Forks::Super::Job::get($pid);
-$pgid = $job->{pgid};
-my $p = waitpid -$ppgid, 0;
-ok($p == $pid && $pgid == $ppgid, 
-   "child pgid set to parent pgid")
-    or diag("Expect waitpid output $p == pid $pid, ",
-	    "pgid $pgid == ppgid $ppgid");
-
-# job with expiration
-$pid = fork { timeout => 3, sub => sub { sleep 5 } };
-$job = Forks::Super::Job::get($pid);
-$pgid = $job->{pgid};
-ok($pgid != $ppgid, "child pgid != parent pgid with timeout");
-$p = waitpid -$ppgid, 0;
-ok($p == -1, "waitpid on parent pgid returns -1");
-$p = waitpid -$pgid, 0;
-ok($p == $pid, "waitpid on child pgid returns child pid")
-    or diag("waitpid returned $p, expected $pid");
+    # job with expiration
+    $pid = fork { timeout => 3, sub => sub { sleep 5 } };
+    $job = Forks::Super::Job::get($pid);
+    $pgid = $job->{pgid};
+    ok($pgid != $ppgid, "child pgid != parent pgid with timeout");
+    $p = waitpid -$ppgid, 0;
+    ok($p == -1, "waitpid on parent pgid returns -1");
+    $p = waitpid -$pgid, 0;
+    ok($p == $pid, "waitpid on child pgid returns child pid")
+	or diag("waitpid returned $p, expected $pid");
 } # end SKIP
 

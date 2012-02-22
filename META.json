@@ -1,0 +1,59 @@
+{
+   "abstract" : "extensions and convenience methods to manage background processes",
+   "author" : [
+      "Marty O'Brien <mob\\@cpan.org>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 6.62, CPAN::Meta::Converter version 2.112150",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "Forks-Super",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ],
+      "package" : [
+         "Sys::CpuAffinity",
+         "Signals::XSIG",
+         "Signals::XSIG::Default",
+         "Signals::XSIG::TieArray56"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : 0
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : 0
+         }
+      },
+      "runtime" : {
+         "recommends" : {
+            "DateTime::Format::Natural" : "0.89",
+            "JSON" : "2.0",
+            "Sys::CpuAffinity" : "0.91",
+            "Sys::CpuLoadX" : "0.02",
+            "Win32::API" : "0.43",
+            "Win32::Process" : "0.11",
+            "Win32::Process::Kill" : "2.64",
+            "YAML" : "0.62",
+            "YAML::Tiny" : "1.39"
+         },
+         "requires" : {
+            "Test::More" : 0,
+            "Time::HiRes" : "1.30"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "version" : "0.59"
+}

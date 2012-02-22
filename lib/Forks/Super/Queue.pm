@@ -17,7 +17,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.58';
+our $VERSION = '0.59';
 
 # must sync FIRST_DEFERRED_ID with Win32 code in Forks::Super::Util::isValidPid
 use constant FIRST_DEFERRED_ID => -500000;
@@ -533,7 +533,7 @@ Forks::Super::Queue
 
 =head1 VERSION
 
-0.58
+0.59
 
 =head1 DESCRIPTION
 
@@ -603,7 +603,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2011, Marty O'Brien.
+Copyright (c) 2009-2012, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,
