@@ -43,6 +43,16 @@ our %META_MERGE
 ######################################################################
 
 if ($] < 5.007003) {
+
+    # common but intermittent test failures on linux v5.6.2:
+    #   t/32
+    #   t/30b
+    #   t/48a
+    #   t/43g
+    #   t/56a
+    #   t/44g
+    #   and others
+
     warn qq{
 
 WARNING !!! The Forks::Super module makes heavy use of 

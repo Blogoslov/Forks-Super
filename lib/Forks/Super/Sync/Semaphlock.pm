@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Carp;
 use Time::HiRes;
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 our @ISA = qw(Forks::Super::Sync);
 
 my $ipc_seq = 0;

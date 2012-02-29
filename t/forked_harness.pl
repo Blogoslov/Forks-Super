@@ -137,7 +137,8 @@ $Forks::Super::ON_BUSY = 'block' if $ENV{BLOCK} || $pause > 0;
 sub color_print;
 
 # these colors are appropriate when your terminal has a dark background.
-# XXX-How can this program determine when your terminal has a dark background?
+# XXX-How can this program determine when your terminal
+#     has a dark background?
 my %colors = (ITERATION => 'bold white',
 	      GOOD_STATUS => 'bold green',
 	      BAD_STATUS => 'bold red',
@@ -146,7 +147,7 @@ my %colors = (ITERATION => 'bold white',
 	      NORMAL => '');
 
 if ($debug) {
-    color_print('DEBUG', 'MAX_PROC is $Forks::Super::MAX_PROC, ',
+    color_print('DEBUG', "MAX_PROC is $Forks::Super::MAX_PROC, ",
 		"on busy is $Forks::Super::ON_BUSY\n");
 }
 
@@ -395,8 +396,8 @@ sub process_test_output {
 		warn "Status $status from test $test_file does not match ",
 		    "reported exit status $expected_status\n";
 	    }
-	    $fail{$test_file}{"NZEC_$expected_status"}++;
-#	    $fail{$test_file} ||= {"NZEC_$expected_status" => 1};
+#	    $fail{$test_file}{"NZEC_$expected_status"}++;
+	    $fail{$test_file} ||= {"NZEC_$expected_status" => 1};
 	    $not_ok++;
 	}
 	elsif ($s =~ /Non-zero wait status: (\d+)/) {
@@ -814,7 +815,7 @@ forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.59
+0.60
 
 =head1 SYNOPSIS
 

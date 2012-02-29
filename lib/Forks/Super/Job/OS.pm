@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -175,9 +175,12 @@ sub get_cpu_load {
     return -1.0;
 }
 
+my $_num_procs_cached;
 sub get_number_of_processors {
-    return _get_number_of_processors_from_Sys_CpuAffinity()
+    return $_num_procs_cached
+	|| _get_number_of_processors_from_Sys_CpuAffinity()
 	|| _get_number_of_processors_from_proc_cpuinfo()
+	|| _get_number_of_processors_from_dmesg_bsd()
 	|| _get_number_of_processors_from_psrinfo()
 	|| _get_number_of_processors_from_ENV()
 	|| $Forks::Super::SysInfo::NUM_PROCESSORS
@@ -192,7 +195,7 @@ sub get_number_of_processors {
 
 sub _get_number_of_processors_from_Sys_CpuAffinity {
     if (CONFIG('Sys::CpuAffinity')) {
-	return Sys::CpuAffinity::getNumCpus();
+	return $_num_procs_cached = Sys::CpuAffinity::getNumCpus();
     }
     return 0;
 }
@@ -209,7 +212,7 @@ sub _get_number_of_processors_from_proc_cpuinfo {
 	    }
 	    close $procfh;
 	}
-	return $num_processors;
+	return $_num_procs_cached = $num_processors;
     }
     return;
 }
@@ -220,7 +223,7 @@ sub _get_number_of_processors_from_psrinfo {
 	my $cmd = CONFIG('/psrinfo') . ' -v';
 	my @psrinfo = qx($cmd 2>/dev/null);     ## no critic (Backtick)
 	my $num_processors = grep { /Status of processor \d+/ } @psrinfo;
-	return $num_processors;
+	return $_num_procs_cached = $num_processors;
     }
     return;
 }
@@ -228,71 +231,97 @@ sub _get_number_of_processors_from_psrinfo {
 sub _get_number_of_processors_from_ENV {
     # sometimes set in Windows, can be spoofed
     if ($ENV{NUMBER_OF_PROCESSORS}) {
-	return $ENV{NUMBER_OF_PROCESSORS};
+	return $_num_procs_cached = $ENV{NUMBER_OF_PROCESSORS};
     }
     return 0;
 }
 
-sub _get_number_of_processors_from_dmesg {
-    if (CONFIG('/dmesg')) {
-	my $cmd = CONFIG('/dmesg') . ' | grep -i cpu';
-	my @dmesg = qw($cmd);
+sub _get_number_of_processors_from_dmesg_bsd {
+    # imported from  Sys::CpuAffinity::_getNumCpus_from_dmesg_bsd. 
+    # this is one of the few reliably methods we have for openbsd,
+    # where Sys::CpuAffinity can't be installed.
+    return 0 if $^O !~ /bsd/i;
 
-	# Looking at Linux 2.6.18-128.7.1.el5 x86_64 x86_64 x86_64 GNU/Linux,
-	# there are many ways to get this out:
+    my @dmesg;
+    if (-r '/var/run/dmesg.boot' && open my $fh, '<', '/var/run/dmesg.boot') {
+	@dmesg = <$fh>;
+	close $fh;
+    } elsif (! CONFIG('/dmesg')) {
+	return 0;
+    } else {
+	my $cmd = CONFIG('/dmesg');
+	@dmesg = qx($cmd 2> /dev/null);
+    }
 
-	my ($brought) = grep { /Brought up \d+ CPUs/i } @dmesg;
-	if ($brought && $brought =~ /Brought up (\d+) CPUs/i) {
-	    return $1;
-	}
+    # on the version of FreeBSD that I have to play with
+    # (8.0), dmesg contains this message:
+    #
+    #       FreeBSD/SMP: Multiprocessor System Detected: 2 CPUs
+    #
+    # so we'll go with that.
+    #
+    # on NetBSD, the message is:
+    #
+    #       cpu3 at mainbus0 apid 3: AMD 686-class, 1975MHz, id 0x100f53
 
-	my @initializing = grep { /Initializing CPU\#\d+/ } @dmesg;
-	if (@initializing > 0) {
-	    return scalar @initializing;
-	}
+    # try FreeBSD format
+    my @d = grep { /Multiprocessor System Detected:/i } @dmesg;
+    my $ncpus;
+    if (@d > 0) {
+	_debug("dmesg_bsd contains:\n@d");
+	($ncpus) = $d[0] =~ /Detected: (\d+) CPUs/i;
+    }
 
-	my @cpu_num = grep { /^cpu\#?\d+:/i } @dmesg;
-	if (@cpu_num > 0) {
-	    my %cpu_num = map {
-		/^cpu\#?(\d+):/ ? ($1 => 1) : ();
-	    } @cpu_num;
-	    if (0 < keys %cpu_num) {
-		return scalar keys %cpu_num;
+    # try NetBSD format. This will also probably work for OpenBSD.
+    if (!$ncpus) {
+	# 1.05 - account for duplicates in @dmesg
+	my %d = ();
+	@d = grep { /^cpu\d+ at / } @dmesg;
+	foreach my $dmesg (@d) {
+	    if ($dmesg =~ /^cpu(\d+) at /) {
+		$d{$1}++;
 	    }
 	}
+	_debug("dmesg_bsd[2] contains:\n",@d);
+	$ncpus = scalar keys %d;
     }
-    return;
+    if (@dmesg < 50) {
+	_debug("full dmesg log:\n", @dmesg);
+    }
+    return $_num_procs_cached = $ncpus || 0;
 }
+
 
 # impose a timeout on a process from a separate small process.
 # Usually, this is not the best way to get a process to shutdown
-# after a timeout. Starting and stopping a new process has a lot
-# of overhead for the operating system. It uses up a precious
+# after a timeout. Starting and stopping a new process has
+# overhead for the operating system. It uses up a precious
 # space in the process table. It terminates the process without
 # prejudice, not allowing the process to clean itself up or
 # otherwise trap a signal.
 #
-# But sometimes it is the only way if
+# But sometimes it is the best way if
 #   * alarm() is not implemented on your system
 #   * SIGALRM might not get delivered during a system call
 #   * alarm() and sleep() are not compatible on your system
 #   * you want to timeout a process that you will start with exec()
+#   * the process you are monitoring also wants to use alarm/SIGALRM
 #
 sub poor_mans_alarm {
-    my ($pid, $timeout) = @_;
+    my ($pid, $time) = @_;
 
     if ($pid < 0) {
 	# don't want to run in a separate process to kill a thread.
 	if (CORE::fork() == 0) {
-	    $0 = "PMA[2]($pid,$timeout)";
-	    sleep 1, kill(0,$pid) || exit for 1..$timeout;
+	    $0 = "PMA[2]($pid,$time)";
+	    sleep 1, kill(0,$pid) || exit for 1..$time;
 	    kill -9, $pid;
 	    exit;
 	}
     }
 
     # program to monitor a pid:
-    my $prog = "\$0='PMA($pid,$timeout)';sleep 1,kill(0,$pid)||exit for 1..$timeout;kill -9,$pid";
+    my $prog = "\$0='PMA($pid,$time)';sleep 1,kill(0,$pid)||exit for 1..$time;kill -9,$pid";
     if (&IS_WIN32) {
 	return system 1, qq[$^X -e "$prog"];
     } else {

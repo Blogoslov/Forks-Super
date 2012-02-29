@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -678,7 +678,7 @@ sub _preconfig_fh_pipes {
     }
 
     if ($job->{debug}) {
-	debug("created pipe pairs for $job");
+	debug("created pipe pairs for ", $job->{pid});
     }
     return;
 }
@@ -1172,6 +1172,7 @@ sub _END_foreground_cleanup {
     }
 
     foreach my $job (@Forks::Super::ALL_JOBS) {
+	next unless ref $job;
 	$job->close_fh('all');
     }
     foreach my $fh (values %Forks::Super::CHILD_STDIN,
@@ -2857,7 +2858,7 @@ sub _getc_pipe {
     # pipes are blocking by default.
     if ($blocking_desired) {
 	# XXX - prefer  sysread  to  getc  here?
-	return getc($sh);
+	return _unbuffered_getc($sh);
     }
 
     my $fileno = fileno($sh);
@@ -2887,7 +2888,12 @@ sub _getc_pipe {
     }
 
     # XXX - prefer  sysread  to  getc  here ?
-    return getc($sh);
+    return _unbuffered_getc($sh);
+}
+
+sub _unbuffered_getc {
+    my $n = sysread $_[0], my($cc), 1;
+    return $cc;
 }
 
 #

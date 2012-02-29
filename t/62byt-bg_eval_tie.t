@@ -1,12 +1,7 @@
 use Forks::Super ':test';
-use Test::More tests => 24;
+use Test::More tests => 38;
 use strict;
 use warnings;
-
-### scalar context ###
-#
-# result is a tie'd scalar, so exercise fetch/store
-#
 
 ok(!defined $Forks::Super::LAST_JOB, 
    "$$\\\$Forks::Super::LAST_JOB not set");
@@ -20,9 +15,9 @@ $Forks::Super::Config::CONFIG{"Data::Dumper"} = 0;
 
 SKIP: {
     if ($ENV{NO_YAML} || !Forks::Super::Config::CONFIG_module("YAML::Tiny")) {
-	skip "YAML::Tiny not available, skipping bg_eval tests", 22;
+	skip "YAML::Tiny not available, skipping bg_eval tests", 36;
     }
 
-    require "./t/62b-bg_eval.tt";
+    require "./t/62b-bg_eval_tie.tt";
 }
 

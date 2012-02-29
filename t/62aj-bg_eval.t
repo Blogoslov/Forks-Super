@@ -3,11 +3,6 @@ use Test::More tests => 24;
 use strict;
 use warnings;
 
-### scalar context ###
-#
-# result is a tie'd scalar, so exercise fetch/store
-#
-
 ok(!defined $Forks::Super::LAST_JOB, 
    "$$\\\$Forks::Super::LAST_JOB not set");
 ok(!defined $Forks::Super::LAST_JOB_ID, 
@@ -24,5 +19,5 @@ SKIP: {
 	skip "JSON module not available, skipping bg_eval tests", 22;
     }
 
-    require "./t/62b-bg_eval.tt";
+    require "./t/62a-bg_eval.tt";
 }

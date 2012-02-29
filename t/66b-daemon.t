@@ -91,7 +91,7 @@ my $n1 = fork {
     daemon => 0,
     sub => sub { 
         print time-$^T," DAEMON 1 MONITOR START\n";
-	sleep 1 while CORE::kill 'ZERO', $d1->{real_pid};
+	sleep 1 while CORE::kill 0, $d1->{real_pid};
         print time-$^T," DAEMON 1 MONITOR COMPLETE\n";
     },
     name => 'daemon1 monitor'

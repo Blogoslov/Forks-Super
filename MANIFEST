@@ -15,6 +15,7 @@ lib/Forks/Super/Sync/IPCSemaphore.pm
 lib/Forks/Super/Sync/Semaphlock.pm
 lib/Forks/Super/Sync/Win32.pm
 lib/Forks/Super/Sync/Win32Mutex.pm
+lib/Forks/Super/Tie/BackgroundArray.pm    # removed v0.52, reintroduced v0.60
 lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
 lib/Forks/Super/Tie/IPCDupSTDIN.pm
@@ -141,12 +142,18 @@ t/56b-env.t
 t/57-sync.t
 t/60-os.t
 t/61-callbacks.t
-t/62b-bg_eval.tt
-t/62bd-bg_eval.t
-t/62bj-bg_eval.t
-t/62by-bg_eval.t
-t/62byt-bg_eval.t
-t/63-bg_qx.t
+t/62a-bg_eval.tt
+t/62ad-bg_eval.t
+t/62aj-bg_eval.t
+t/62ay-bg_eval.t
+t/62ayt-bg_eval.t
+t/62b-bg_eval_tie.tt
+t/62bd-bg_eval_tie.t
+t/62bj-bg_eval_tie.t
+t/62by-bg_eval_tie.t
+t/62byt-bg_eval_tie.t
+t/63a-bg_qx.t
+t/63b-bg_qx_tie.t
 t/64-cpu_load.t
 t/65a-daemon.t
 t/65b-daemon.t
@@ -212,4 +219,3 @@ bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
 TODO-1.0                                 # roadmap for major release
 META.yml                                 Module meta-data (added by MakeMaker)
-META.json                                Module JSON meta-data (added by MakeMaker)

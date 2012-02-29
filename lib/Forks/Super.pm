@@ -38,7 +38,8 @@ $| = 1;
 
 our @EXPORT = qw(fork wait waitall waitpid);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
-			getc_stdout getc_stderr bg_eval bg_qx open2 open3);
+			getc_stdout getc_stderr 
+                        bg_eval bg_qx  open2 open3);
 my @export_ok_vars = qw(%CHILD_STDOUT %CHILD_STDERR %CHILD_STDIN);
 our @EXPORT_OK = (@export_ok_func, @export_ok_vars);
 our %EXPORT_TAGS =
@@ -48,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -94,6 +95,16 @@ sub import {
 		$Forks::Super::Config::IS_TEST = 1;
 		if ($args[$i] =~ /config/) {
 		    $Forks::Super::Config::IS_TEST_CONFIG = 1
+		}
+		if ($^O =~ /openbsd/
+		    && Forks::Super::Job::OS::get_number_of_processors() == 1) {
+
+		    # OpenBSD is not (as far as I can tell) very good at
+		    # swapping processes in and out of its cores. When it
+		    # needs to do it a lot, there is a lot of latency that
+		    # buggers a lot of timing tests.
+		    $ENV{TEST_LENIENT} = 1;
+
 		}
 
 		# preload some modules so lazy loading doesn't affect
@@ -187,6 +198,9 @@ sub _init {
 
     # Default value for $MAX_PROC should be tied to system properties
     $DEFAULT_MAX_PROC = $Forks::Super::SysInfo::MAX_FORK - 1;
+    if ($] < 5.007003) {
+	$DEFAULT_MAX_PROC = $Forks::Super::SysInfo::NUM_PROCESSORS;
+    }
 
     $MAX_PROC = $DEFAULT_MAX_PROC;
     $MAX_LOAD = -1;
@@ -626,7 +640,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.59
+Version 0.60
 
 =head1 SYNOPSIS
 
@@ -781,6 +795,11 @@ Version 0.59
     $result = bg_qx( "./long_running_command" );
     # ... do something else for a while and when you need the output ...
     print "output of long running command was: $result\n";
+
+    # if you need bg_eval or bg_qx functionality in list context ...
+    tie @result, 'Forks::Super::bg_eval', sub { long_running_calc() };
+    tie @output, 'Forks::Super::bg_qx', "./long_running_cmd";
+
 
     # --- convenience methods, compare to IPC::Open2, IPC::Open3
     my ($fh_in, $fh_out, $pid, $job) = Forks::Super::open2(@command);
@@ -942,11 +961,14 @@ If the deadline is some time in the past (if the timeout is
 not positive, or the expiration is earlier than the current time),
 then the child process will die immediately after it is created.
 
-Note that this feature uses the Perl L<alarm|perlfunc/"alarm">
-call and installs its own handler for C<SIGALRM>. Do not use this
-feature with a child L<sub|"sub"> that also uses C<alarm> or that
-installs another C<SIGALRM> handler, or the results will be
-undefined.
+This feature I<usually> uses Perl's L<alarm|perlfunc/"alarm"> call
+and installs its own handler for C<SIGALRM>, but an alternate
+L<"poor mans alarm"|http://stackoverflow.com/a/8452732/168657>
+is available. If you wish to use the C<timeout> or C<expiration>
+feature with a child L<sub|"sub"> that also uses 
+C<alarm>/C<SIGALRM>, or on a system that has issues with C<alarm>,
+you can also pass the option C<< use_alternate_alarm => 1 >>
+to force C<Forks::Super> to use the alternate alarm.
 
 If you have installed the 
 L<DateTime::Format::Natural|DateTime::Format::Natural> module,
@@ -2373,8 +2395,10 @@ an overloaded object that retrieves its value when it is I<used> in
 an expression. It is no longer a scalar I<reference> that retrieves
 its value when it is I<dereferenced>. >>
 
-B<< API change since v0.52: list context is no longer supported. >>
-Instead use a code reference that returns a list reference.
+B<< API change since v0.52: list context is no longer directly supported. >>
+To retrieve results of a code block evaluated in the background in list
+context, see
+L<Forks::Super::bg_eval tied class|"Forks::Super::bg_eval_tied_class">.
 
 Launches a block of code in a background process, returning immediately.
 The next time the result of the function call is referenced, interprocess
@@ -2441,7 +2465,9 @@ an overloaded object that retrieves its value when it is I<used> in
 an expression. It is no longer a scalar I<reference> that retrieves
 its value when it is I<dereferenced>. >>
 
-B<< API change since v0.52: list context is no longer supported. >>
+B<< API change since v0.52: list context is no longer directly supported. >>
+To receive output of a background process in list context, 
+see L<Forks::Super::bg_qx tied class|"Forks::Super::bg_qx_tied_class">.
 
 Launches an external program and returns immediately. Execution of
 the command continues in a background process. When the command completes,
@@ -2480,6 +2506,70 @@ See L<"LAST_JOB" under MODULE VARIABLES|"LAST_JOB"> below.
 See also: L<"bg_eval">.
 
 =back
+
+=begin COMMENT
+
+Forks%3A%3ASuper%3A%3Abg_eval_tied_class, 
+Forks%3A%3ASuper%3A%3Abg_qx_tied_class headers here are a hack so that
+links above like L<"Forks::Super::bg_qx tied class"> and
+L<"Forks::Super::bg_eval tied class"> will work.
+
+=end COMMENT
+
+=head3 Forks%3A%3ASuper%3A%3Abg_eval_tied_class
+
+=head3 Forks%3A%3ASuper%3A%3Abg_qx_tied_class
+
+=head3 Forks::Super::bg_eval tied class
+
+=head3 Forks::Super::bg_qx tied class
+
+=over 4
+
+=item C<< tie $result, 'Forks::Super::bg_eval', sub { CODE }, \%options >>
+
+=item C<< tie @result, 'Forks::Super::bg_eval', sub { CODE }, \%options >>
+
+=item C<< tie %result, 'Forks::Super::bg_eval', sub { CODE }, \%options >>
+
+=item C<< tie $output, 'Forks::Super::bg_qx', $command, \%options >>
+
+=item C<< tie @output, 'Forks::Super::bg_qx', $command, \%options >>
+
+=item C<< tie %output, 'Forks::Super::bg_qx', $command, \%options >>
+
+Alternative calls to L<"bg_eval"> and L<"bg_qx"> functions that also
+work in list context.
+
+Instead of calling
+
+    my $result = long_running_function($arg1, $arg2);
+    my @output = qx(some long running command);
+    my %hash = long_running_function_that_returns_hash();
+
+you could say
+
+    tie my $result,'Forks::Super::bg_eval',sub{long_running_function($arg1,$arg2)};
+    tie my @output,'Forks::Super::bg_qx',qq[some long running command];
+    tie my %hash,'Forks::Super::bg_eval',sub{long_running_function_that_returns_hash()};
+
+The result of each of these expressions is to tie a variable to the result
+of a background process. Like C<bg_qx> and C<bg_eval>, these expressions
+spawn a background process and return immediately. Also like C<bg_qx> and
+C<bg_eval>, the module retrieves the results of the background operation
+the next time the tied variables are evaluated, waiting for the background
+process to finish if necessary.
+
+Like other L<bg_qx|"bg_qx"> and L<bg_eval|"bg_eval"> calls, these
+expressions respect most of the additional options that you can pass
+to L<Forks::Super::fork|"fork">.
+
+    tie my @output, 'Forks::Super::bg_qx', "ssh me@remotehost who", { timeout => 10 };
+    tie my %result, 'Forks::Super::bg_eval', \&my_function, { cpu_affinity => 0x2 };
+
+=back
+
+
 
 =head2 Miscellaneous functions
 

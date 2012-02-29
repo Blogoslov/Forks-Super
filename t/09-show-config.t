@@ -49,6 +49,7 @@ print STDERR "Time_HiRes_TOL: $Forks::Super::SysInfo::TIME_HIRES_TOL\n";
 if ($Forks::Super::SysInfo::TIME_HIRES_TOL >= 0.5) {
     print STDERR "     are you serious?\n";
 }
+print STDERR "Number of cpus: $Forks::Super::SysInfo::NUM_PROCESSORS\n";
 
 print STDERR "\n";
 

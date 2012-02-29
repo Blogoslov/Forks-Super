@@ -5,7 +5,7 @@ use warnings;
 #
 # tests (24) for exercising bg_eval. This code should
 # not be run by itself, but should be <require>'d by
-# the test scripts (62j-bg_eval.t, 62y-bg_eval.t)
+# the test scripts (62aj-bg_eval.t, 62ay-bg_eval.t)
 # that wish to run them.
 # 
 

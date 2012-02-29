@@ -18,7 +18,7 @@ use warnings;
 use constant FOREVER => 9E9;
 use constant LONG_TIME => 9E8;
 
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -101,6 +101,11 @@ sub Forks::Super::Job::_config_timeout_child {
 	}
 	return;
     }
+
+    # XXX - are there systems that are inexplicably incompatible with alarm?
+    # I thought  freebsd  was like that some times (when CPAN tests would
+    # abort after 2-4 hours), but I haven't seen this problem in a while
+    # (since v0.56?)
 
     if ($Forks::Super::SysInfo::SLEEP_ALARM_COMPATIBLE <= 0
 	|| !$Forks::Super::SysInfo::CONFIG{'alarm'}

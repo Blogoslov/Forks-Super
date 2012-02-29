@@ -1,15 +1,15 @@
 #
 # Forks::Super::Tie::BackgroundScalar - lazy evaluation of a perl
-#    subroutine or external command
+#    expression in scalar context or external command
 #
-# Unlike previous version of Forks::Super::Tie::BackgroundScalar,
-# you don't need to dereference the result:
+# Since Forks::Super v0.43, you don't need to dereference the result of 
+# bg_eval.
 #
-# previous BackgroundScalar:
+# prior to v0.43: 
 #     $x = bg_eval { sub { sleep 3 ; 42 } };
 #     print "Expect $$x == 42\n";
 #
-# this BackgroundScalar:
+# since v0.43: 
 #     $x = bg_eval { sub { sleep 3 ; 42 } };
 #     print "Expect $x == 42\n";
 #
@@ -22,8 +22,8 @@ use Forks::Super::Wait 'WREAP_BG_OK';
 use Carp;
 use strict;
 use warnings;
-use overload
-    '""' => \&_fetch,
+use overload # XXX - what is overloading for? is it necessary?
+    '""' => sub { "" . $_[0]->_fetch },
     '+' => sub { $_[0]->_fetch + $_[1] },
     '*' => sub { $_[0]->_fetch * $_[1] },
     '&' => sub { $_[0]->_fetch & $_[1] },
@@ -67,7 +67,7 @@ use overload
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 # "protocols" for serializing data and the methods used
 # to carry out the serialization
@@ -225,7 +225,8 @@ sub is_ready {
 sub _fetch {
     my $self = shift;
 
-    # turn off overloaded hash dereferencing. Don't forget to turn it back on
+    # temporarily turn off overloaded hash dereferencing.
+    # it will be turned back on later
     my $class = $self->_unbless;
 
     if (!$self->{value_set}) {

@@ -71,11 +71,6 @@ Possible TODOs:
 
     ___ POSIX::RT::Timer as possible replacement for get/set itimer?
 
-    _O_ Understand why Windows hack needed for socket write (see 
-	FSJ::Ipc::write_stdin, FST::IPCSocketHandle::trivial_pause).
-	Is there a better solution?
-        ___ is it needed ? removed in v0.55 but MSWin32 tests pass now
-
     ___ Does anything bad happen when you set $SIG{CHLD} = 'IGNORE' ?
         'DEFAULT'? sub {} ? undef ?
         _X_ Yes. ANY setting for $SIG{CHLD} will let system calls
@@ -113,9 +108,6 @@ Possible TODOs:
         but they wouldn't return control to foreground process. Can this
 	be fixed?
 
-    ___ is _trap_signals call in FSJ::Ipc::_config_fh_parent necessary?
-        ___ was removed in 0.53, so we'll see
-
     ___ Track down, solve 'untie attempted while ... inner references'
         mystery with FST::IPCFileHandle
 	_X_ helps to explicitly assign (tied *$handle) to lexical
@@ -125,7 +117,8 @@ Possible TODOs:
         (since v0.43). Change the name? 
 
     ___ INET sockets as well as UNIX sockets, if you can commit to a port
-        before fork'ing and not bind to it until after fork'ing.
+        before fork'ing and not bind to it until after fork'ing. Or if you
+	can pass the port from parent to child with a pipe?
 
     ___ refactoring needed after getting daemon code to work.
         _x_ handle failures
@@ -162,7 +155,8 @@ Possible TODOs:
         a program using Forks::Super. The purpose is to make sure that
         a program runs in a detached process. The wrapper will set up
         all the (almost surely file based) IPC and then run the desired
-        program.
+        program. The other purpose is to execute a command on a remote
+	host.
 
     ___ backport to 5.6
         _x_ Signals/XSIG needs work
@@ -219,7 +213,7 @@ Possible TODOs:
         use FSJ::OS::poor_mans_alarm if the caller wants to use alarm's
 	in the child.
 	_x_ set  use_alternate_alarm => 1 
-	___ document?
+	_X_ document?
 
     ___ Anything to learn from python  multiprocessing  module? See   
         stackoverflow.com/questions/7931455/
@@ -243,8 +237,6 @@ Possible TODOs:
 
     ___ encryption layers on IO channels
 
-    _X_ getc_stdout/getc_stderr methods like read_stdout/read_stderr?
-
     ___ parent_dump enhancements:
         _X_ get and display stack trace of natural/sub-style children
 	___ measure input and output for IPCxxxHandle classes
@@ -252,7 +244,9 @@ Possible TODOs:
     ___ CPAN testers find lots of timeout failures in FreeBSD that I can't
         reproduce. Are there circumstances/configurations where the
 	SIGALRM isn't sent or received?
+	___ last observed 0.56
 
-    _X_ system-limits.pl discover which mutexes work for FS::Sync
-
-    _X_ waitall is slow when there are a lot of jobs to reap
+    ___ CPAN testers find lots of timing errors in openbsd. Is pause(n)
+        on openbsd prone to returning significantly more or less than n
+	seconds later? Would a busy wait just for openbsd make things
+	better or worse?

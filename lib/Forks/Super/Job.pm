@@ -24,7 +24,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -51,23 +51,14 @@ if ($use_overload) {
 
 sub new {
     my ($class, $opts) = @_;
-    my $self = {};
+    my $self = { pid => '' };
     if (ref $opts eq 'HASH') {
-	if (0 && $opts->{untaint}) {
-	    if ($opts->{env} && ref($opts->{env}) eq 'HASH') {
-		foreach my $k (%{$opts->{env}}) {
-		    ($opts->{env}{$k}) = $opts->{env}{$k}=~/(.*)/s;
-		}
-	    }
-	}
-
 	foreach (keys %$opts) {
 	    $self->{$_} = $opts->{$_} ;
 	}
     }
 
     $self->{__opts__} = $opts;
-
     $self->{created} = Time::HiRes::time();
     $self->{state} = 'NEW';
     $self->{ppid} = $$;
@@ -553,9 +544,7 @@ sub _postlaunch_parent {
 	$pid = $job->_postlaunch_daemon_parent($pid);
     }
     $job->{real_pid} = $pid;
-    if (!defined $job->{pid}) {
-	$job->{pid} = $pid;
-    }
+    $job->{pid} ||= $pid;
     $job->{start} = Time::HiRes::time();
 
     $job->_config_parent;
@@ -1946,7 +1935,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.59
+0.60
 
 =head1 SYNOPSIS
 

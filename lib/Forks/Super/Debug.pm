@@ -15,7 +15,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 our $DUMPSIG;
 
 our ($DEBUG, $DEBUG_FH, %_CARPED, 
@@ -416,7 +416,7 @@ Forks::Super::Debug - debugging and logging routines for Forks::Super distro
 
 =head1 VERSION
 
-0.59
+0.60
 
 =head1 VARIABLES
 

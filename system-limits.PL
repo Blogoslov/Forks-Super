@@ -25,6 +25,7 @@
 use lib q(lib);
 use strict;
 use warnings;
+use Config;
 
 
 my $limits_file = $ARGV[0] || "t/out/limits.$^O.$]";

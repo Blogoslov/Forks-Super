@@ -91,9 +91,9 @@ while (time < $t+10) {
     push @out, Forks::Super::read_stdout($pid);
     push @err, Forks::Super::read_stderr($pid);
     sleep 1;
-#   print "\@out:\n------\n@out\n\@err:\n-------\n@err\n";
 }
 
+# remaining tests are failure point in v5.6.2
 ok(@out == 3, scalar @out . " == 3 lines from STDOUT   [ @out ]");
 
 @err = grep { !/alarm\(\) not available/ } @err; # exclude warning to child STDERR

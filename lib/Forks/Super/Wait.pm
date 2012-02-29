@@ -11,6 +11,7 @@ use Forks::Super::Config;
 use Forks::Super::Queue;
 use Forks::Super::SysInfo;
 use Forks::Super::Tie::Enum;
+use Signals::XSIG;
 use POSIX ':sys_wait_h';
 use Exporter;
 use Carp;
@@ -20,7 +21,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.59';
+our $VERSION = '0.60';
 
 my ($productive_waitpid_code);
 my $respect_SIGCHLD_ignore = 1;
@@ -266,8 +267,11 @@ sub _waitpid_any {
 sub __waitpid_result {
     my $pid = shift;
     if ($respect_SIGCHLD_ignore &&
+	$Signals::XSIG{CHLD} &&
+	ref($Signals::XSIG{CHLD}) eq 'ARRAY' &&
 	'IGNORE' eq ($Signals::XSIG::XSIG{CHLD}[0] || '') &&
 	defined $Forks::Super::SysInfo::IGNORE_WAITPID_RESULT) {
+
 
 	$? = $Forks::Super::SysInfo::IGNORE_WAITPID_STATUS;
 	$pid = $Forks::Super::SysInfo::IGNORE_WAITPID_RESULT;
