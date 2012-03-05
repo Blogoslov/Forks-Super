@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.60';
+our $VERSION = '0.61';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -2892,7 +2892,24 @@ sub _getc_pipe {
 }
 
 sub _unbuffered_getc {
-    my $n = sysread $_[0], my($cc), 1;
+
+    # sysread can return undef on solaris in t/44j.
+    # Maybe SIGCHLD is causing an interruption?
+
+    # this was fixed in F::S::Tie::IPCPipeHandle::GETC in v0.58, but we
+    # have to fix it here, too
+
+    my $cc;
+    {
+	local $!;
+	my $n = sysread $_[0], $cc, 1;
+	if (!defined $n) {
+	    redo if $!{EINTR};
+	    carp "FSJ::Ipc::_unbuffered_getc: $!";
+	    return;
+	}
+	return if $n==0;
+    }
     return $cc;
 }
 

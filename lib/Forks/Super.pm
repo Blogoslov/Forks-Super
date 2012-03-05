@@ -36,7 +36,7 @@ use Carp;
 $Carp::Internal{ (__PACKAGE__) }++;
 $| = 1;
 
-our @EXPORT = qw(fork wait waitall waitpid);
+our @EXPORT = qw(fork wait waitall waitpid BG_QX BG_EVAL);
 my @export_ok_func = qw(isValidPid pause Time read_stdout read_stderr
 			getc_stdout getc_stderr 
                         bg_eval bg_qx  open2 open3);
@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.60';
+our $VERSION = '0.61';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -640,7 +640,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.60
+Version 0.61
 
 =head1 SYNOPSIS
 
@@ -797,8 +797,8 @@ Version 0.60
     print "output of long running command was: $result\n";
 
     # if you need bg_eval or bg_qx functionality in list context ...
-    tie @result, 'Forks::Super::bg_eval', sub { long_running_calc() };
-    tie @output, 'Forks::Super::bg_qx', "./long_running_cmd";
+    tie @result, BG_EVAL, sub { long_running_calc() };
+    tie @output, BG_QX, "./long_running_cmd";
 
 
     # --- convenience methods, compare to IPC::Open2, IPC::Open3
@@ -2566,6 +2566,14 @@ to L<Forks::Super::fork|"fork">.
 
     tie my @output, 'Forks::Super::bg_qx', "ssh me@remotehost who", { timeout => 10 };
     tie my %result, 'Forks::Super::bg_eval', \&my_function, { cpu_affinity => 0x2 };
+
+Note: the constants C<BG_QX> and C<BG_EVAL> are exported by default, and
+provide a convenient shorthand for "C<Forks::Super::bg_qx>" and
+"C<Forks::Super::bg_eval>", respectively. So you could rewrite the previous two
+expressions as
+
+    tie my @output, BG_QX, "ssh me@remotehost who", { timeout => 10 };
+    tie my %result, BG_EVAL, \&my_function, { cpu_affinity => 0x2 };
 
 =back
 

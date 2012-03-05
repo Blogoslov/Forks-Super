@@ -1,6 +1,7 @@
 use Forks::Super ':test';
 use Forks::Super::Config ':all';
 use Test::More tests => 5;
+use Carp;
 use strict;
 use warnings;
 
@@ -137,11 +138,19 @@ unlink $output;
 
 sub get_os_priority {
     my ($pid) = @_;
+
+    # freebsd: on error, getpriority returns -1 and sets $!
+
     my $p;
+    local $! = 0;
     eval {
 	$p = getpriority(0, $pid);
     };
     if ($@ eq '') {
+	if ($p == -1 && $!) {
+	    carp "get_os_priority($pid): $!";
+	    return -99;
+	}
 	return $p;
     }
 

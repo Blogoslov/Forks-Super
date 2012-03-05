@@ -1,5 +1,6 @@
 use Forks::Super ':test';
 use Test::More tests => 10;
+use Carp;
 use strict;
 use warnings;
 
@@ -46,11 +47,13 @@ my ($new_priority, $affinity);
 for (1..6) {
 
     $new_priority = get_os_priority($daemon);
-    if ($np > 1 && Forks::Super::Config::CONFIG('Sys::CpuAffinity')) {
-	$affinity = Sys::CpuAffinity::getAffinity($daemon);
-	last if $new_priority != $base_priority && $affinity == 2;
-    } else {
-	last if $new_priority != $base_priority;
+    if ($new_priority != -99) {
+	if ($np > 1 && Forks::Super::Config::CONFIG('Sys::CpuAffinity')) {
+	    $affinity = Sys::CpuAffinity::getAffinity($daemon);
+	    last if $new_priority != $base_priority && $affinity == 2;
+	} else {
+	    last if $new_priority != $base_priority;
+	}
     }
     sleep 1;
 }
@@ -89,7 +92,7 @@ ok(Forks::Super::Util::isValidPid($d1->{real_pid}),"real pid is valid");
 
 my $n1 = fork {
     daemon => 0,
-    sub => sub { 
+    sub => sub {
         print time-$^T," DAEMON 1 MONITOR START\n";
 	sleep 1 while CORE::kill 0, $d1->{real_pid};
         print time-$^T," DAEMON 1 MONITOR COMPLETE\n";
@@ -121,16 +124,23 @@ ok($d2->{start} >= ($n1->{end}||0),                            ### 10 ###
 
 sub get_os_priority {
     my ($pid) = @_;
+
+    # freebsd: on error, getpriority returns -1 and sets $!
+
     my $p;
+    local $! = 0;
     eval {
 	$p = getpriority(0, $pid);
     };
     if ($@ eq '') {
+	if ($p == -1 && $!) {
+	    carp "get_os_priority($pid): $!";
+	    return -99;
+	}
 	return $p;
     }
 
     if ($^O eq 'MSWin32') {
-	#return Forks::Super::Job::OS::Win32::get_thread_priority($pid);
 	return Forks::Super::Job::OS::Win32::get_priority($pid);
     }
     return;

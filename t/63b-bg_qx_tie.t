@@ -13,7 +13,7 @@ if (${^TAINT}) {
 ### list context ###
 
 my $t = Time::HiRes::time();
-tie my @x, 'Forks::Super::bg_qx',
+tie my @x, &BG_QX,
     "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -n -s=2 -e=\"it is a\" -n -e=beautiful -n -e=day";
 my @tests = @x;
 $t = Time::HiRes::time() - $t;
@@ -46,7 +46,7 @@ ok(@x == 0, "list bg_qx clear");
 ### partial output ###
 
 $t = Time::HiRes::time();
-tie @x, 'Forks::Super::bg_qx', 
+tie @x, &BG_QX, 
     "$^X t/external-command.pl -e=Hello -n -s=1 -e=World -s=12 -n -e=\"it is a\" -n -e=beautiful -n -e=day", 
     { timeout => 6 };
 @tests = @x;
@@ -64,7 +64,7 @@ ok($t >= 5.5 && $t < 11.9,
 
 my $t2 = Time::HiRes::time();
 my $z = sprintf "%05d", 100000 * rand();
-tie my $x, 'Forks::Super::bg_qx', "$^X t/external-command.pl -e=$z -s=3";
+tie my $x, &BG_QX, "$^X t/external-command.pl -e=$z -s=3";
 $t = Time::HiRes::time();
 ok(defined $Forks::Super::LAST_JOB, "\$Forks::Super::LAST_JOB set");
 ok(defined $Forks::Super::LAST_JOB_ID, "\$Forks::Super::LAST_JOB_ID set");
@@ -91,7 +91,7 @@ ok($x == 19, "result is not read only");
 my $j = $Forks::Super::LAST_JOB;
 $y = "";
 $z = sprintf "B%05d", 100000 * rand();
-tie my $x2, 'Forks::Super::bg_qx', "$^X t/external-command.pl -s=10 -e=$z", timeout => 2;
+tie my $x2, &BG_QX, "$^X t/external-command.pl -s=10 -e=$z", timeout => 2;
 $t = Time::HiRes::time();
 $y = "$x2";
 
@@ -104,7 +104,7 @@ ok($t <= 5.95,                       ### 14 ### was 4 obs 4.92
 ### interrupted bg_qx, capture existing output ###
 
 $z = sprintf "C%05d", 100000 * rand();
-tie $x, 'Forks::Super::bg_qx', "$^X t/external-command.pl -e=$z -s=10", 
+tie $x, &BG_QX, "$^X t/external-command.pl -e=$z -s=10", 
     timeout => 4;
 $t = Time::HiRes::time();
 ok($x eq "$z \n" || $x eq "$z ",   ### 15 ###
@@ -121,7 +121,7 @@ ok($t <= 7.0,                            ### 16 ### was 3 obs 3.62,5.88
 ### list context ###
 
 $t = Time::HiRes::time();
-tie @x, 'Forks::Super::bg_qx',
+tie @x, &BG_QX,
     "$^X t/external-command.pl -e=Hello -n -s=2 -e=World -n -s=2 -e=\"it is a\" -n -e=beautiful -n -e=day";
 @tests = @x;
 $t = Time::HiRes::time() - $t;
@@ -154,7 +154,7 @@ ok(@x == 0, "list bg_qx clear");
 ### partial output ###
 
 $t = Time::HiRes::time();
-tie @x, 'Forks::Super::bg_qx', 
+tie @x, &BG_QX, 
     "$^X t/external-command.pl -e=Hello -n -s=1 -e=World -s=12 -n -e=\"it is a\" -n -e=beautiful -n -e=day", { timeout => 6 };
 @tests = @x;
 $t = Time::HiRes::time() - $t;

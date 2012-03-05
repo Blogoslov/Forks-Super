@@ -104,9 +104,10 @@ Possible TODOs:
         _X_ Test F::S as a drop in replacement to a program that
             has a SIGCHLD handler. -- looks good
 
-    ___ Prior to v0.52, bg_eval and bg_qx could be called in list context
+    _X_ Prior to v0.52, bg_eval and bg_qx could be called in list context
         but they wouldn't return control to foreground process. Can this
 	be fixed?
+	_X_ Yes, with tie'd variables.
 
     ___ Track down, solve 'untie attempted while ... inner references'
         mystery with FST::IPCFileHandle
@@ -125,13 +126,6 @@ Possible TODOs:
 
     ___ reinstate t/31? ok on Cygwin, MSWin32, Linux, FreeBSD ?
         ___ still doesn't work on Linux? 
-
-    _o_ is it feasible to fork to a "process pool" (cf. FastCGI)?
-        There could be significant improvement for use cases with
-        lots of short jobs. Leave this for 1.0?
-
-    _o_ TASKKILL, TASKLIST are strongly recommended utilities to have
-        for MSWin32. Should we try harder to find them in the PATH?
 
     _O_ Test file just for Forks::Super::XXX
 	_X_ Forks::Super::Util
@@ -157,17 +151,6 @@ Possible TODOs:
         all the (almost surely file based) IPC and then run the desired
         program. The other purpose is to execute a command on a remote
 	host.
-
-    ___ backport to 5.6
-        _x_ Signals/XSIG needs work
-        _x_ Cwd 2.04 not effective in Forks::Super::Util::abs_path?
-            No, it's just Cwd::abs_path that's not effective.
-        ___ unsafe signals leave zombies, make trouble
-        ___ any pipe code causes SIGSEGV
-        _X_ :utf8 layer not available for IO layers test
-	    skip those tests
-        _X_ even the :crlf layer behaves differently on 56
-            skip/adjust those tests
 
     ___ share MAX_PROC across processes, or have a SHARED_MAX_PROC
         attribute to limit the number of processes across a group
@@ -208,12 +191,6 @@ Possible TODOs:
 	_X_ not enabled by default
 	_X_ install sighandler in every natural/sub child to write stack trace
 	___ How to test?
-
-    ___ timeout feature tries to use alarm, SIGALRM handler, but it could
-        use FSJ::OS::poor_mans_alarm if the caller wants to use alarm's
-	in the child.
-	_x_ set  use_alternate_alarm => 1 
-	_X_ document?
 
     ___ Anything to learn from python  multiprocessing  module? See   
         stackoverflow.com/questions/7931455/

@@ -10,8 +10,11 @@ use strict;
 use warnings;
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw(bg_eval bg_qx);
-our $VERSION = '0.60';
+our @EXPORT = qw(bg_eval bg_qx BG_EVAL BG_QX);
+our $VERSION = '0.61';
+
+use constant BG_EVAL => 'Forks::Super::bg_eval';
+use constant BG_QX   => 'Forks::Super::bg_qx';
 
 sub _choose_protocol {
     if (CONFIG_module('YAML')) {
@@ -316,7 +319,7 @@ Forks::Super::LazyEval
 
 =head1 VERSION
 
-0.60
+0.61
 
 =head1 DESCRIPTION
 

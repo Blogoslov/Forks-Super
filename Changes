@@ -1,5 +1,9 @@
 Revision history for Forks-Super
 
+0.61    2012-03-05
+        Defines constants BG_QX, BG_EVAL as shorthand for tied class names.
+        Miscellaneous fixes specific to freebsd, openbsd, and solaris.
+
 0.60    2012-02-29
         tie interface to  bg_qx, bg_eval  calls. These calls are equivalent
         in function if not in implementation:

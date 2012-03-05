@@ -1,4 +1,4 @@
-Forks::Super version 0.60
+Forks::Super version 0.61
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -99,7 +99,7 @@ alternative is to run
 
 which will run the Forks::Super module tests in
 parallel, using the Forks::Super module. Running
-"make fasttest" will take about 1-3 minutes.
+"make fasttest" will take about 2-3 minutes.
 
 
 DEPENDENCIES

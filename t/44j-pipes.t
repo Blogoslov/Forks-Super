@@ -49,6 +49,8 @@ ok($cc eq 'o', 'read another char from stdout') or diag("2nd char was '$cc'");
 ok($pid->read_stdout eq "o\n", 'read_stdout returns the rest of the line');
 $c = $pid->getc_stderr(block => 1);
 $t = Time::HiRes::time() - $t;
+
+# tests 11,13,14 failure point on solaris
 ok(defined($c) && $c eq 'O',                         ### 11 ###
    'got first char from stderr');
 ok($t >= 3.5 && $t <= 6.5, "took ${t}s, expected ~5s");

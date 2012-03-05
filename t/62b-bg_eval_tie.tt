@@ -25,7 +25,7 @@ if ($untaint) {
 
 ### scalar context ###
 
-tie my $x, 'Forks::Super::bg_eval', sub { sleep 3 ; return 42 },
+tie my $x, &BG_EVAL, sub { sleep 3 ; return 42 },
     { untaint => $untaint };
 my $t = Time::HiRes::time();
 ok(defined $Forks::Super::LAST_JOB,        ### 3 ###
@@ -47,7 +47,7 @@ okl($t0 >= 2.85 && $t <= 7.95,     ### 10 ### was 3.85, obs 3.97,5.11,7.39
 $x = 19;
 ok($x == 19, "result is not read only");
 
-my $tied = tie $x, 'Forks::Super::bg_eval', sub { sleep 10; return 19 },
+my $tied = tie $x, &BG_EVAL, sub { sleep 10; return 19 },
     { timeout => 2, untaint => $untaint };
 $t = Time::HiRes::time();
 ok(!defined($tied->_fetch) || $x eq '',
@@ -59,7 +59,7 @@ okl($t <= 5.25,                    ### 13 ### was 3.25, obs 3.41,4.01,5.01
 
 
 $t0 = Time::HiRes::time();
-tie $x, 'Forks::Super::bg_eval', sub {
+tie $x, &BG_EVAL, sub {
     sleep 2;
     opendir(X, "t");
     my $i = 0; my %f = map { $_ => ++$i } grep { !/\.t$/ } readdir(X);
@@ -84,7 +84,7 @@ waitall;
 $x = 20;
 my $w = 14;
 $t0 = Time::HiRes::time();
-tie $x, 'Forks::Super::bg_eval', sub {
+tie $x, &BG_EVAL, sub {
     sleep 5; return 19
 }, { name => 'bg_eval_job', delay => 3, on_busy => "queue",
     callback => { queue => sub { $w++ }, start => sub { $w+=2 },
@@ -109,7 +109,7 @@ ok($w == 14 + 1 + 2 + 5, "bg_eval finish callback");
 
 ### list context ###
 
-tie my @x, 'Forks::Super::bg_eval', sub { sleep 3 ; return (19,42,[11..22]) },
+tie my @x, &BG_EVAL, sub { sleep 3 ; return (19,42,[11..22]) },
     { untaint => $untaint };
 $t = Time::HiRes::time();
 ok(defined $Forks::Super::LAST_JOB,
@@ -131,7 +131,7 @@ okl($t0 >= 2.85 && $t <= 7.95,     ### 10 ### was 3.85, obs 3.97,5.11,7.39
 @x = (9,14,@INC);
 ok($x[0]==9 && @x>3, "result is not read only");
 
-$tied = tie @x, 'Forks::Super::bg_eval', sub { sleep 10; return (19) },
+$tied = tie @x, &BG_EVAL, sub { sleep 10; return (19) },
     { timeout => 2, untaint => $untaint };
 $t = Time::HiRes::time();
 ok(!defined($tied->_fetch) || @x==0,
@@ -143,7 +143,7 @@ okl($t <= 5.25,                    ### 13 ### was 3.25, obs 3.41,4.01,5.01
 
 
 $t0 = Time::HiRes::time();
-tie my %x, 'Forks::Super::bg_eval', sub {
+tie my %x, &BG_EVAL, sub {
     sleep 2;
     opendir(X, "t");
     my $i = 0; my %f = map { $_ => ++$i } grep { !/\.t$/ } readdir(X);
