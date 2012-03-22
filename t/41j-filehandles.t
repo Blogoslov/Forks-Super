@@ -116,7 +116,7 @@ waitall;
 
 $z = <$pid>;
 if (defined $z) {
-    sleep 3;
+    sleep 5;
     $z = <$pid>;
 }
 ok(!defined($z), "<\$pid> undef on empty stream")

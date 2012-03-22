@@ -104,11 +104,6 @@ Possible TODOs:
         _X_ Test F::S as a drop in replacement to a program that
             has a SIGCHLD handler. -- looks good
 
-    _X_ Prior to v0.52, bg_eval and bg_qx could be called in list context
-        but they wouldn't return control to foreground process. Can this
-	be fixed?
-	_X_ Yes, with tie'd variables.
-
     ___ Track down, solve 'untie attempted while ... inner references'
         mystery with FST::IPCFileHandle
 	_X_ helps to explicitly assign (tied *$handle) to lexical
@@ -178,13 +173,6 @@ Possible TODOs:
         ___ Since MSWin32 doesn't have proper process groups, does it matter?
             Yeah, it does. We should try and DWIM w.r.t. process groups/Win32.
 
-
-    _X_ Use FSJ::OS::totally_kludgy_process_monitor to set timeout when
-        $FS::SysInfo::SLEEP_ALARM_COMPATIBLE<=0
-        and when $FS::SysInfo::CONFIG{'alarm'}==0
-	___ must test. Solaris 8 is like this?
-        _X_ test with mock
-
     _X_ In Java, you can send SIGQUIT to a virtual machine and the JVM will
         dump the stack trace for every thread with some other data about the
         program. Can we do something similar for Forks::Super? 
@@ -207,10 +195,13 @@ Possible TODOs:
         For low volumes, use pipes and sockets.
         For high volumes, make channels use files.
 
-    ___ exercise every method of FS::Tie::IPCDupSTDIN
+    ___ exercise every method of FS::Tie::IPCDupSTDIN 
+        (__config_fh_child_stdin_file, $job->{fh_config}{f_in},
+	sub/natural-style)
 
     ___ use shared memory between processes, where supported
         ___ synchronization based on shared memory
+	___ process pools based on shared memory
 
     ___ encryption layers on IO channels
 
@@ -227,3 +218,16 @@ Possible TODOs:
         on openbsd prone to returning significantly more or less than n
 	seconds later? Would a busy wait just for openbsd make things
 	better or worse?
+
+    _x_ Signal and conf file based controls. For example,
+        sending SIG45 followed by SIG46 (within 500 ms) means
+	"increase $Forks::Super::MAX_PROC by 1",
+	SIG45+SIG45 means "reload config from file $ENV{FORKS_SUPER_CONFIG}".
+	possible asynchronous operations:
+	_x_ reload config file
+	_x_ increase $Forks::Super::MAX_PROC
+	_x_ decrease $Forks::Super::MAX_PROC
+	_x_ increase $Forks::Super::MAX_LOAD
+	_x_ decrease $Forks::Super::MAX_LOAD
+	_x_ dump (see Forks::Super::Debug::parent_dump)
+        ___ what else?

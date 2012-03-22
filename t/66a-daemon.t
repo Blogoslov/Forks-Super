@@ -104,7 +104,8 @@ my $dppid = <$dh>;
 close $dh;
 
 ok($dppid == 1 || $dppid eq "unknown\n" || $dppid eq "unknown$/",
-   "daemon process does not have a parent");
+   "daemon process does not have a parent")
+    or diag("daemon process was '$dppid', expected '1'");
 
 if (${^TAINT}) {
     ($dpid) = $dpid =~ /([-\d]*)/;

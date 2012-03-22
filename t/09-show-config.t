@@ -50,6 +50,7 @@ if ($Forks::Super::SysInfo::TIME_HIRES_TOL >= 0.5) {
     print STDERR "     are you serious?\n";
 }
 print STDERR "Number of cpus: $Forks::Super::SysInfo::NUM_PROCESSORS\n";
+print STDERR "\$ENV{TEST_LENIENT} = $ENV{TEST_LENIENT}\n";
 
 print STDERR "\n";
 

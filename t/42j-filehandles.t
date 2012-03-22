@@ -32,8 +32,8 @@ okl($tt >= 1.0 && $tt <= 4.5,             ### 4 ###
 $c = $pid->getc_stdout(block => 1);
 $t = Time::HiRes::time() - $t;
 ok($c eq 'f', 'got first char from stdout');
-ok($t >= 3.5 && $t <= 7.65,               ### 6 ###
-   "took ${t}s, expected ~5s");
+okl($t >= 3.5 && $t <= 7.65,              ### 6 ###
+    "took ${t}s, expected ~5s");
 
 $t = Time::HiRes::time();
 $c = $pid->getc_stderr(timeout => 2);

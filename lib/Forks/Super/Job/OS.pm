@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.61';
+our $VERSION = '0.62';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -268,7 +268,7 @@ sub _get_number_of_processors_from_dmesg_bsd {
     my @d = grep { /Multiprocessor System Detected:/i } @dmesg;
     my $ncpus;
     if (@d > 0) {
-	debug("dmesg_bsd contains:\n@d");
+	debug("dmesg_bsd contains:\n@d") if $Forks::Super::DEBUG;
 	($ncpus) = $d[0] =~ /Detected: (\d+) CPUs/i;
     }
 
@@ -282,10 +282,10 @@ sub _get_number_of_processors_from_dmesg_bsd {
 		$d{$1}++;
 	    }
 	}
-	debug("dmesg_bsd[2] contains:\n",@d);
+	debug("dmesg_bsd[2] contains:\n",@d) if $Forks::Super::DEBUG;
 	$ncpus = scalar keys %d;
     }
-    if (@dmesg < 50) {
+    if (@dmesg < 50 && $Forks::Super::DEBUG) {
 	debug("full dmesg log:\n", @dmesg);
     }
     return $_num_procs_cached = $ncpus || 0;

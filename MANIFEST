@@ -164,6 +164,7 @@ t/66a-daemon.t
 t/66b-daemon.t
 t/66c-daemon.t
 t/70-cleanse.t
+t/71-config.t
 t/external-command.pl
 t/external-daemon.pl
 t/forked_harness.pl
@@ -219,3 +220,4 @@ bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
 TODO-1.0                                 # roadmap for major release
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

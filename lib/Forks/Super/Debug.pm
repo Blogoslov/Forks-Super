@@ -15,7 +15,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our $VERSION = '0.61';
+our $VERSION = '0.62';
 our $DUMPSIG;
 
 our ($DEBUG, $DEBUG_FH, %_CARPED, 
@@ -108,7 +108,7 @@ sub enable_dump {
     }
     if ($sig) {
 	$DUMPSIG ||= 'QUIT';
-	$SIG{$DUMPSIG} = \&parent_dump;
+	$SIG{$DUMPSIG} = sub { parent_dump(1); }
     } else {
 	if ($DUMPSIG) {
 	    $SIG{$DUMPSIG} = 'DEFAULT';
@@ -160,6 +160,7 @@ sub parent_dump {
     #     total active jobs
     #     total completed jobs
     #     completed job distribution of run times
+    my ($dump_completed_jobs) = @_;
 
     if ($$ != $Forks::Super::MAIN_PID) {
 	# this is not the main fork, so we should do the
@@ -224,15 +225,17 @@ sub parent_dump {
 
     # complete jobs
     my @run_times = ();
-    $header = 0;
-    foreach my $job (@Forks::Super::ALL_JOBS, 
-		     @Forks::Super::Job::ARCHIVED_JOBS) {
-	if ($job->is_complete) {
-	    print $TTY "COMPLETE JOBS\n-------------\n\n" unless $header++;
-	    _dump_job($TTY, $job);
-	    push @run_times, $job->{end} - $job->{start};
-	    $num_complete++;
-	    $num_reaped++ if $job->is_reaped;
+    if ($dump_completed_jobs) {
+	$header = 0;
+	foreach my $job (@Forks::Super::ALL_JOBS, 
+			 @Forks::Super::Job::ARCHIVED_JOBS) {
+	    if ($job->is_complete) {
+		print $TTY "COMPLETE JOBS\n-------------\n\n" unless $header++;
+		_dump_job($TTY, $job);
+		push @run_times, $job->{end} - $job->{start};
+		$num_complete++;
+		$num_reaped++ if $job->is_reaped;
+	    }
 	}
     }
 
@@ -416,7 +419,7 @@ Forks::Super::Debug - debugging and logging routines for Forks::Super distro
 
 =head1 VERSION
 
-0.61
+0.62
 
 =head1 VARIABLES
 

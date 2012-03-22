@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.61';
+our $VERSION = '0.62';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -62,9 +62,9 @@ our $DONT_CLEANUP;
 our $CHILD_FORK_OK;
 our $QUEUE_INTERRUPT;
 our $PKG_INITIALIZED;
-#our %IMPORT;
 our $LAST_JOB;
 our $LAST_JOB_ID;
+
 push @Devel::DumpTrace::EXCLUDE_PATTERN, '^Signals::XSIG';
 
 sub import {
@@ -104,13 +104,7 @@ sub import {
 		    # needs to do it a lot, there is a lot of latency that
 		    # buggers a lot of timing tests.
 		    $ENV{TEST_LENIENT} = 1;
-
 		}
-
-		# preload some modules so lazy loading doesn't affect
-		# the timing in some unit tests
-		### Forks::Super::Job::Timeout::warm_up();
-
 		if ($args[$i] =~ /CA/) {
 		    Forks::Super::Debug::use_Carp_Always();
 		}
@@ -119,8 +113,10 @@ sub import {
 	    }
 	}
     }
+    if (!$Forks::Super::Config::CONFIG_FILE && $ENV{FORKS_SUPER_CONFIG}) {
+	_import_common_vars('CONFIG_FILE', $ENV{FORKS_SUPER_CONFIG});
+    }
 
-#    $IMPORT{$_}++ foreach @tags;
     Forks::Super->export_to_level(1, 'Forks::Super', @tags ? @tags : @EXPORT);
 
     _import_init_ipc_dir($ipc_dir);
@@ -149,6 +145,10 @@ sub _import_common_vars {
     }
     if (uc $arg eq 'ENABLE_DUMP') {
 	Forks::Super::Debug::enable_dump($val);
+	return 1;
+    }
+    if (uc($arg) eq 'CONFIG' || uc($arg) eq 'CONFIG_FILE') {
+	Forks::Super::Config::load_config_file($val);
 	return 1;
     }
     return;
@@ -307,7 +307,9 @@ sub fork {
     # or malice.
 
     if (!defined $SIG{CHLD}) {
-	$SIG{CHLD} = "\n";
+	# $SIG{CHLD}="\n" warns in openbsd:'SIGCHLD handler "\n" not defined'
+	$SIG{CHLD} = sub {};
+	# $SIG{CHLD} = 'IGNORE'; ?
     }
     return $job->launch;
 }
@@ -640,7 +642,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.61
+Version 0.62
 
 =head1 SYNOPSIS
 
@@ -1442,13 +1444,13 @@ C<$Forks::Super::MAX_PROC> limits.
 
 =back
 
-=head3 max_fork
+=head3 max_proc
 
 =over 4
 
 =item C<$Forks::Super::MAX_PROC = $max_simultaneous_jobs>
 
-=item C<< fork { max_fork => $max_simultaneous_jobs } >>
+=item C<< fork { max_proc => $max_simultaneous_jobs } >>
 
 Specifies the maximum number of background processes that you want
 to allow to run simultaneously.
@@ -1473,6 +1475,8 @@ overridden by also specifying C<max_proc> or L<"force"> options.
 
 Setting C<$Forks::Super::MAX_PROC> to zero or a negative number will
 disable the check for too many simultaneous processes.
+
+C<max_fork> is a synonym for C<max_proc>.
 
 =back
 
@@ -1519,7 +1523,8 @@ otherwise cannot be downloaded from CPAN.
 
 Dictates the behavior of C<fork> in the event that the module is not allowed
 to launch the specified job for whatever reason. If you are using
-C<Forks::Super> to throttle (see L<max_fork, $Forks::Super::MAX_PROC|"max_fork">)
+C<Forks::Super> to throttle (see 
+L<max_proc, $Forks::Super::MAX_PROC|"max_proc">)
 or impose dependencies on (see L<depend_start|"depend_start">, L<depend_on|"depend_on">)
 background processes, then failure to launch a job should be expected.
 
@@ -3062,6 +3067,75 @@ listed above.
 The C<Forks::Super::kill> function cannot be exported
 for now, while I think through the implications of
 overloading yet another Perl system call.
+
+=head1 IMPORT CONFIG
+
+Many of these settings have been mentioned in other parts of this document,
+but here is a summary of the configuration that can be done on the
+C<use Forks::Super ...> line
+
+=head2 MAX_PROC => integer
+
+Initializes C<$Forks::Super::MAX_PROC>, which governs the maximum number
+of simultaneous background processes managed
+by this module. When a new process is requested and this limit has been
+reached, the C<fork> call will fail, block (until at least one current
+process finishes), or queue, depending on the setting of
+C<$Forks::Super::ON_BUSY>. See L<"MAX_PROC">.
+
+=head2 ON_BUSY => 'block' | 'fail' | 'queue'
+
+Sets C<$Forks::Super::ON_BUSY>, which governs the behavior of C<fork>
+when the limit of simultaneous background processes has been reached.
+See L<"ON_BUSY">.
+
+=head2 CHILD_FORK_OK => -1 | 0 | 1
+
+Sets C<$Forks::Super::CHILD_FORK_OK>, which governs the behavior of
+C<Forks::Super::fork> when called from a child process.
+See L<"CHILD_FORK_OK"> in L<"MODULE VARIABLES">.
+
+=head2 DEBUG => boolean
+
+Turns module debugging on and off. On the import line, this configuration
+overrides the value of C<$ENV{FORKS_SUPER_DEBUG}> (see L<"ENVIRONMENT">).
+
+=head2 QUEUE_MONITOR_FREQ => num_seconds
+
+Sets C<$Forks::Super::Queue::QUEUE_MONITOR_FREQ>, which governs how frequently
+the main process should be interrupted to examine the queue of jobs
+that have not started yet. See L<Forks::Super::Queue>.
+
+=head2 QUEUE_INTERRUPT => signal_name
+
+Sets C<$Forks::Super::QUEUE_INTERRUPT>, the name of the signal used by
+C<Forks::Super> to periodically examine the queue of background jobs that
+have not started yet. The default setting is C<USR1>, but you should
+change this if you with to use C<SIGUSR1> for other purposes in your
+program. This setting does not have any effect on MSWin32 systems.
+
+=head2 IPC_DIR => directory, FH_DIR => directory
+
+Use the specified directory for temporary interprocess communication
+files used by C<Forks::Super>. Overrides settings of
+C<$ENV{IPC_DIR}> or C<$ENV{FH_DIR}>.
+
+=head2 CONFIG => file, CONFIG_FILE => file
+
+Loads module configuration out of the specified file. The file
+is expected to contain key-value pairs for the same parameter
+documented in this section. Parameter names in the configuration
+file are not case sensitive.
+
+    # sample Forks::Super config file
+    max_proc=10
+    IPC_DIR=/home/mob/.forks-super-ipc
+
+=begin NOT_READY_YET
+
+Setting a configuration file name with a C<< CONFIG => file >>
+directive also specifies the file that will be reloaded when you
+are using dynamic configuration with signals.
 
 =head1 ENVIRONMENT
 
