@@ -29,4 +29,5 @@ my @out = Forks::Super::read_stdout($pid);
 my @err = Forks::Super::read_stderr($pid);
 ok(isValidPid($pid), "launched piped command");
 ok(@out==1 && $out[0] eq "HELLO|WORLD|FOO\n", "got expected output: @out");
-ok(@err==0, "got no error output @err");
+ok(@err==0, "got no error output @err")
+    or diag("error output was: @err");

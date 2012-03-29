@@ -65,9 +65,20 @@ SKIP: {
      if (!isValidPid($pid3)) {
 	 ok(0, "fork failed with cpu_affinity option");
      } else {
+	 # give some time for the right cpu affinity to be set
 	 sleep 5;
 	 my $affinity = Sys::CpuAffinity::getAffinity($pid3);
-	 ok($affinity == 0x02, "set cpu affinity $affinity==2");
+	 for (1 .. 5) {
+	     last if $affinity == 0x02;
+	     sleep 2;
+	     $affinity = Sys::CpuAffinity::getAffinity($pid3);
+	 }
+	 ok($affinity == 0x02, "set cpu affinity $affinity==2")
+	     or do {
+		 sleep 5;
+		 $affinity = Sys::CpuAffinity::getAffinity($pid3);
+		 diag("final affinity: $affinity");
+	 };
      }
 
      my $pid4 = fork { sub => sub { sleep 10 }, cpu_affinity => [ 0 ] };

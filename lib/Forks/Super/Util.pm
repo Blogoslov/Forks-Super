@@ -16,7 +16,7 @@ use constant IS_CYGWIN => $^O =~ /cygwin/i;
 use constant IS_WIN32ish => &IS_WIN32 || &IS_CYGWIN;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.62';
+our $VERSION = '0.63';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN okl);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -26,19 +26,6 @@ our (%SIG_NO, @SIG_NAME, $Time_HiRes_avail,
 our $_PAUSE = 0;
 our $DEFAULT_PAUSE = 0.10; # s. Warning: may also be set in Forks/Super.pm
 our $DEFAULT_PAUSE_IO = 0.05;
-
-if ($^O =~ /openbsd/) {
-    require Forks::Super::Job::OS;
-    if (Forks::Super::Job::OS::get_number_of_processors() == 1) {
-
-	# OpenBSD is not (as far as I can tell) very good at
-	# swapping processes in and out of its cores. When it
-	# needs to do it a lot, there is a lot of latency that
-	# buggers a lot of timing tests.
-	$ENV{TEST_LENIENT} = 1;
-    }
-}
-
 
 $Time_HiRes_avail = eval  { use Time::HiRes; 1 } || 0;
 if (!$Time_HiRes_avail) {
@@ -369,7 +356,7 @@ Forks::Super::Util - utility routines for Forks::Super module
 
 =head1 VERSION
 
-0.62
+0.63
 
 =head1 SYNOPSIS
 

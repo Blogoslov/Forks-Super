@@ -44,7 +44,7 @@ my $daemon = fork {
 # for F::S to update its priority and CPU affinity
 
 my ($new_priority, $affinity);
-for (1..6) {
+for (1..10) {
 
     $new_priority = get_os_priority($daemon);
     if ($new_priority != -99) {
@@ -54,6 +54,10 @@ for (1..6) {
 	} else {
 	    last if $new_priority != $base_priority;
 	}
+    }
+    if ($_==8) {
+	warn "priority/affinity $new_priority/$affinity still not ",
+	    "at expected levels after 8 seconds";
     }
     sleep 1;
 }

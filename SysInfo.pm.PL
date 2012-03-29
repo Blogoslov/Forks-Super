@@ -5,7 +5,6 @@
 # See also: system-limits.PL
 
 use lib qw(lib);
-use Forks::Super::Util;
 use strict;
 use warnings;
 
@@ -20,7 +19,6 @@ if (! -r $limits_file) {
 }
 
 my %info = load_limits_file($limits_file);
-
 
 open F, '>', $ARGV[0] || 'lib/Forks/Super/SysInfo.pm';
 print F <<"____;";
@@ -38,9 +36,11 @@ use warnings;
 
 ## no critic (ProhibitMagicNumbers)
 
-our \$VERSION = '0.62';
+our \$VERSION = '0.63';
 
 ____;
+
+
 
 printF('SYSTEM', "'$info{system}'", "'unknown'");
 printF('PERL_VERSION', "'$info{version}'", "'unknown'");
@@ -144,9 +144,9 @@ sub sleep_alarm_compat {
     my $compatible = -1;
     eval {
 	local $SIG{ALRM} = sub { die "Timeout\n" };
-	alarm 1;
+	alarm 2;
 	$compatible = 1;
-	sleep 2;
+	sleep 5;
 	$compatible = "000";
     };
     return $compatible;

@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.62';
+our $VERSION = '0.63';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -158,14 +158,26 @@ sub get_cpu_load {
 	        "unable to get current CPU load for $^O $].";
 	    return -1.0;
 	}
-    } else { # pray for `uptime`.
-	my $uptime = qx(uptime 2>/dev/null);        ## no critic (Backtick)
-	$uptime =~ s/\s+$//;
-	my @uptime = split /[\s,]+/, $uptime;
-	if (@uptime > 2) {
-	    if ($uptime[-3] =~ /\d/ && $uptime[-3] >= 0.0) {
-		return $uptime[-3];
-	    }
+    }
+
+    if (-r '/proc/loadavg' && $^O ne 'cygwin') {
+	open my $fh, '<', '/proc/loadavg';
+	my $line = <$fh>;
+	close $fh;
+	if ($line =~ /^(\d+[.,]\d+)\s+(\d+[.,]\d+)\s+(\d+[.,]\d+)/) {
+	    return $1;
+	}
+    }
+
+    # else pray for `uptime`.
+    local %ENV = %ENV;
+    $ENV{'LC_NUMERIC'} = 'POSIX';    # ensure decimal separator is a .
+    my $uptime = qx(uptime 2>/dev/null);
+    $uptime =~ s/\s+$//;
+    my @uptime = split /[\s,]+/, $uptime;
+    if (@uptime > 2) {
+	if ($uptime[-3] =~ /\d/ && $uptime[-3] >= 0.0) {
+	    return $uptime[-3];
 	}
     }
 

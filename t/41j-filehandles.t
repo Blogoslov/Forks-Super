@@ -49,7 +49,7 @@ $t = Time::HiRes::time();
 $z = $pid->read_stdout(block => 1);
 $t = Time::HiRes::time() - $t;
 ok($z eq "abc\n", "blocking \$obj->read_stdout() ok");
-okl($t >= 1.35, "blocking read took ${t}s expected ~4s");   ### 11 ### obs 1.41
+okl($t >= 1.35, "blocking read took ${t}s expected ~4s");  ### 11 ### obs 1.41
 
 $t = Time::HiRes::time();
 $z = <$pid>;
@@ -58,12 +58,13 @@ ok($z eq "123\n", "<\$pid> ok");
 okl($t <= 1, "fast return [5] ${t}s expected <= 1s");
 waitall;
 
-$z = <$pid>;
-if (defined $z) {
-    sleep 4;
+for (1 .. 4) {
     $z = <$pid>;
+    last if !defined $z;
+    sleep 2;
 }
-ok(!defined($z), "<\$pid> undef on empty stream")
+
+ok(!defined($z), "<\$pid> undef on empty stream")          ### 14 ###
   or diag("\$z was \"$z\"");
 
 ################# repeat, with blocking #############

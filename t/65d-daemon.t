@@ -58,10 +58,12 @@ SKIP: {
 	$pid->suspend;
 	sleep 3;
 	my $s1 = -s $output;
-	sleep 2;
+	sleep 1;
 	my $s2 = -s $output;
-	$pid->resume;
-	sleep 2;
+	for (1..3) {
+	    $pid->resume;
+	    sleep 1;
+	}
 	my $s22 = -s $output;
 	ok($s1 == $s2 && $s2 != $s22,
 	   "suspend/resume on daemon ok $s1/$s2/$s22")

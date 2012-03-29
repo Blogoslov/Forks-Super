@@ -60,10 +60,12 @@ SKIP: {
 	my $s1 = -s $output;
 	sleep 1;
 	my $s2 = -s $output;
-	$pid->resume;
-	sleep 2;
+	for (1..3) {
+	    $pid->resume;
+	    sleep 1;
+	}
 	my $s22 = -s $output;
-	ok($s1 && $s1 == $s2 && $s2 != $s22, 
+	ok($s1 && $s1 == $s2 && $s2 != $s22,                  ### 5 ###
 	   "suspend/resume on daemon ok $s1/$s2/$s22")
 	    or diag("$s1/$s2/$s22");
     }

@@ -5,7 +5,7 @@ use Test::More tests => 30;
 use strict;
 use warnings;
 
-$ENV{TEST_LENIENT} = 1 if $^O =~ /freebsd/;
+$ENV{TEST_LENIENT} = 1 if $^O =~ /openbsd|freebsd/;
 
 ok(Forks::Super::Util::is_number("1234"), 'is_number #1');
 ok(Forks::Super::Util::is_number("-1234"), 'is_number #2');
