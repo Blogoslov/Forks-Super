@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -39,6 +39,11 @@ sub _preconfig_os {
 #
 sub Forks::Super::Job::_config_os_child {
     my $job = shift;
+
+#    if ($job->{setsid}) {
+#      use POSIX ();
+#      eval { print STDERR "\n\nsetsid\n\n"; POSIX::setsid(); }
+#    }
 
     if (defined $job->{name}) {
 	$0 = $job->{name}; # might affect ps(1) output

@@ -15,7 +15,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(debug $DEBUG carp_once);
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 our $DUMPSIG;
 
 our ($DEBUG, $DEBUG_FH, %_CARPED, 
@@ -419,7 +419,7 @@ Forks::Super::Debug - debugging and logging routines for Forks::Super distro
 
 =head1 VERSION
 
-0.63
+0.64
 
 =head1 VARIABLES
 
@@ -528,7 +528,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2012, Marty O'Brien.
+Copyright (c) 2009-2013, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

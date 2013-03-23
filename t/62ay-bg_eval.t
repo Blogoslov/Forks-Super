@@ -16,6 +16,8 @@ SKIP: {
 	skip "YAML not available, skipping bg_eval tests", 22;
     }
 
+    Forks::Super::Debug::no_Carp_Always();
+
     require "./t/62a-bg_eval.tt";
 }
 

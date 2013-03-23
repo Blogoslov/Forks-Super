@@ -98,23 +98,23 @@ $::fail35584 = '';
 # x s @  x@   i  @xixi x i x
 my $result = GetOptions(
     'h|harness' => \$use_harness,
-    'C|color' => \$use_color,
-    'verbose' => \$test_verbose,
+    'C|color'   => \$use_color,
+    'verbose'   => \$test_verbose,
     'include=s' => \@use_libs,
     'p|popts=s' => \@perl_opts,
-    'env=s' => \@env,
+    'env=s'     => \@env,
     's|shuffle' => \$shuffle,
     'timeout=i' => \$timeout,
     'r|repeat=i' => \$repeat,
     'xrepeat=i' => \$xrepeat,
     'maxproc=i' => \$maxproc,
-    'q|quiet' => \$quiet,
+    'q|quiet'   => \$quiet,
     'qq|really-quiet' => \$really_quiet,
-    'debug' => \$debug,
-    'z|socket' => \$use_socket,
+    'debug'     => \$debug,
+    'z|socket'  => \$use_socket,
     'abort-on-fail' => \$abort_on_first_error,
-    'pause=s' => \$pause,
-    'help' => \$help,
+    'pause=s'   => \$pause,
+    'help'      => \$help,
     );
 
 if ($help) {
@@ -803,19 +803,13 @@ __END_USAGE__
     return;
 }
 
-#####################################################################
-#
-# pod this file, in preparation for releasing it as an installed
-# executable with the Forks::Super module.
-#
-
 =head1 NAME
 
 forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.63
+0.64
 
 =head1 SYNOPSIS
 
@@ -904,7 +898,7 @@ combination, except as noted.
 =head2 -a, --abort-on-fail
 
 When this option is used and a test fails, no further tests are
-performed and any currently running tests are signalled to quit.
+performed and a quit signal is sent to any currently running tests.
 
 =head2 -c, --color
 
@@ -1164,7 +1158,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2010-2012, Marty O'Brien.
+Copyright (c) 2010-2013, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

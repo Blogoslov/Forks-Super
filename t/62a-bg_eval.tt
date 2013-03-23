@@ -54,7 +54,7 @@ SKIP: {
 	"scalar bg_eval respected timeout, took ${t}s expected ~2s");
 }
 
-Forks::Super::Debug::use_Carp_Always();
+# Forks::Super::Debug::use_Carp_Always();
 
 ### scalar context, return reference ###
 

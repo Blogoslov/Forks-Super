@@ -1,5 +1,5 @@
 use Forks::Super::Sync;
-use Test::More tests => 24;
+use Test::More tests => 28;
 use strict;
 use warnings;
 select STDERR;
@@ -22,7 +22,7 @@ sub test_implementation {
 	initial => [ 'P', 'C', 'N' ]);
 
     my $impl = $sync ? $sync->{implementation} : '<none>';
-    ok($sync, "sync object created ($impl)");               ### 1,9,17 ###
+    ok($sync, "sync object created ($impl)");               ### 1,10,19 ###
     my $pid = CORE::fork();
     $sync->releaseAfterFork($pid || $$);
     if ($pid == 0) {
@@ -39,7 +39,7 @@ sub test_implementation {
 
     sleep 2;
     my $z = $sync->acquire(1, 0.0);
-    ok(!$z, 'resource 1 is held in child');                ### 2,10,18 ###
+    ok(!$z, 'resource 1 is held in child');                ### 2,11,20 ###
 
     $z = $sync->acquire(2, 0.0);
     ok($z==1, 'resource 2 acquired in parent')
@@ -55,16 +55,20 @@ sub test_implementation {
     ok(!$z, 'resource 0 not held in parent');
 
     $z = $sync->release(2);
+    ok($z, 'resource 2 released in parent');
+
+    # failure point on Cygwin/Semaphlock
     $z = $sync->acquireAndRelease(0);
 
     # failure point on MSWin32, Win32Mutex impl
     #    $!==504, "Win32Mutex release error: the handle is invalid"
-    ok($z, "acquired 0 in parent ($impl)")                 ### 7,15,23 ###
+    ok($z, "acquired 0 in parent ($impl)")                 ### 8,17,26 ###
 	or diag("error is $! ", 0+$!);
     $z = $sync->release(0);
     ok(!$z, ' and released 0 in parent');
 
     $sync->release(1);
+    my $child = CORE::waitpid($pid, 0);
 }
 
 test_implementation('Semaphlock');
@@ -72,7 +76,7 @@ test_implementation('Semaphlock');
 SKIP: {
     if ($^O eq 'MSWin32' || $^O eq 'cygwin') {
 	if (! eval { require Forks::Super::Sync::Win32; 1 }) {
-	    skip "Win32::Semaphore implementation not available", 8;
+	    skip "Win32::Semaphore implementation not available", 9;
 	}
 	test_implementation('Win32');
     } else {
@@ -82,15 +86,17 @@ SKIP: {
 
 SKIP: {
     if (!eval "use Win32::Mutex;1") {
-	skip "Win32::Mutex not available", 8;
+	skip "Win32::Mutex not available", 9;
     }
     if ($^O ne 'MSWin32' && $^O ne 'cygwin') {
-	skip "Win32::Mutex implementation only for MSWin32, cygwin", 8;
+	skip "Win32::Mutex implementation only for MSWin32, cygwin", 9;
     }
     test_implementation('Win32::Mutex');
 }
 
-wait for 1..3;
+CORE::wait for 1..3;
+
+ok(1, 'waited on outstanding child processes');
 
 unlink "t/out/07.$$/.sync*";
 rmdir "t/out/07.$$";

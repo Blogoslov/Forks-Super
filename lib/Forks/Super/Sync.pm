@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 
 sub new {
     my ($pkg, %args) = @_;
@@ -73,12 +73,12 @@ sub new {
 	}
 
 	if ($self) {
+	    $self->{ppid} = $$;
 	    $self->{implementation} = $implementation;
 	}
 	last if $self && ref($self) =~ /Forks::Super::Sync/;
     }
 
-    $self->{ppid} = $$;
     return $self;
 }
 
@@ -151,7 +151,7 @@ Forks::Super::Sync - portable interprocess synchronization object
 
 =head1 VERSION
 
-0.63
+0.64
 
 =head1 SYNOPSIS
 
@@ -321,7 +321,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2012, Marty O'Brien.
+Copyright (c) 2009-2013, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

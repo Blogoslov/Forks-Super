@@ -11,7 +11,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(bg_eval bg_qx BG_EVAL BG_QX);
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 
 use constant BG_EVAL => 'Forks::Super::bg_eval';
 use constant BG_QX   => 'Forks::Super::bg_qx';
@@ -319,7 +319,7 @@ Forks::Super::LazyEval
 
 =head1 VERSION
 
-0.63
+0.64
 
 =head1 DESCRIPTION
 
@@ -336,7 +336,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2010-2012, Marty O'Brien.
+Copyright (c) 2010-2013, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

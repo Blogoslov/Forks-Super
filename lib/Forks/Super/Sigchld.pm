@@ -14,7 +14,7 @@ use warnings;
 our ($_SIGCHLD, $_SIGCHLD_CNT, $REAP) = (0,0,0);
 our (@CHLD_HANDLE_HISTORY, @SIGCHLD_CAUGHT) = (0);
 our $SIG_DEBUG = $ENV{SIG_DEBUG};
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 my %bastards;
 
 #
@@ -55,14 +55,13 @@ sub handle_CHLD {
 
     while (1) {
 	my $pid = -1;
-	my $old_status = $?;
-	my $status = $old_status;
+	my $status = $?;
 	for my $tries (1 .. 3) {
+	    local $?;
 	    $pid = CORE::waitpid -1, WNOHANG;
 	    $status = $?;
 	    last if isValidPid($pid);
 	}
-	$? = $old_status;
 	last if !isValidPid($pid);
 
 	$nhandled++;

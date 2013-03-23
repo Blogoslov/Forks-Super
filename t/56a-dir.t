@@ -5,9 +5,13 @@ use Config;
 use strict;
 use warnings;
 
+# this test crashes on Windows 7
+
 mkdir "t/dir1-$$" or die;
 mkdir "t/dir2-$$" or die;
 mkdir "t/dir2-$$/dir3" or die;
+
+my $END_PID = $$;
 
 my $PERL = $Config{perlpath};  # in case $^X is a relative path ...
 $PERL = $^X if ! -x $PERL;
@@ -80,11 +84,12 @@ sub get_path {
 }
 
 END {
-    unlink "t/dir2-$$/dir3/*";
-    rmdir "t/dir2-$$/dir3";
-    unlink glob("t/dir2-$$/*");
-    rmdir "t/dir2-$$";
-    unlink glob("t/dir1-$$/*");
-    rmdir "t/dir1-$$";
+    if ($$ == $END_PID) {
+	unlink "t/dir2-$$/dir3/*";
+	rmdir "t/dir2-$$/dir3";
+	unlink glob("t/dir2-$$/*");
+	rmdir "t/dir2-$$";
+	unlink glob("t/dir1-$$/*");
+	rmdir "t/dir1-$$";
+    }
 }
-

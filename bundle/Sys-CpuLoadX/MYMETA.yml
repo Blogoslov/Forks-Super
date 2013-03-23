@@ -6,14 +6,14 @@ build_requires:
   Module::Build: 0.25
   Test::More: 0
 dynamic_config: 0
-generated_by: 'Module::Build version 0.3613'
+generated_by: 'Module::Build version 0.4002, CPAN::Meta::Converter version 2.120921'
 keywords:
   - cpu
   - load
 license: perl
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.2.html
-  version: 1.2
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
 name: Sys-CpuLoadX
 provides:
   Sys::CpuLoadX:

@@ -8,7 +8,7 @@ use base qw(DynaLoader);
 ## no critic (DotMatch,LineBoundary,Sigils,Punctuation,Quotes,Magic,Checked)
 ## no critic (NamingConventions::Capitalization,BracedFileHandle)
 
-our $VERSION = '1.05';
+our $VERSION = '1.06';
 our $DEBUG = $ENV{DEBUG} || 0;
 our $XS_LOADED = 0;
 eval { bootstrap Sys::CpuAffinity $VERSION; $XS_LOADED = 1 };
@@ -445,7 +445,7 @@ sub _getNumCpus_from_hinv {   # NOT TESTED irix
     return 0 if !_configExternalProgram('hinv');
     my $cmd = _configExternalProgram('hinv');
 
-    # 1.01-1.05: debug
+    # 1.01-1.06: debug
     if ($Sys::CpuAffinity::IS_TEST && !$Sys::CpuAffinity::HINV_CALLED++) {
 	print STDERR "$cmd output:\n";
 	print STDERR qx($cmd);
@@ -587,7 +587,7 @@ sub _getAffinity_with_Win32API {
 
 sub _getProcessAffinity_with_Win32API {
     my $pid = shift;
-    my ($processMask, $systemMask, $processHandle) = (0,0);
+    my ($processMask, $systemMask, $processHandle) = (' ' x 16, ' ' x 16);
 
     # 0x0400 - PROCESS_QUERY_INFORMATION,
     # 0x1000 - PROCESS_QUERY_LIMITED_INFORMATION
@@ -604,7 +604,7 @@ sub _getProcessAffinity_with_Win32API {
 
 sub _getThreadAffinity_with_Win32API {
     my $thrid = shift;
-    my ($processMask, $systemMask, $threadHandle) = (0,0);
+    my ($processMask, $systemMask, $threadHandle) = (' 'x16, ' 'x16);
 
     # 0x0020: THREAD_QUERY_INFORMATION
     # 0x0400: THREAD_QUERY_LIMITED_INFORMATION
@@ -719,7 +719,7 @@ sub _getAffinity_with_Win32Process {
 	return 0 if !defined $pid;
     }
 
-    my ($processHandle, $processMask, $systemMask, $result);
+    my ($processMask, $systemMask, $result, $processHandle) = (' 'x16, ' 'x16);
     if (! Win32::Process::Open($processHandle, $pid, 0)
 	|| ref($processHandle) ne 'Win32::Process') {
 	return 0;
@@ -1162,16 +1162,17 @@ sub _setAffinity_with_xs_win32 {
 
   if ($pid < 0) {
     if (defined &xs_win32_setAffinity_thread) {
-      _debug('xs_win32_setAffinity_thread -$pid');
-      return xs_win32_setAffinity_thread(-$pid,$mask);
+      my $r = xs_win32_setAffinity_thread(-$pid,$mask);
+      _debug("xs_win32_setAffinity_thread -$pid,$mask => $r");
+      return $r if $r;
     }
     return 0;
   } elsif ($opid == $$) {
 
-    if (0 && $^O ne 'cygwin' && defined &xs_win32_setAffinity_thread) {
-      my $r = xs_win32_setAffinity_thread(0, $mask);
-      return $r if $r;
-    }
+#    if (0 && $^O ne 'cygwin' && defined &xs_win32_setAffinity_thread) {
+#      my $r = xs_win32_setAffinity_thread(0, $mask);
+#      return $r if $r;
+#    }
     if (defined &xs_win32_setAffinity_proc) {
       _debug('xs_win32_setAffinity_proc $$');
       return xs_win32_setAffinity_proc($pid,$mask);
@@ -1182,8 +1183,9 @@ sub _setAffinity_with_xs_win32 {
     }
     return 0;
   } elsif (defined &xs_win32_setAffinity_proc) {
-    _debug('xs_win32_setAffinity_proc +$pid');
-    return xs_win32_setAffinity_proc($pid, $mask);
+    my $r = xs_win32_setAffinity_proc($pid, $mask);
+    _debug("xs_win32_setAffinity_proc +$pid,$mask => $r");
+    return $r;
   }
   return 0;
 }
@@ -1412,8 +1414,6 @@ sub __load_win32api_function {
 
   local ($!, $^E) = (0, 0);
 
-  #$WIN32API{$function} = Win32::API->new(@$spec);
-
   my $spec_ = $WIN32_API_SPECS_{$function};
   $WIN32API{$function} = Win32::API->new('kernel32',$spec_);
 
@@ -1439,7 +1439,7 @@ Sys::CpuAffinity - Set CPU affinity for processes
 
 =head1 VERSION
 
-Version 1.05
+Version 1.06
 
 =head1 SYNOPSIS
 
@@ -1678,7 +1678,7 @@ Marty O'Brien, C<< <mob at cpan.org> >>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010-2011 Marty O'Brien.
+Copyright 2010-2013 Marty O'Brien.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published

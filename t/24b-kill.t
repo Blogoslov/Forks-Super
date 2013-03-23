@@ -20,6 +20,8 @@ if (${^TAINT}) {
     Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
+our $INT = $^O eq 'cygwin' ? 'TERM' : 'INT';
+
 SKIP: {
     if ($^O eq "MSWin32" && !Forks::Super::Config::CONFIG("Win32::API")) {
 	skip "kill is unsafe on MSWin32 without Win32::API", 5;
@@ -43,12 +45,12 @@ SKIP: {
 
     # failure point on MSWin32 - terminates the script
     if ($^O eq 'MSWin32') {
-	diag("Sending SIGINT to $pid1");
+	diag("Sending SIG$INT to $pid1");
     }
-    my $y = Forks::Super::kill('INT', $pid1);
+    my $y = Forks::Super::kill($INT, $pid1);
     sleep 2;
     Forks::Super::Queue::run_queue();
-    ok($y == 1, "sent INT to $y==1 proc active job");
+    ok($y == 1, "sent SUG$INT to $y==1 proc active job");
 
     $zero = Forks::Super::kill('ZERO', $pid1, $pid2, $pid3);
     ok($zero==2, "SIGZERO successfully sent to 2 processes")
@@ -59,7 +61,7 @@ SKIP: {
        "killed active job is complete " . $j1->{state}); ### 7 ###
     waitall;
 
-    $y = Forks::Super::kill('INT', $pid1, $pid2, $pid3);
+    $y = Forks::Super::kill($INT, $pid1, $pid2, $pid3);
     ok($y == 0, "kill to complete jobs returns 0");
 
 }

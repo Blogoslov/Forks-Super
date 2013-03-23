@@ -27,7 +27,7 @@ if (!&Forks::Super::Util::IS_WIN32ish) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 ##################################################################
@@ -46,17 +46,19 @@ our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 eval {
     require Win32::API;
 
-    Win32::API::Struct->typedef(
-	THREADENTRY32 => qw{
+    my @threadentry32spec = qw(
 	DWORD dwSize;
 	DWORD cntUsage;
 	DWORD thread_id;
 	DWORD owner_process_id;
 	LONG tpBasePri;
 	LONG tpDeltaPri;
-	DWORD dwFlags;
-    });
-}; # or carp 'Win32::API module is highly highly recommended ';
+	DWORD dwFlags; );
+
+    Win32::API::Struct->typedef( THREADENTRY32 => @threadentry32spec );
+    1;
+
+} or carp $@; # or carp 'Win32::API module is highly highly recommended ';
 
 
 our %_WIN32_API_SPECS = (
@@ -162,6 +164,26 @@ sub get_thread_handle {
 	return 0
 	    || win32api('OpenThread', 0x0002, 0, $thread_id);
     }
+
+    foreach my $perm (0x0060, 0x0C00, 0x0600, 0x0040, 0x0020) {
+      local $! = 0;
+      my $handle = win32api('OpenThread', $perm, 1, $thread_id);
+      if ($DEBUG) {
+	debug("OpenThread($perm,1) => $handle $! $^E");
+      }
+      return $handle if $handle;
+    }
+
+    # nothing yet
+    if ($DEBUG) {
+      debug("Couldn't get a handle to thread id $thread_id.");
+      debug("Here are all the thread ids that this process knows about.");
+      my @known_threads = _enumerate_threads_for_process( $$ );
+      debug("[ @known_threads ]");
+    }
+
+
+    return 0;
 
     return 0
 	# 0x0060: THREAD_SET_INFORMATION | THREAD_QUERY_INFORMATION
@@ -400,18 +422,18 @@ sub _enumerate_threads_for_process {
     }
 
     # 0x00000004: TH32CS_SNAPTHREAD
-    # 0x00000008: XXXXXX
-    my $snapshot = win32api('CreateSnapshot', 0x0000000C, $process_id);
+    # 0x00000008: TH32CS_SNAPMODULE
+    my $snapshot = win32api('CreateSnapshot', 0x00000004, $process_id);
     if (!$snapshot) {
-	carp $^E;
+	carp "\n\nNo thread snapshot available for pid $process_id $$.\n\n"
+	  . win32api('GetLastError') . "\n\n$^E\n\n=======\n";
 	return;
     }
     my $thread_entry = Win32::API::Struct->new('THREADENTRY32');
     $thread_entry->{dwSize} = 28;
-    foreach my $field (qw(cntUsage thread_id owner_process_id 
-				   tpBasePri tpDeltaPri dwFlags)) {
-	$thread_entry->{$field} = 0;
-    }
+    $thread_entry->{$_} = '0000'
+      for qw(cntUsage thread_id owner_process_id tpBasePri tpDeltaPri dwFlags);
+
     my $z = win32api('Thread32First', $snapshot, $thread_entry);
     if (!$z) {
 
@@ -558,6 +580,9 @@ sub sigzero_process {
 sub sigzero_thread {
     my ($thread_id) = @_;
     my $handle = get_thread_handle($thread_id);
+    if ($DEBUG) {
+      debug("SIGZERO sent to thread $thread_id. Handle is $handle.");
+    }
     return 0 if !$handle;
 
     my $xcode = pack('I', 0);

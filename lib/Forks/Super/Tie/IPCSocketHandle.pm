@@ -28,7 +28,7 @@ use IO::Socket;
 use IO::Handle;
 
 our @ISA = qw(IO::Socket IO::Handle);
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
@@ -209,6 +209,9 @@ sub shutdown {
     my $result = shutdown($self->{SOCKET}, $how);
     if ($result) {
 	$self->{_SHUTDOWN} |= 1 + $how;
+	if ($self->{_SHUTDOWN} == 3) {
+	  # should close
+	}
     }
     return $result;
 }

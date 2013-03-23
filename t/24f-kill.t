@@ -3,6 +3,8 @@ use Test::More tests => 7;
 use strict;
 use warnings;
 
+# if this test hangs in Cygwin, install Win32::API ?
+
 if (${^TAINT}) {
     require Cwd;
 
@@ -17,9 +19,11 @@ if (${^TAINT}) {
     Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
+our $QUIT = $^O eq 'cygwin' ? 'TERM' : 'QUIT';
+
 my $bgsub = sub {
     # In case process doesn't know it's supposed to exit on SIGQUIT:
-    $SIG{QUIT} = sub { die "$$ received SIGQUIT\n" };
+    $SIG{$QUIT} = sub { die "$$ received SIG$QUIT\n" };
     sleep 15;
 };
 
@@ -49,8 +53,8 @@ SKIP: {
     ok($zero == 3, "kill SIGZERO sent to the 3 bg jobs we launched")
 	or diag("signal was sent to $zero/3 jobs");
 
-    local $SIG{QUIT} = sub { print "DON'T QUIT!\n" };
-    my $y = Forks::Super::kill('-QUIT', $pid1->{pgid});
+    local $SIG{$QUIT} = sub { print "DON'T QUIT!\n" };
+    my $y = Forks::Super::kill("-$QUIT", $pid1->{pgid});
     ok($y == 3, "kill signal to $pid1 with sent successfully $y==3 sub");
     sleep 1;
 

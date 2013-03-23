@@ -1,4 +1,4 @@
-Forks::Super version 0.63
+Forks::Super version 0.64
 =========================
 
 Forks::Super provides drop-in replacements for the Perl
@@ -57,7 +57,9 @@ and managing them, including:
    *  operating system features
 
       On some operating systems, the priority and CPU affinity
-      of the child processes can be set.
+      of the child processes can be set. The module also provides
+      a (more) portable set of routines for signalling,
+      suspending, or terminating processes.
 
    *  process identifier objects
 

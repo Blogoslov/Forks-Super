@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Carp;
 use Time::HiRes;
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 our @ISA = qw(Forks::Super::Sync);
 
 my $ipc_seq = 0;
@@ -56,11 +56,37 @@ sub _register_ipc_file {
     return;
 }
 
+sub _touch {
+  my $file = shift;
+  open my $touch, '>>', $file;
+  close $touch;
+}
+
 sub releaseAfterFork {
     my $self = shift;
 
-    # for this implementation, it is more like acquire after fork.
+    # for this implementation, it is more like acquire after fork
     my $label = $$ == $self->{ppid} ? 'P' : 'C';
+
+    my $wait = time + 5.0;
+    if ($label eq 'P') {
+      _touch( $self->{parent_sync} . "1" );
+      until (time > $wait || -e $self->{child_sync} . "1") {
+	sleep 0.05;
+      }
+      if (! -e $self->{child_sync} . "1") {
+	warn "child not synchronized for parent-child sync init";
+      }
+    } elsif ($label eq 'C') {
+      _touch( $self->{child_sync} . "1" );
+      until (time > $wait || -e $self->{parent_sync} . "1") {
+	sleep 0.05;
+      }
+      if (! -e $self->{parent_sync} . "1") {
+	warn "parent not synchronized for parent-child sync init";
+      }
+    }
+
     for my $i (0 .. $self->{count} - 1) {
 	if ($self->{initial}[$i] eq $label) {
 	    my $file = $self->{files}[$i];
@@ -78,6 +104,29 @@ sub releaseAfterFork {
 		    "no resource $i $file to acquire in $label";
 	    }
 	}
+    }
+
+    $wait = time + 5.0;
+    if ($label eq 'P') {
+      _touch( $self->{parent_sync} . "2" );
+      while (! -e $self->{child_sync} . "2") {
+	if (time > $wait) {
+	  warn "child not synchronized for end of parent-child init";
+	  last;
+	}
+	sleep 0.1;
+      }
+      unlink $self->{parent_sync} . "1", $self->{parent_sync} . "2";
+    } elsif ($label eq 'C') {
+      _touch( $self->{child_sync} . "2" );
+      while (! -e $self->{parent_sync} . "2") {
+	if (time > $wait) {
+	  warn "parent not synchronized for end of parent-child init";
+	  last;
+	}
+	sleep 0.1;
+      }
+      unlink $self->{child_sync} . "1", $self->{child_sync} . "2";
     }
 
     if ($label eq 'P') {
@@ -100,6 +149,18 @@ sub releaseAfterFork {
 	flock $fh, 2;
 
     }
+
+    # Since this implementation does not lock any resources until
+    # AFTER the fork, there is a race condition. It is possible
+    # for the companion process to try and successfully acquire a
+    # resource before the intended process is able to run this
+    # method and acquire it for itself.
+    #
+    # A delay here is not fool proof, but it should help the
+    # companion process have enough time to grab the resources
+    # it is supposed to before this process gets on with its
+    # business.
+####    sleep 5;
 
     return;
 }

@@ -33,7 +33,9 @@ my %LIMITS = (file => $limits_file);
 our $MAIN_PID = $$;
 
 if ($^O eq 'cygwin') {
-    print STDERR qq!
+  
+  # I think we've fixed this.
+  0 && print STDERR qq!
 *************************************************
 * On Cygwin systems, if you see error messages  *
 * that say "WFSO timed out after longjmp" five  *

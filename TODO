@@ -231,3 +231,7 @@ Possible TODOs:
 	_x_ decrease $Forks::Super::MAX_LOAD
 	_x_ dump (see Forks::Super::Debug::parent_dump)
         ___ what else?
+
+    ___ Emulation mode, good for debugging, where calling fork()
+	does not actually create a new subprocess, but just runs
+	the child code in the main process.

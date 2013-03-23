@@ -9,10 +9,12 @@ our %RECOMMENDED
        'Sys::CpuAffinity' => '0.91',
        'Sys::CpuLoadX' => '0.02',
        'DateTime::Format::Natural' => '0.89',
+       'PerlIO::gzip' => 0,
 
        # for MSWin32/Cygwin:
-       'Win32::API' => '0.43',
-       'Win32::Process' => '0.11',
+       'Win32::API' => '0.70',
+       'Win32::IPC' => 0,
+       'Win32::Process' => '0.14',
        'Win32::Process::Kill' => '2.64');
 
 our %REQUIRED 

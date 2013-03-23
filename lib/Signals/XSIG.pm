@@ -269,7 +269,8 @@ sub Signals::XSIG::TieSIG::CLEAR {
 
 sub Signals::XSIG::TieSIG::EXISTS {
     my ($self,$key) = @_;
-    return untied { exists $SIG{$key} };
+    my $z = untied { exists $SIG{$key} };
+    return $z;
 }
 
 sub Signals::XSIG::TieSIG::FIRSTKEY {
@@ -1023,7 +1024,7 @@ _head1 ACKNOWLEDGEMENTS
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010-2011 Marty O'Brien.
+Copyright 2010-2013 Marty O'Brien.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published

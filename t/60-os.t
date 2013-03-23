@@ -121,7 +121,7 @@ SKIP: {
 #	 "\$phandle is $phandle\n");
 
     if ($phandle) {
-	my ($proc_affinity, $sys_affinity) = (0,0);
+	my ($proc_affinity, $sys_affinity) = (' 'x16, ' 'x16);
 	my $result 
 	    = Forks::Super::Job::OS::Win32::win32api("GetProcessAffinityMask",
 					     $phandle, $proc_affinity,

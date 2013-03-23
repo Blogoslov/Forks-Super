@@ -104,9 +104,12 @@ SKIP: {
 
 if ($^O eq 'MSWin32') {
     waitall;
-} elsif (ref $pid eq 'Forks::Super::Job') {
-    kill 'INT', $pid->{real_pid};
 } else {
-    kill 'INT',$pid;
+    our $INT = $^O eq 'cygwin' ? 'TERM' : 'INT'; # see t/24a-kill.t
+    if (ref $pid eq 'Forks::Super::Job') {
+        kill $INT, $pid->{real_pid};
+    } else {
+	kill $INT,$pid;
+    }
 }
 exit 0;

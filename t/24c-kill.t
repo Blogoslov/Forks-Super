@@ -20,6 +20,8 @@ if (${^TAINT}) {
     Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
+our $QUIT = $^O eq 'cygwin' ? 'TERM' : 'QUIT';
+
 SKIP: {
     if ($^O eq "MSWin32" && !Forks::Super::Config::CONFIG("Win32::API")) {
 	skip "kill is unsafe on MSWin32 without Win32::API", 7;
@@ -40,7 +42,7 @@ SKIP: {
     ok($zero==3, "successfully sent SIGZERO to 3 exec procs")
 	or diag("signalled $zero procs, expected 3");
 
-    my $y = Forks::Super::kill('QUIT', $pid1);
+    my $y = Forks::Super::kill($QUIT, $pid1);
     ok($y == 1, "kill signal to $pid1 sent successfully $y==1 exec")
 	or diag("signalled $y procs, expected 1");
 
@@ -48,7 +50,7 @@ SKIP: {
     # resend to make sure it gets delivered, otherwise later tests will fail
     for (1..3) {
 	sleep 1;
-	Forks::Super::kill('QUIT', $pid1) unless $pid1->is_complete;
+	Forks::Super::kill($QUIT, $pid1) unless $pid1->is_complete;
     }
     for (1..3) {
 	last if $pid1->is_complete;

@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -642,7 +642,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.63
+Version 0.64
 
 =head1 SYNOPSIS
 
@@ -3131,7 +3131,7 @@ file are not case sensitive.
     max_proc=10
     IPC_DIR=/home/mob/.forks-super-ipc
 
-=begin NOT_READY_YET
+=cut
 
 Setting a configuration file name with a C<< CONFIG => file >>
 directive also specifies the file that will be reloaded when you
@@ -3282,31 +3282,6 @@ in your code, you should still be OK.
 # ------ $SIG{CHLD}='IGNORE' may cause  wait/waitpid  to
 #        always return 0/-1
 
-=pod
-
-Some features of C<Forks::Super> use the
-L<alarm|perlfunc/"alarm"> function and custom
-C<SIGALRM> handlers in the child processes. Using other
-modules that employ this functionality may cause
-undefined behavior. Systems and versions that do not
-implement the C<alarm> function (like MSWin32 prior to
-Perl v5.7) will not be able to use these features.
-
-On some systems that (1) have a POSIX-y signal framework,
-and (2) have B<not> implemented C<Time::HiRes::setitimer>,
-this module will also try to install a C<SIGUSR1>
-handler when there are deferred tasks. See the description
-of C<$Forks::Super::QUEUE_INTERRUPT> under
-L</"MODULE VARIABLES"> to use a different signal handler
-if you intended to use a C<SIGUSR1> handler for
-something else.
-
-(In all these cases, you will get undefined behavior rather than
-catastrophic behavior because the C<Forks::Super> module uses
-L<Signals::XSIG|Signals::XSIG>. This module makes it possible
-to define multiple handlers for a signal, though it does not
-necessarily make it a good idea.)
-
 =head1 DEPENDENCIES
 
 The L<Win32::API|Win32::API> module is required for Windows users.
@@ -3414,7 +3389,7 @@ Marty O'Brien, E<lt>mob@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2009-2012, Marty O'Brien.
+Copyright (c) 2009-2013, Marty O'Brien.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.8 or,

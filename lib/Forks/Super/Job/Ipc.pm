@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.63';
+our $VERSION = '0.64';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -2373,16 +2373,10 @@ sub _close_socket {
 
 	    _update_handle_for_close($handle);
 
-	    #$$handle->{closed} ||= Time::HiRes::time();
-	    #$$handle->{elapsed} ||= $$handle->{closed} - $$handle->{opened};
-
 	    my $sh = $handle;
 	    my $th = tied *$handle;
 	    if ($th && $th->isa('Forks::Super::Tie::IPCSocketHandle')) {
 		$sh = $th->{SOCKET};
-#	    if (tied *$handle 
-#		&& ref(tied *$handle) eq 'Forks::Super::Tie::IPCSocketHandle') {
-#		$sh = (tied *$handle)->{SOCKET};
 		$z = close $sh;
 
 		# XXX - is untie necessary? see comment in _close()
@@ -2393,7 +2387,6 @@ sub _close_socket {
 	    } else {
 		$z = close $handle;
 		if ($th) {
-#		if (tied *$handle) {
 		    # XXX - is untie necessary? see comment in _close()
 		    # no warnings from this untie, though ...
 		    untie *$handle;
@@ -3112,7 +3105,8 @@ sub deinit_child {
     }
 
     if (@IPC_FILES > 0) {
-	Carp::cluck("Child $$ had temp files! @IPC_FILES\n");
+        Carp::cluck("Child $$ had temp files! @IPC_FILES\n")
+	    if $Forks::Super::CHILD_FORK_OK < 0; # SO.com/questions/15230850
 	unlink @IPC_FILES;
 	@IPC_FILES = ();
     }

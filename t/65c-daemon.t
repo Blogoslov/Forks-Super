@@ -21,6 +21,8 @@ if (${^TAINT}) {
 
 ### to cmd
 
+our $QUIT = $^O eq 'cygwin' ? 'TERM' : 'QUIT';
+
 my $output = "$CWD/t/out/daemon3.$$.out";
 my $pid = fork {
     daemon => 1,
@@ -28,7 +30,7 @@ my $pid = fork {
     name => 'daemon3',
     cmd => [ $^X, "$CWD/t/external-daemon.pl" ]
 };
-ok(isValidPid($pid), "fork to cmd with daemon opt successful");
+ok(isValidPid($pid), "$pid\\fork to cmd with daemon opt successful");
 my $t = Time::HiRes::time;
 my $p2 = wait;
 $t = Time::HiRes::time - $t;
@@ -39,13 +41,14 @@ sleep 2;
 SKIP: {
     if (!Forks::Super::Config::CONFIG('filehandles')) {
 	sleep 13;
+	sleep 5 if $^O eq 'MSWin32';
 	skip "some daemon features won't work without file IPC", 4;
     }
 
     my $k = Forks::Super::kill 'ZERO', $pid;
     ok($k, "SIGZERO on daemon successful");
     ok($pid->{intermediate_pid},
-       "intermediate pid $pid->{intermediate} set on job");
+       "intermediate pid $pid->{intermediate_pid} set on job");
 
     if (Forks::Super::Util::IS_WIN32ish &&
 	!Forks::Super::Config::CONFIG_module('Win32::API')) {
@@ -55,14 +58,17 @@ SKIP: {
     } else {
 
 	sleep 2;
+	diag "gonna suspend job in state ",$pid->{state};
 	$pid->suspend;
 	sleep 4;
+	sleep 2 if $^O eq 'MSWin32';
 	my $s1 = -s $output;
 	sleep 1;
 	my $s2 = -s $output;
 	for (1..3) {
 	    $pid->resume;
 	    sleep 1;
+	    sleep 1 if $^O eq 'MSWin32';
 	}
 	my $s22 = -s $output;
 	ok($s1 && $s1 == $s2 && $s2 != $s22,                  ### 5 ###
@@ -71,7 +77,7 @@ SKIP: {
     }
 
     sleep 2;
-    my $k1 = Forks::Super::kill 'QUIT', $pid;
+    my $k1 = Forks::Super::kill $QUIT, $pid;
     sleep 3;
 
     for (1..2) {

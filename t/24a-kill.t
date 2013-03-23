@@ -3,8 +3,10 @@ use Test::More tests => 8;
 use strict;
 use warnings;
 
-# as of v0.30, the kill and kill_all functions are not very well speced out.
-# these tests should pass in the current incarnation, though.
+# on Cygwin, the OS sometimes sends this script SIGTTIN
+
+# can this be trapped? I don't think so.
+$SIG{TTIN} = sub { print STDERR "trapped SIGTTIN\n" };
 
 if (${^TAINT}) {
     require Cwd;
@@ -20,9 +22,16 @@ if (${^TAINT}) {
     Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 }
 
+# XXX - with t/forked_harness.pl (make fasttest) on Cygwin w/ Windows 7,
+#       SIGQUIT and SIGINT suspend the whole process group for some reason,
+#       but SIGTERM does not. Have to look into that. But for now,
+#       we can pass this test using SIGTERM.
+#       
+our $QUIT = $^O eq 'cygwin' ? 'TERM' : 'QUIT';
+
 my $bgsub = sub {
     # In case process doesn't know it's supposed to exit on SIGQUIT:
-    $SIG{QUIT} = sub { die "$$ received SIGQUIT\n" };
+    $SIG{$QUIT} = sub { die "$$ received SIG$QUIT\n" };
     sleep 15;
 };
 
@@ -47,7 +56,7 @@ SKIP: {
 	or diag("signal was sent to $zero/3 jobs");
 
 
-    my $y = Forks::Super::kill('QUIT', $j1);
+    my $y = Forks::Super::kill($QUIT, $j1);
     ok($y == 1, "kill signal to $pid1 with sent successfully $y==1 sub");
     sleep 1;
 
