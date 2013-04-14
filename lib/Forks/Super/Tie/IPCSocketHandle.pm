@@ -28,7 +28,7 @@ use IO::Socket;
 use IO::Handle;
 
 our @ISA = qw(IO::Socket IO::Handle);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 # XXX Windows hack. To get smoothly running sockets on Windows it
 #     seems we have to do a slight pause after each write op.
@@ -218,7 +218,7 @@ sub shutdown {
 
 sub CLOSE {
     my $self = shift;
-    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
+    if (&Forks::Super::Job::_INSIDE_END_QUEUE) {
 	untie *{$self->{GLOB}};
 	if ($self->{SOCKET}) {
 	    CORE::shutdown $self->{SOCKET}, 2;
@@ -255,7 +255,7 @@ sub DESTROY {
 # on the tied object's real underlying socket handle
 #
 sub Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD {
-    return if $Forks::Super::Job::INSIDE_END_QUEUE;
+    return if &Forks::Super::Job::_INSIDE_END_QUEUE;
     my $method = $Forks::Super::Tie::IPCSocketHandle::Delegator::AUTOLOAD;
     $method =~ s/.*:://;
     my $delegator = shift;

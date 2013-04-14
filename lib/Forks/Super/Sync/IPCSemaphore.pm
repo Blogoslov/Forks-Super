@@ -7,7 +7,7 @@ use POSIX ':sys_wait_h';
 use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_NOWAIT);
 use IPC::Semaphore;
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 our $NOWAIT_YIELD_DURATION = 0.05;
 

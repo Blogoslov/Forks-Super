@@ -22,9 +22,11 @@ use IO::Handle;
 use strict;
 use warnings;
 
+eval "use Devel::GlobalDestruction";
+
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -1570,6 +1572,16 @@ sub _config_dir {
     return;
 }
 
+sub _INSIDE_END_QUEUE {
+
+  # for RT#76868
+  if ($INC{"Devel/GlobalDestruction.pm"}) {
+    return in_global_destruction();
+  } else {
+    return $INSIDE_END_QUEUE;
+  }
+}
+
 END {
     no warnings 'internal';
     $INSIDE_END_QUEUE = 1;
@@ -1693,9 +1705,12 @@ sub enable_overload {
 sub disable_overload {
     if ($OVERLOAD_ENABLED) {
 	$OVERLOAD_ENABLED = 0;
-	eval { no overload values %overload::ops; 1 }
-        or Forks::Super::Debug::carp_once 'Forks::Super::Job ',
+
+	my $ops = join(" ", values %overload::ops);   # RY#84548
+	eval "no overload qw($ops); 1"
+	or Forks::Super::Debug::carp_once 'Forks::Super::Job ',
 	        "disable overload failed: $@";
+
     }
     return;
 }
@@ -1889,7 +1904,7 @@ sub dispose {
 		$! = 0;
 		if (unlink $file) {
 		    delete $Forks::Super::Job::Ipc::IPC_FILES{$file};
-		} elsif ($INSIDE_END_QUEUE) {
+		} elsif (&_INSIDE_END_QUEUE) {
 		    warn "unlink failed for \"$file\": $! $^E\n";
 		    warn "@{$Forks::Super::Job::Ipc::IPC_FILES{$file}}\n";
 		}
@@ -1938,7 +1953,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.64
+0.65
 
 =head1 SYNOPSIS
 

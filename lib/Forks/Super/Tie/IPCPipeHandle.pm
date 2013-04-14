@@ -24,7 +24,7 @@ use IO::Pipe;
 use IO::Handle;
 
 our @ISA = qw(IO::Pipe IO::Handle);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 sub TIEHANDLE {
     my ($class, $real_pipe, $glob) = @_;
@@ -194,7 +194,7 @@ sub opened {
 
 sub CLOSE {
     my $self = shift;
-    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
+    if (&Forks::Super::Job::_INSIDE_END_QUEUE) {
 	untie *{$self->{GLOB}};
 	if ($self->{PIPE}) {
 	    close $self->{PIPE};
@@ -221,7 +221,7 @@ sub DESTROY {
 # on the tied object's real underlying socket handle
 #
 sub Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD {
-    return if $Forks::Super::Job::INSIDE_END_QUEUE;
+    return if &Forks::Super::Job::_INSIDE_END_QUEUE;
     my $method = $Forks::Super::Tie::IPCPipeHandle::Delegator::AUTOLOAD;
     $method =~ s/.*:://;
     my $delegator = shift;

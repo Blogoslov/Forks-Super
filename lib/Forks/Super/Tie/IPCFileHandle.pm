@@ -29,7 +29,7 @@ use strict;
 use warnings;
 
 our @ISA = qw(Exporter IO::Handle);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 sub TIEHANDLE {
     my ($class, %props) = @_;
@@ -204,7 +204,7 @@ sub Forks::Super::Tie::Delegator::AUTOLOAD {
 	return;  # no op
     }
 
-    if (!$Forks::Super::Job::INSIDE_END_QUEUE) {
+    if (!&Forks::Super::Job::_INSIDE_END_QUEUE) {
 	Carp::confess "Can't delegate method $method from an untied object!";
     }
 

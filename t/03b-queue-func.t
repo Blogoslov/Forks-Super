@@ -1,12 +1,12 @@
 # exercise Forks::Super::Queue package
 
 use Forks::Super::Queue;
+use Forks::Super::Job;
 use Test::More tests => 15;
 use strict;
 use warnings;
 
 $Forks::Super::MAIN_PID = $$;
-$Forks::Super::Job::INSIDE_END_QUEUE = 0;
 $Forks::Super::CHILD_FORK_OK = 0;
 Forks::Super::Queue::init();
 

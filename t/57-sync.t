@@ -54,7 +54,9 @@ ok($pid->{_sync} && $pid->{_sync}{count}==3,
    "job has _sync object, correct count");
 
 ok(0 > $pid->acquire(0), 'job already has resource 0');
-ok(! $pid->acquire(1,5), 'resource 1 is locked even after 5s');
+
+# intermittent failure point on MSWin32
+ok(! $pid->acquire(1,5), 'resource 1 is locked even after 5s');  ### 11 ###
 ok($pid->release(0),     'resource 0 is released');
 $t = Time::HiRes::time();
 ok($pid->acquire(1,2),   'resource 1 can be acquired now');

@@ -16,7 +16,7 @@ use constant IS_CYGWIN => $^O =~ /cygwin/i;
 use constant IS_WIN32ish => &IS_WIN32 || &IS_CYGWIN;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN okl);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -249,9 +249,12 @@ sub _has_POSIX_signal_framework {
 
 sub is_socket {
     my $handle = shift;
-    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
-	return 1 if ref $handle eq 'REF';
-    }
+
+    return 1 if ref $handle eq 'REF';
+
+#    if (&Forks::Super::Job::_INSIDE_END_QUEUE) {
+#	return 1 if ref $handle eq 'REF';
+#    }
 
     my $th = tied *$handle;
     if (ref($th)) {
@@ -356,7 +359,7 @@ Forks::Super::Util - utility routines for Forks::Super module
 
 =head1 VERSION
 
-0.64
+0.65
 
 =head1 SYNOPSIS
 

@@ -6,7 +6,9 @@ use warnings;
 # on Cygwin, the OS sometimes sends this script SIGTTIN
 
 # can this be trapped? I don't think so.
-$SIG{TTIN} = sub { print STDERR "trapped SIGTTIN\n" };
+if (exists $SIG{TTIN}) {
+  $SIG{TTIN} = sub { print STDERR "trapped SIGTTIN\n" };
+}
 
 if (${^TAINT}) {
     require Cwd;

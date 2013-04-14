@@ -67,7 +67,7 @@ use overload # XXX - what is overloading for? is it necessary?
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 # "protocols" for serializing data and the methods used
 # to carry out the serialization

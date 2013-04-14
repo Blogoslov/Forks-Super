@@ -17,7 +17,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(queue_job);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 # must sync FIRST_DEFERRED_ID with Win32 code in Forks::Super::Util::isValidPid
 use constant FIRST_DEFERRED_ID => -500000;
@@ -245,7 +245,7 @@ sub _cleanup {
 #
 sub queue_job {
     my $job = shift;
-    if ($Forks::Super::Job::INSIDE_END_QUEUE) {
+    if (&Forks::Super::Job::_INSIDE_END_QUEUE) {
 	return;
     }
     if (defined $job) {
@@ -287,7 +287,7 @@ sub run_queue {
     if (@QUEUE <= 0) {
 	return;
     }
-    if ($Forks::Super::Job::INSIDE_END_QUEUE > 0) {
+    if (&Forks::Super::Job::_INSIDE_END_QUEUE) {
 	return;
     }
 
@@ -533,7 +533,7 @@ Forks::Super::Queue
 
 =head1 VERSION
 
-0.64
+0.65
 
 =head1 DESCRIPTION
 

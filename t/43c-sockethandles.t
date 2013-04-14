@@ -110,7 +110,7 @@ sub read_stderr_test {
 	   "CHILD_STDIN value defined");
 	ok(!defined $Forks::Super::CHILD_STDOUT{$pid}, 
 	   "CHILD_STDOUT value not defined pid $pid");
-	ok(defined $Forks::Super::CHILD_STDERR{$pid}, 
+	ok(defined $Forks::Super::CHILD_STDERR{$pid},           ### 5 ###
 	   "CHILD_STDERR value defined");
     }
 

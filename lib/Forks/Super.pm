@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.64';
+our $VERSION = '0.65';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -642,7 +642,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.64
+Version 0.65
 
 =head1 SYNOPSIS
 
@@ -1287,6 +1287,20 @@ about reading from a handle after you have
 already read past the end. You may find it useful for your
 parent and child processes to follow some convention (for example,
 a special word like C<"__END__">) to denote the end of input.
+
+=item *
+
+There is a limit to how many filehandles your process can have
+open at one time. Sometimes that limit is quite small (I'm talking
+to B<you>, default configuration of Solaris!) If your program creates
+many child processes and you use filehandles or sockethandles for
+interprocess communication with them, you could run out of 
+filehandles. When this happens, you will see warning messages like
+C<Too many open file while opening ...> or sometimes a cryptic
+C<Can't locate Scalar/Util.pm in @INC (@INC contains: ...)> message.
+Invoking L<"close_fh"> or L<Forks::Super::Job/"dispose"> 
+on finished jobs will close these I/O handles and make them available
+for new processes.
 
 =back
 
