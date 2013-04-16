@@ -135,7 +135,4 @@ ok($Forks::Super::Job::OVERLOAD_ENABLED == 0,
 $job_pid = fork { sub => sub { sleep 1 } };
 ok(!ref($job_pid), "redisabled overload fork returns simple num");
 
-
 waitall;
-
-

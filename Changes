@@ -1,8 +1,11 @@
 Revision history for Forks-Super
 
+0.66    2013-04-16
+        RT#84548 - re-fix disable overload for Perl <=5.12 too
+
 0.65    2013-04-13
-        RT84548 - fix disable overload warning with Perl>=v5.16
-        RT76868 - incorporate Devel::GlobalDestruction if available.
+        RT#84548 - fix disable overload warning with Perl>=v5.16
+        RT#76868 - incorporate Devel::GlobalDestruction if available.
 
 0.64    2013-03-23
         Improved thread signal processing in Win32

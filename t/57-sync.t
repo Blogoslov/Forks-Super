@@ -26,7 +26,8 @@ ok($pid->{_sync} && $pid->{_sync}{count} == 1,
 diag("sync implementation is ", $pid->{_sync}{implementation});
 
 my $t = Time::HiRes::time();
-ok($pid->acquire(0,10), "parent acquires lock");
+# intermittent failure (hang) point on Cygwin 5.8.8, Semaphlock impl
+ok($pid->acquire(0,10), "parent acquires lock");                   ### 2 ###
 $t = Time::HiRes::time() - $t;
 ok($t <= 1.0, "parent acquires lock quickly ${t}s expected <1s");
 ok(0 > $pid->acquire(0,10), "parent already has lock");
@@ -36,7 +37,8 @@ ok(!$pid->release(0), "parent already released lock");
 
 Time::HiRes::sleep(0.25) while $pid->is_active && $pid->acquireAndRelease(0,0);
 $t = Time::HiRes::time();
-ok(! $pid->acquire(0, 2), "parent fails to acquire lock in 2s");
+# intermittent failure (hang) point on Cygwin 5.8.8, Semaphlock impl
+ok(! $pid->acquire(0, 2), "parent fails to acquire lock in 2s"); ### 7 ###
 $t = Time::HiRes::time() - $t;
 ok($t > 1.50 && $t < 3.5, 
    "acquire with timeout respected timeout took ${t}s expected ~2s");

@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.65';
+our $VERSION = '0.66';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -1679,6 +1679,7 @@ sub enable_overload {
 	        'atan2' => sub { $_[2] ? atan2($_[1],$_[0]->{pid}) 
 				     : atan2($_[0]->{pid},$_[1]) },
 		 # '<>' => sub { $_[0]->read_stdout() },  # doesn't work
+		'fallback' => 1,
 		    ;
 
 	    # '<>' => sub { ... }
@@ -1706,9 +1707,15 @@ sub disable_overload {
     if ($OVERLOAD_ENABLED) {
 	$OVERLOAD_ENABLED = 0;
 
-	my $ops = join(" ", values %overload::ops);   # RY#84548
-	eval "no overload qw($ops); 1"
-	or Forks::Super::Debug::carp_once 'Forks::Super::Job ',
+	# XXX - the use of  overload::unimport  at run-time is "questionable"
+	#       and of dubious value
+	eval {
+	    my @ops = grep {
+	        $_ ne '""' && $_ ne 'fallback'
+	    } map { split } values %overload::ops;
+	    overload->unimport( @ops );
+	    1
+	} or Forks::Super::Debug::carp_once 'Forks::Super::Job ',
 	        "disable overload failed: $@";
 
     }
@@ -1953,7 +1960,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.65
+0.66
 
 =head1 SYNOPSIS
 

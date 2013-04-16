@@ -235,3 +235,7 @@ Possible TODOs:
     ___ Emulation mode, good for debugging, where calling fork()
 	does not actually create a new subprocess, but just runs
 	the child code in the main process.
+
+    ___ RT#78285 - monitor open filehandles. When we approach the
+        limit, we may want to close the filehandles from old, finished
+        jobs.

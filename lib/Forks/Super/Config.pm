@@ -19,7 +19,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(CONFIG CONFIG_module);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.65';
+our $VERSION = '0.66';
 
 our (%CONFIG, $IS_TEST, $IS_TEST_CONFIG, %SIGNO, $CONFIG_FILE);
 
