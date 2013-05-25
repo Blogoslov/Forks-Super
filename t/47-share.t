@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 13;
+use Test::More tests => 18;
 use strict;
 use warnings;
 
@@ -99,4 +99,29 @@ if (keys %a == 0) {
     ok($a{"Forks"} eq "Super", "share hash ok even on job failure");
 }
 ok(!defined $a{"Super"}, "job failed before second child hash assignment");
+
+##################################################################
+
+# test sharing in a natural child (implemented in 0.67)
+
+my ($b, @b, %b);
+
+$b = 1;
+@b = ("foo");
+%b = (foo => 123, bar => 456);
+
+$pid = fork { share => [ \%b, \@b, \$b ] };
+if ($pid == 0) {
+  $b = 42;
+  @b = ("bar");
+  %b = ("forks" => "super");
+  exit;
+}
+ok($pid, "natural fork with share launched");
+ok(waitpid($pid, 0), "waitpid ok");
+ok($b == 42, "shared scalar in natural fork updated");
+ok($b[0] eq "foo" && $b[1] eq "bar",
+   "shared array in natural fork updated");
+ok($b{"foo"}==123 && $b{"forks"} eq "super",
+   "shared hash in natural fork updated");
 

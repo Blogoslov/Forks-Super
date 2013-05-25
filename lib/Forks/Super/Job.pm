@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.66';
+our $VERSION = '0.67';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -837,7 +837,11 @@ sub _postlaunch_child {
 
 	$job->_postlaunch_child_to_sub;
 
-    }
+    } elsif ($job->{style} eq 'natural') {
+
+        $job->_postlaunch_to_natural_child;
+
+      }
     return 0;
 }
 
@@ -953,6 +957,14 @@ sub _postlaunch_child_to_sub {
 	die $error,"\n";
     }
     exit 0;
+}
+
+sub _postlaunch_to_natural_child {
+    # no chance to run  deinit_child  on a natural fork except inside
+    # an END block. This function adds an END block at run time that
+    # won't be seen by any other processes.
+    use B;
+    unshift @{B::end_av->object_2svref}, \&deinit_child;
 }
 
 sub _launch_from_child {
@@ -1960,7 +1972,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.66
+0.67
 
 =head1 SYNOPSIS
 
