@@ -7,7 +7,7 @@ use POSIX ':sys_wait_h';
 use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_NOWAIT);
 use IPC::Semaphore;
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.67';
+our $VERSION = '0.68';
 
 our $NOWAIT_YIELD_DURATION = 0.05;
 
@@ -24,17 +24,17 @@ sub new {
 
     $self->{sems} = eval q{
 	IPC::Semaphore->new(
-	    &IPC_PRIVATE, 4+$count, &S_IRUSR|&S_IWUSR|&IPC_CREAT);
+	    &IPC_PRIVATE, $count, &S_IRUSR|&S_IWUSR|&IPC_CREAT);
     };
     unless ($self->{sems}) {
 	carp "IPC::Semaphore constructor failed: $@";
 	return;
     }
-    $self->{sems}->setall(1,1,1,1,(0) x $count);
+    $self->{sems}->setall((0) x $count);
     return $self;
 }
 
-sub releaseAfterFork {
+sub _releaseAfterFork {
     my ($self, $childPid) = @_;
 
     $self->{childPid} = $childPid;
@@ -44,22 +44,14 @@ sub releaseAfterFork {
 	    $self->acquire($i);
 	}
     }
-    if ($label eq "P") {
-	$self->release(-3);            # indicate parent is ready
-	$self->acquireAndRelease(-2);  # wait for child to be ready
-    } elsif ($label eq 'C') {
-	push @RELEASE_ON_EXIT, $self; # if rand() > 0.5;
-	$self->release(-2);
-	$self->acquireAndRelease(-3);
-    }
     return;
 }
 
 sub release {
     my ($self, $n) = @_;
-    return if $n+4 < 0 || $n >= $self->{count};
+    return if $n < 0 || $n >= $self->{count};
     if ($n < 0 || $self->{acquired}[$n]) {
-	$self->{sems} && $self->{sems}->setval($n+4, 0);
+	$self->{sems} && $self->{sems}->setval($n, 0);
 	$self->{acquired}[$n] = 0  if $n >= 0;
 	return 1;
     }
@@ -115,7 +107,7 @@ sub _wait_on {
 
 sub acquire {
     my ($self, $n, $timeout) = @_;
-    if ($n+4 < 0 || $n >= $self->{count}) {
+    if ($n < 0 || $n >= $self->{count}) {
 	return;
     }
     if ($n >= 0 && $self->{acquired}[$n]) {
@@ -127,12 +119,12 @@ sub acquire {
     if (defined $timeout) {
 	$expire = Time::HiRes::time() + $timeout;
     }
-    my $z = $self->_wait_on($n+4, $expire);
+    my $z = $self->_wait_on($n, $expire);
     if ($z > 0) {
 	if ($n >= 0) {
 	    $self->{acquired}[$n] = 1;
 	}
-	$self->{sems} && $self->{sems}->setval($n+4,1);
+	$self->{sems} && $self->{sems}->setval($n,1);
     }
 
     if ($z > 1) {

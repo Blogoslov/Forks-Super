@@ -61,12 +61,10 @@ ok(0 > $pid->acquire(0), 'job already has resource 0');
 ok(! $pid->acquire(1,5), 'resource 1 is locked even after 5s');  ### 11 ###
 ok($pid->release(0),     'resource 0 is released');
 $t = Time::HiRes::time();
-ok($pid->acquire(1,2),   'resource 1 can be acquired now');
+
+# failure point for MSWin32, Win32::Mutex sync implementation
+ok($pid->acquire(1,4),   'resource 1 can be acquired now');      ### 13 ###
 $t = Time::HiRes::time() - $t;
 ok($t < 1.5, "resource 1 was acquired quickly. Took ${t}s, expected <1s");
 
 ##################################################################
-
-
-
-

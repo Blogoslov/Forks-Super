@@ -8,11 +8,12 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.67';
+our $VERSION = '0.68';
 
 sub new {
     my ($pkg, %args) = @_;
-    my $implementation_arg = $args{implementation} || '';
+    my $implementation_arg = $args{implementation} ||
+      $ENV{"FORKS_SUPER_SYNC_IMPL"} || '';
     my $count = $args{count} || 1;
     my @initial = ('N') x $count;
     if ($args{initial}) {
@@ -79,7 +80,37 @@ sub new {
 	last if $self && ref($self) =~ /Forks::Super::Sync/;
     }
 
+    $self->_prepare_initial_sync;
     return $self;
+}
+
+sub _prepare_initial_sync {
+
+    # the parent and/or child process may have some initialization to
+    # perform, and needs a way to guarantee that the other process
+    # will not affect some shared resource until that initialization is
+    # complete. One way to accomplish that is with two pairs of pipes
+    # so that (1) a process can tell the other process when it is
+    # done with the initialization and (2) a process can wait until the
+    # other process is done with its initialization.
+
+    my $self = shift;
+    pipe my $r1, my $w1;
+    pipe my $r2, my $w2;
+    $self->{pipes} = { P => [ $r1, $w2 ], C => [ $r2, $w1 ] };
+    return;
+}
+
+sub _perform_initial_sync {
+    my ($self) = @_;
+    my $label = $$ == $self->{ppid} ? 'P' : 'C';
+    my ($reader, $writer) = @{$self->{pipes}{$label}};
+
+    print {$writer} "\n";
+    close $writer;
+
+    readline($reader);
+    close $reader;
 }
 
 sub acquire {
@@ -120,6 +151,12 @@ sub acquireAndRelease {
 }
 
 sub releaseAfterFork {
+    my ($self,$childPid) = @_;
+    $self->_releaseAfterFork($childPid);
+    $self->_perform_initial_sync;
+}
+
+sub _releaseAfterFork {
     my ($self) = @_;
     my $label = $$ == $self->{ppid} ? 'P' : 'C';
     for my $n (0 .. $#{$self->{initial}}) {
@@ -139,6 +176,12 @@ sub acquired {
 sub remove {
 }
 
+sub releaseAll {
+    my $self = shift;
+    $self->release($_) for 0 .. $self->{count}-1;
+    close $_ for @{$self->{pipes}{P}}, @{$self->{pipes}{C}};
+}
+
 #############################################################################
 
 1;
@@ -151,7 +194,7 @@ Forks::Super::Sync - portable interprocess synchronization object
 
 =head1 VERSION
 
-0.67
+0.68
 
 =head1 SYNOPSIS
 

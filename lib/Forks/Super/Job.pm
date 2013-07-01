@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.67';
+our $VERSION = '0.68';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -1890,7 +1890,16 @@ sub init_child {
 }
 
 sub deinit_child {
+
+    # global destruction does not always release any sync objects held
+    # by the child. this is especially true on MSWin32.
+    my $job = Forks::Super::Job->this;
+    if ($job->{_sync}) {
+      $job->{_sync}->releaseAll;
+    }
+
     Forks::Super::Job::Ipc::deinit_child();
+
     return;
 }
 
@@ -1972,7 +1981,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.67
+0.68
 
 =head1 SYNOPSIS
 

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Carp;
 use Time::HiRes;
-our $VERSION = '0.67';
+our $VERSION = '0.68';
 our @ISA = qw(Forks::Super::Sync);
 
 my $ipc_seq = 0;
@@ -16,19 +16,6 @@ sub new {
     $self->{initial} = [ @initial ];
     $self->{id} = $sync_count++;
     bless $self, $pkg;
-
-    # meta locks
-    $self->{child_sync} = _get_filename();
-    $self->_register_ipc_file($self->{child_sync}, "for child");
-    $self->{parent_sync} = _get_filename();
-    $self->_register_ipc_file($self->{parent_sync}, "for parent");
-
-    # lock these file descriptors before the fork. The locks will persist
-    # through the fork, and can be unlocked by either parent or child
-    open $self->{child_lock}, '>>', $self->{child_sync};
-    flock $self->{child_lock}, 2;
-    open $self->{parent_lock}, '>>', $self->{parent_sync};
-    flock $self->{parent_lock}, 2;
 
     for my $i (0 .. $count-1) {
 	my $file = _get_filename();
@@ -62,30 +49,13 @@ sub _touch {
   close $touch;
 }
 
-sub releaseAfterFork {
+sub _releaseAfterFork {
     my $self = shift;
 
     # for this implementation, it is more like acquire after fork
     my $label = $$ == $self->{ppid} ? 'P' : 'C';
 
     my $wait = time + 5.0;
-    if ($label eq 'P') {
-      _touch( $self->{parent_sync} . "1" );
-      until (time > $wait || -e $self->{child_sync} . "1") {
-	sleep 0.05;
-      }
-      if (! -e $self->{child_sync} . "1") {
-	warn "child not synchronized for parent-child sync init";
-      }
-    } elsif ($label eq 'C') {
-      _touch( $self->{child_sync} . "1" );
-      until (time > $wait || -e $self->{parent_sync} . "1") {
-	sleep 0.05;
-      }
-      if (! -e $self->{parent_sync} . "1") {
-	warn "parent not synchronized for parent-child sync init";
-      }
-    }
 
     for my $i (0 .. $self->{count} - 1) {
 	if ($self->{initial}[$i] eq $label) {
@@ -105,62 +75,6 @@ sub releaseAfterFork {
 	    }
 	}
     }
-
-    $wait = time + 5.0;
-    if ($label eq 'P') {
-      _touch( $self->{parent_sync} . "2" );
-      while (! -e $self->{child_sync} . "2") {
-	if (time > $wait) {
-	  warn "child not synchronized for end of parent-child init";
-	  last;
-	}
-	sleep 0.1;
-      }
-      unlink $self->{parent_sync} . "1", $self->{parent_sync} . "2";
-    } elsif ($label eq 'C') {
-      _touch( $self->{child_sync} . "2" );
-      while (! -e $self->{parent_sync} . "2") {
-	if (time > $wait) {
-	  warn "parent not synchronized for end of parent-child init";
-	  last;
-	}
-	sleep 0.1;
-      }
-      unlink $self->{child_sync} . "1", $self->{child_sync} . "2";
-    }
-
-    if ($label eq 'P') {
-
-	flock $self->{parent_lock}, 8;
-
-	open my $fh, '>>', $self->{child_sync};
-	flock $fh, 2;
-
-	close $fh;
-	close $self->{parent_lock};
-	close $self->{child_lock};
-	unlink $self->{parent_sync}, $self->{child_sync};
-
-    } else {
-
-	flock $self->{child_lock}, 8;
-
-	open my $fh, '>>', $self->{parent_sync};
-	flock $fh, 2;
-
-    }
-
-    # Since this implementation does not lock any resources until
-    # AFTER the fork, there is a race condition. It is possible
-    # for the companion process to try and successfully acquire a
-    # resource before the intended process is able to run this
-    # method and acquire it for itself.
-    #
-    # A delay here is not fool proof, but it should help the
-    # companion process have enough time to grab the resources
-    # it is supposed to before this process gets on with its
-    # business.
-####    sleep 5;
 
     return;
 }

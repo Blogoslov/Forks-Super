@@ -37,4 +37,4 @@ recommends:
 requires:
   Test::More: 0
   Time::HiRes: 1.30
-version: 0.67
+version: 0.68

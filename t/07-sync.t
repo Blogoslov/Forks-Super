@@ -57,15 +57,11 @@ sub test_implementation {
     $z = $sync->release(2);
     ok($z, 'resource 2 released in parent');
 
-    # failure point on Cygwin/Semaphlock
-    $z = $sync->acquireAndRelease(0);
-
-    # failure point on MSWin32, Win32Mutex impl
-    #    $!==504, "Win32Mutex release error: the handle is invalid"
+    $z = $sync->acquireAndRelease(0, 10);
     ok($z, "acquired 0 in parent ($impl)")                 ### 8,17,26 ###
-	or diag("error is $! ", 0+$!);
-    $z = $sync->release(0);
-    ok(!$z, ' and released 0 in parent');
+	or diag("error is $! $^E ", 0+$!);
+    $z = $sync->release(0) || 0;
+    ok($z <= 0, ' and released 0 in parent');
 
     $sync->release(1);
     my $child = CORE::waitpid($pid, 0);

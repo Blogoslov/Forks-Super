@@ -8,7 +8,7 @@ use strict;
 use warnings;
 
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.67';
+our $VERSION = '0.68';
 our $NOWAIT_YIELD_DURATION = 50; # milliseconds
 
 # Something we have to watch out for is a process dying without
@@ -26,13 +26,6 @@ sub new {
     $self->{count} = $count;
     $self->{initial} = [ @initial ];
 
-    # use Semaphlock to manage sync in  releaseAfterFork, since I don't have
-    # a handle on what happens to a Win32::Mutex across a fork
-    $self->{isync} = Forks::Super::Sync->new(
-	implementation => 'Semaphlock',
-	count => "0E0", initial => [],
-	);
-
     # does creating a unique name help?
     $self->{mutex} = [ map { Win32::Mutex->new(0, "$$-$^T-$_") } 1 .. $count ];
     $self->{invalid} = [ (0) x $count ];
@@ -40,7 +33,7 @@ sub new {
     return $self;
 }
 
-sub releaseAfterFork {
+sub _releaseAfterFork {
     my ($self, $childPid) = @_;
     $self->{childPid} = $childPid;
     my $label = $self->{label} = $$ == $self->{ppid} ? 'P' : 'C';
@@ -49,18 +42,6 @@ sub releaseAfterFork {
 	if ($self->{initial}[$n] eq $label) {
 	    $self->acquire($n);
 	}
-    }
-
-    $self->{isync}->releaseAfterFork;
-
-    if (0) {  # 0  here 
-    if ($label eq 'P') {
-	$self->{isync}->release(0);
-	$self->{isync}->acquireAndRelease(1);
-    } else {
-	$self->{isync}->release(1);
-	$self->{isync}->acquireAndRelease(0);
-    }
     }
 }
 
@@ -75,9 +56,10 @@ sub _wait_on {
 	local $! = 0;
 	my $nk = CORE::kill 0, $partner;
 	if (!$nk) {
-	    carp "sync::_wait_on thinks $partner is gone";
+	    carp "sync::_wait_on process $$ thinks $partner is gone [3]";
 	    $self->{skip_wait_on} = 1;
-	    delete $self->{mutex};
+	    $_++ for @{$self->{invalid}};
+	    # delete $self->{mutex};
 	    return 3;
 	}
 
@@ -127,12 +109,12 @@ sub acquire {
 sub release {
     my ($self, $n) = @_;
     return unless $n >= 0 && $n < $self->{count};
-    return 0 unless $self->{acquired}[$n];
     return -1 if $self->{invalid}[$n];
+    return 0 unless $self->{acquired}[$n];
 
     local($!,$^E) = (0,0);
 
-    my $z = eval { $self->{mutex}[$n]->release };
+    my $z = eval { $self->{mutex}[$n] && $self->{mutex}[$n]->release };
     if ($z) {
 	$self->{acquired}[$n] = 0;
     } elsif ($@ && !($self->{mutex} && $self->{mutex}[$n])) {
@@ -147,7 +129,7 @@ sub release {
 	$self->{acquired}[$n] = 0;
 	return -1;
     } else {
-	carp "Win32Mutex release error: $^E";
+        # already released?
     }
     return $z;
 }
@@ -159,7 +141,7 @@ sub remove {
 sub DESTROY {
     my $self = shift;
     $self->{DESTROYING} = 1;
-    $self->release($_) for 0 .. $self->{count}-1;
+    $self->releaseAll;
     $self->{mutex} = [];
 }
 
@@ -173,7 +155,7 @@ Forks::Super::Sync::Win32Mutex
 
 =head1 VERSION
 
-0.67
+0.68
 
 =head1 SYNOPSIS
 

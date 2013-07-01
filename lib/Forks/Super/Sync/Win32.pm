@@ -7,7 +7,7 @@ use POSIX ':sys_wait_h';
 use Win32::Semaphore;
 
 our @ISA = qw(Forks::Super::Sync);
-our $VERSION = '0.67';
+our $VERSION = '0.68';
 our $NOWAIT_YIELD_DURATION = 250;
 my @RELEASE_ON_EXIT = ();
 
@@ -34,12 +34,6 @@ sub new {
     # initial value of 1 means that resource is available
     $self->{sem} = [ map { Win32::Semaphore->new(1,1) } 1..$count ];
 
-    # initial value of 0 means that resource is locked.
-    # after fork (in &releaseAfterFork), parent will release {parent_sync}
-    # and child will release {child_sync}
-
-    $self->{parent_sync} = Win32::Semaphore->new(0,1,"$^T-$$-p");
-    $self->{child_sync} = Win32::Semaphore->new(0,1,"$^T-$$-c");
     $self->{ppid} = $$;
     $self->{acquired} = [];
     $self->{invalid} = [];
@@ -47,18 +41,11 @@ sub new {
     return $self;
 }
 
-sub releaseAfterFork {
+sub _releaseAfterFork {
     my ($self, $childPid) = @_;
 
     $self->{childPid} = $childPid;
     my $label = $$ == $self->{ppid} ? 'P' : 'C';
-    if ($label eq 'P') {
-	$self->{parent_sync}->release();
-	$self->{child_sync}->wait();
-    } elsif ($label eq 'C') {
-	$self->{child_sync}->release();
-	$self->{parent_sync}->wait();
-    }
 
     for my $i (0 .. $self->{count} - 1) {
 	if ($self->{initial}[$i] ne $label) {
@@ -66,16 +53,6 @@ sub releaseAfterFork {
 	} else {
 	    $self->acquire($i,0);
 	}
-    }
-
-    if ($label eq 'C') {
-	$self->{parent_sync}->release();
-	$self->{child_sync}->wait();
-	$self->{child_sync}->release();
-    } elsif ($label eq 'P') {
-	$self->{child_sync}->release();
-	$self->{parent_sync}->wait();
-	$self->{parent_sync}->release();
     }
     return;
 }
@@ -162,6 +139,17 @@ sub release {
 
 	# does carp clear $! or $^E?  that's inconvenient
 	my ($e,$E) = (0+$!,0+$^E);
+
+	if (0 && $self->{DESTROYING} && $e == 0 && $E == 0) {
+	  # is the other process gone?
+
+	  use Data::Dumper;
+	  print STDERR Dumper($self, $$);
+
+	  
+	}
+
+
 	carp "Forks::Super::Sync::Win32::release[$n] failed: $!/$^E/$@ // ",
 		"$e/$E";
 
@@ -171,8 +159,6 @@ sub release {
 	    $self->{invalid}[$n] = 1;
 	    return -1;
 	}
-
-print STDERR "sem[$n] exists but \$!,\$^E are $!,$^E,$e,$E\n";	
 
 	return;
 
@@ -186,7 +172,6 @@ print STDERR "sem[$n] exists but \$!,\$^E are $!,$^E,$e,$E\n";
 	$self->{invalid}[$n] = 1;
 	return -1;
     }
-#   return $self->{sem} && $self->{sem}[$n] && $self->{sem}[$n]->release();
 }
 
 sub remove {
