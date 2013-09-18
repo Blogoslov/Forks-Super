@@ -50,6 +50,11 @@ my @s = sizes();
 sleep 3;
 my @t = sizes();
 
+if ($t[0]==$s[0] || $t[1]==$s[1] || $t[2]==$s[2]) {
+    sleep 2;
+    @t = sizes();
+}
+
 ok($t[2]>$s[2], "fork-to-sub job is active");
 ok($t[1]>$s[1], "fork-to-natural job is active");
 ok($t[0]>$s[0], "foreign job is active");
@@ -61,9 +66,9 @@ sleep 2;
 my @v = sizes();
 
 
-ok($v[2]==$u[2], "fork-to-sub was signalled");
-ok($v[1]==$u[1], "fork-to-natural was signalled");
-ok($v[0]==$u[0], "foreign job was signalled");
+ok($v[2]==$u[2], "fork-to-sub ($j2) was signalled");
+ok($v[1]==$u[1], "fork-to-natural ($job) was signalled");
+ok($v[0]==$u[0], "foreign job ($pid) was signalled");
 
 
 ok(@k == 3, "sent kill signal to 3 processes")

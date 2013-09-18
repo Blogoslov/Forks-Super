@@ -1,5 +1,15 @@
 Revision history for Forks-Super
 
+0.70    2013-09-18
+        Experimental emulation of process groups in MSWin32 in 
+        waitpid/kill functions.
+        Improved procedures to terminate a process tree in MSWin32.
+
+0.69    2013-08-19
+        Move FS::Tie::BackgroundScalar and BackgroundArray, which are no
+        longer used with 'tie', to FS::LazyEval.
+        Better handling of recalcitrant MSWin32 processes.
+
 0.68    2013-07-01
         Refactored sync objects - should eliminate race conditions
         during parent/child startup.

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Carp;
 use Time::HiRes;
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 our @ISA = qw(Forks::Super::Sync);
 
 my $ipc_seq = 0;
@@ -98,10 +98,18 @@ sub acquire {
 	return -1;
     }
     my $fh;
-    if (!open $fh, '>>', $file) {
-	carp "no file resource $file available to acquire: $!";
-	return;
+
+    # on Cygwin, using fcntl to emulate flock, this open can
+    # (intermittently) fail with $! := "Device or resource busy"
+    for my $try (1..5) {
+	last if open $fh, '>>', $file;
+	if ($try == 5) {
+	    carp "failed to acquire file resource $file after 5 tries: $!";
+	    return;
+	}
+	Time::HiRes::sleep(0.25 * $try);
     }
+
     if (defined $timeout) {
 	my $expire = Time::HiRes::time() + $timeout;
 	my $z;
@@ -141,7 +149,6 @@ sub _get_filename {
 
 sub remove {
     my $self = shift;
-    # XXXXXX
     foreach my $fh (@{$self->{acquired}}) {
 	if ($fh) {
 	    close $fh;

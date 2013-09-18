@@ -374,7 +374,7 @@ sub explore_sync_options {
 	eval { alarm 0 };
 	1
 	} ) {
-	print STDERR "SysV semaphores are available for ipc synchornization\n";
+	print STDERR "SysV semaphores are available for ipc synchronization\n";
 	push @sync, "IPCSemaphore";
 	write_limits( sync_options => join('/', @sync) );
     }
@@ -395,7 +395,7 @@ sub explore_sync_options {
     $t = time - $t;
     close $fh;
     if ($t > 1 && $t < 20) {
-	print STDERR "advisory filelocking available for ipc synchornization\n";
+	print STDERR "advisory filelocking available for ipc synchronization\n";
 	push @sync, "Semaphlock";
 	write_limits( sync_options => join('/', @sync) );
     }

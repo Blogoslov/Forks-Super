@@ -28,7 +28,7 @@ my $t0 = Time::HiRes::time();
 my $err = Forks::Super::read_stderr($pid, "block" => 1);
 my $t1 = Time::HiRes::time() - $t0;
 ok($err =~ /^foo/, "read stderr");
-okl($t1 <= 1.0, "read blocked stderr fast ${t1}s, expected <1s");
+okl($t1 <= 1.0, "read blocked stderr fast ${t1}s, expected <1s");     ### 4 ###
 
 my $out = Forks::Super::read_stdout($pid, "block" => 1);   # this should block
 my $t2 = Time::HiRes::time() - $t0;

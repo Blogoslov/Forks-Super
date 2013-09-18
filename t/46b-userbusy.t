@@ -29,7 +29,7 @@ $Forks::Super::ON_BUSY = "fail";
 my $pid = fork { sub => $sleepy };
 ok(isValidPid($pid), "successful fork");
 my $pid2 = fork { sub => $sleepy };
-ok(!isValidPid($pid2), "failed fork");
+ok(!isValidPid($pid2), "failed fork") or diag "current script age: ",time-$^T;
 my $pid3 = fork { sub => $sleepy , can_launch => 'main::do_launch' };
 ok(isValidPid($pid3), "successful user fork");
 my $t = Time::HiRes::time();

@@ -109,7 +109,7 @@ Possible TODOs:
 	_X_ helps to explicitly assign (tied *$handle) to lexical
 	___ "untie attempted while inner references ..." is back in socket 0.55
 
-    ___ Forks::Super::Tie::BackgroundScalar is no longer used with 'tie'
+    _X_ Forks::Super::Tie::BackgroundScalar is no longer used with 'tie'
         (since v0.43). Change the name? 
 
     ___ INET sockets as well as UNIX sockets, if you can commit to a port

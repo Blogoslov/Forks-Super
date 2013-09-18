@@ -9,13 +9,19 @@ our %RECOMMENDED
        'Sys::CpuAffinity' => '0.91',
        'Sys::CpuLoadX' => '0.02',
        'DateTime::Format::Natural' => '0.89',
-       'PerlIO::gzip' => 0,
+       'PerlIO::gzip' => 0 );
 
-       # for MSWin32/Cygwin:
-       'Win32::API' => '0.70',
-       'Win32::IPC' => 0,
-       'Win32::Process' => '0.14',
-       'Win32::Process::Kill' => '2.64');
+if ($^O eq 'cygwin') {
+    $RECOMMENDED{'Win32::API'} = '0.70';
+}
+if ($^O eq 'MSWin32') {
+    %RECOMMENDED = (%RECOMMENDED,
+		    'Win32::API' => '0.70',
+		    'Win32::IPC' => 0,
+		    'Win32::Process' => '0.14',
+		    'Win32::Process::Kill' => '2.64',
+		    'DBD::WMI' => 0);
+}
 
 our %REQUIRED 
     = ('Test::More' => '0',
@@ -162,9 +168,9 @@ package MY;
 
 sub MY::postamble {
 
-    my $stresstestargs = "-r 20 -x 5 -s -q";
+    my $stresstestargs = "-r 20 -x 5 -s -q -t 150";
     if ($^O =~ /solaris/i) {
-	$stresstestargs = "-r 25 -x 4 -s -q";
+	$stresstestargs = "-r 25 -x 4 -s -q -t 150";
     }
     # $(PERLRUN) not avail in 5.6.1, ExtUtils::MakeMaker 5.45
     my $PERLEXE = '$(FULLPERL)';  
@@ -179,7 +185,7 @@ sub MY::postamble {
 # ------ fasttest: use Forks::Super to run Forks::Super tests in parallel
 
 fasttest :: pure_all
-	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q
+	$PERLEXE t/forked_harness.pl \$(TEST_FILES) -h -q -t 150
 
 # ------ stress test: run all tests in parallel 100 times
 

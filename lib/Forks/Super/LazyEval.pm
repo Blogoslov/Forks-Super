@@ -11,7 +11,7 @@ use warnings;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(bg_eval bg_qx BG_EVAL BG_QX);
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 use constant BG_EVAL => 'Forks::Super::bg_eval';
 use constant BG_QX   => 'Forks::Super::bg_qx';
@@ -61,14 +61,14 @@ sub bg_eval (&;@) {
     my $result;
 
     if ($other_options{wantarray}) {
-	require Forks::Super::Tie::BackgroundArray;
-	$result = Forks::Super::Tie::BackgroundArray->new(
+	require Forks::Super::LazyEval::BackgroundArray;
+	$result = Forks::Super::LazyEval::BackgroundArray->new(
 	    'eval', $code, 
 	    protocol => $proto,
 	    %other_options);
     } else {
-	require Forks::Super::Tie::BackgroundScalar;
-	$result = Forks::Super::Tie::BackgroundScalar->new(
+	require Forks::Super::LazyEval::BackgroundScalar;
+	$result = Forks::Super::LazyEval::BackgroundScalar->new(
 	    'eval', $code, 
 	    protocol => $proto,
 	    %other_options);
@@ -91,8 +91,8 @@ sub bg_qx {
     my $p = $$;
     my (@result, $result);
 
-    require Forks::Super::Tie::BackgroundScalar;
-    $result =  Forks::Super::Tie::BackgroundScalar->new(
+    require Forks::Super::LazyEval::BackgroundScalar;
+    $result =  Forks::Super::LazyEval::BackgroundScalar->new(
 	'qx', $command, %other_options);
     if ($$ != $p) {
 	# a WTF observed on Windows
@@ -319,7 +319,7 @@ Forks::Super::LazyEval
 
 =head1 VERSION
 
-0.68
+0.70
 
 =head1 DESCRIPTION
 

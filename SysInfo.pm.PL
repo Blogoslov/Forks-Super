@@ -36,7 +36,7 @@ use warnings;
 
 ## no critic (ProhibitMagicNumbers)
 
-our \$VERSION = '0.68';
+our \$VERSION = '0.70';
 
 ____;
 
@@ -128,13 +128,14 @@ sub printF {
 sub load_limits_file {
     my ($f) = @_;
     my %info;
-    open L, '<', $f;
-    while (<L>) {
-	s/\s+$//;
-	my ($key, $value) = split /:/, $_, 2;
-	$info{$key} = $value;
+    if (open L, '<', $f) {
+	while (<L>) {
+	    s/\s+$//;
+	    my ($key, $value) = split /:/, $_, 2;
+	    $info{$key} = $value;
+	}
+	close L;
     }
-    close L;
     return %info;
 }
 

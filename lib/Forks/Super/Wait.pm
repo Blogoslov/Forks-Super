@@ -21,7 +21,7 @@ use warnings;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(wait waitpid waitall TIMEOUT WREAP_BG_OK);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 my ($productive_waitpid_code);
 my $respect_SIGCHLD_ignore = 1;
@@ -95,19 +95,35 @@ sub waitpid {
 	debug('waitpid: dispatching _waitpid_name') if $DEBUG;
 	return _waitpid_name($no_hang, $reap_bg_ok, $target, $timeout);
     }
-    if (!is_number($target) || $target > 0) {
+    if (!is_number($target)) {
 	debug("waitpid: bogus target $target") if $DEBUG;
 	return _bogus_waitpid_result();
     }
+    if ($target > 0) {
+	if ($^O eq 'MSWin32' && defined $ALL_JOBS{-$target}) {
+	    debug("dispatching _waitpid_pgrp_MSWin32 on a negative pgid!")
+		if $DEBUG;
+	    return _waitpid_pgrp_MSWin32($no_hang, $reap_bg_ok,
+					 -$target, $timeout);
+	} else {
+	    debug("waitpid: bogus target $target") if $DEBUG;
+	    return _bogus_waitpid_result();
+	}
+    }
 
+    # $target is a number <= 0
     if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-	# $target is a number <= 0
 
 	debug('waitpid: dispatching _waitpid_pgrp') if $DEBUG;
 	return _waitpid_pgrp($no_hang, $reap_bg_ok, $target, $timeout);
     }
+    if ($^O eq 'MSWin32') {
+	debug("waitpid: dispatching _waitpid_pgrp_MSWin32 on -$target")
+	    if $DEBUG;
+	return _waitpid_pgrp_MSWin32($no_hang,$reap_bg_ok,0-$target,$timeout);
+    }
 
-    debug('waitpid: bogus (pgid) target') if $DEBUG;
+    debug('waitpid: bogus (pgid) target ', $target) if $DEBUG;
     return _bogus_waitpid_result();
 }
 
@@ -177,6 +193,7 @@ sub _reap {
 
     my @j = @ALL_JOBS;
     if (defined $optional_pgid) {
+	# same code for MSWin32, Unix
 	@j = grep { $_->{pgid} == $optional_pgid } @ALL_JOBS;
     }
 
@@ -444,6 +461,36 @@ sub _waitpid_pgrp {
 
     my $expire = Time::HiRes::time() + ($timeout || &FOREVER);
     my ($pid, $nactive) = _reap($reap_bg_ok,$target);
+    if (! $no_hang) {
+	while (!isValidPid($pid,1) && $nactive > 0) {
+	    if (Time::HiRes::time() >= $expire) {
+		# XXX - update $? ?
+		return TIMEOUT;
+	    }
+	    __run_productive_waitpid_code();
+	    Forks::Super::Util::pause();
+	    ($pid, $nactive) = _reap($reap_bg_ok,$target);
+	}
+    }
+    if (defined $ALL_JOBS{$pid}) {
+	$? = $ALL_JOBS{$pid}{status};
+    }
+    return __waitpid_result($pid);
+}
+
+sub _waitpid_pgrp_MSWin32 {
+    my ($no_hang, $reap_bg_ok, $target, $timeout) = @_;
+
+    if ($target == 0) {
+	$target = $$;
+    } elsif ($target < 0) {
+	# ok for emulated MSWin32 process group to be negative
+	# $target = -$target;
+    }
+
+    my $expire = Time::HiRes::time() + ($timeout || &FOREVER);
+    my ($pid, $nactive) = _reap($reap_bg_ok,$target);
+
     if (! $no_hang) {
 	while (!isValidPid($pid,1) && $nactive > 0) {
 	    if (Time::HiRes::time() >= $expire) {

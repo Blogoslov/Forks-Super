@@ -4,7 +4,7 @@
       "Marty O'Brien <mob\\@cpan.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 6.64, CPAN::Meta::Converter version 2.120921",
+   "generated_by" : "ExtUtils::MakeMaker version 6.66, CPAN::Meta::Converter version 2.120921",
    "license" : [
       "perl_5"
    ],
@@ -44,9 +44,6 @@
             "Sys::CpuAffinity" : "0.91",
             "Sys::CpuLoadX" : "0.02",
             "Win32::API" : "0.70",
-            "Win32::IPC" : "0",
-            "Win32::Process" : "0.14",
-            "Win32::Process::Kill" : "2.64",
             "YAML" : "0.62",
             "YAML::Tiny" : "1.39"
          },
@@ -57,5 +54,5 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.68"
+   "version" : "0.70"
 }

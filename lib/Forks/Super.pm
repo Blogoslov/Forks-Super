@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -267,6 +267,7 @@ sub fork {
     if ($job->{debug}) {
 	debug('fork(): ', $job->toString(), ' initialized.');
     }
+    handle_CHLD(-1);   # <-- benefits  MSWin32
 
     while (!$job->can_launch) {
 
@@ -642,7 +643,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.68
+Version 0.70
 
 =head1 SYNOPSIS
 
@@ -1848,7 +1849,7 @@ child, and the third resource is not held by either process:
     $pid = fork { sync => ['P','C','N'] };
 
 Using the C<sync> option with a numeric value will create that number
-of synchornization objects, with none of the objects initially held by
+of synchronization objects, with none of the objects initially held by
 either the parent or child process. That is, these three uses of the
 C<sync> option are equivalent:
 

@@ -3,7 +3,23 @@ use Test::More tests => 14;
 use strict;
 use warnings;
 
-$Devel::Trace::TRACE = 0;
+if ($^O eq 'cygwin') {
+    require Config;
+    if ($Config::Config{"d_flock"} && $Config::Config{"d_fcntl_can_lock"} &&
+	$Config::Config{"d_flock"} eq 'define' &&
+	$Config::Config{"d_fcntl_can_lock"} eq 'define') {
+
+	diag q~
+note for Cygwin users: I believe there is a flaw in recent
+versions of Cygwin's flock implementation. If this test (or
+t/07-sync.t) times out or hangs, you may have better luck
+with a perl build configured *without* flock (e.g., building
+from source after running  ./Configure -Ud_flock ). In that
+case, perl will use  fcntl  to emulate flock.
+
+~;
+    }
+}
 
 # exercise synchronization facilities in Forks::Super
 

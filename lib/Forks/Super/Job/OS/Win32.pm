@@ -27,7 +27,7 @@ if (!&Forks::Super::Util::IS_WIN32ish) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 ##################################################################
@@ -42,7 +42,8 @@ our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 # want to call in this distribution and their function prototypes
 # in the Kernel32.dll library.
 
-# a struct we need to enumerate all the threads of a process
+# some structs we need to enumerate all the threads of a process
+# and all processes running on the system
 eval {
     require Win32::API;
 
@@ -55,7 +56,29 @@ eval {
 	LONG tpDeltaPri;
 	DWORD dwFlags; );
 
+    my @processentry32spec = qw(
+        DWORD dwSize;
+        DWORD cntUsage;
+        DWORD th32ProcessID;
+        DWORD th32DefaultHeapID;
+        DWORD th32ModuleID;
+        DWORD cntThreads;
+        DWORD th32ParentProcessID;
+        LONG  pcPriClassBase;
+        DWORD dwFlags;
+        TCHAR szExeFile[260];
+    );
+
     Win32::API::Struct->typedef( THREADENTRY32 => @threadentry32spec );
+    Win32::API::Struct->typedef( PROCESSENTRY32 => @processentry32spec );
+
+    if ($Win32::API::VERSION < 0.70) {
+	die "Win32::API >=v0.71 is really really recommended. ",
+	    "In older versions of Win32::API, there is no good way to ",
+	    "emulate signals to a Windows process (your version: ",
+	    $Win32::API::VERSION, ")";
+    }
+
     1;
 
 } or carp $@; # or carp 'Win32::API module is highly highly recommended ';
@@ -87,6 +110,8 @@ our %_WIN32_API_SPECS = (
     TerminateThread => 'BOOL TerminateThread(HANDLE h,DWORD x)',
 
     CreateSnapshot => 'HANDLE CreateToolhelp32Snapshot(DWORD a,DWORD b)',
+    Process32First => 'BOOL Process32First(HANDLE h,LPPROCESSENTRY32 b)',
+    Process32Next => 'BOOL Process32Next(HANDLE h,LPPROCESSENTRY32 b)',
     Thread32First => 'BOOL Thread32First(HANDLE h,LPTHREADENTRY32 b)',
     Thread32Next => 'BOOL Thread32Next(HANDLE h,LPTHREADENTRY32 b)',
 );
@@ -350,7 +375,7 @@ sub signal_process {
     } elsif (Forks::Super::Util::is_stop_signal($signal)) {
 	return [] if suspend_process($pid);
     } elsif (Forks::Super::Util::is_kill_signal($signal)) {
-	return [$pid] if sigkill_process($signal, $pid);
+	return [$pid] if sigkill_process($signal, $pid, $kill_proc_group);
     } else {
 	carp_once 'Forks::Super::Win32::signal_process: '
 	    . "signal $signal not recognized, treating as SIGKILL";
@@ -406,10 +431,98 @@ sub terminate_process {
 	my $z = win32api('TerminateProcess',$procHandle,$exitCode || 0);
 	if (!$z) {
 	    carp "Forks::Super::Win32: terminate_process: $^E\n";
+	} else {
+	    return $z;
 	}
-	return !!$z;
+    }
+    if (!CONFIG('Win32::API')) {
+	return !system "TASKKILL /F /PID $pid > nul 2>&1";
     }
     return 0;
+}
+
+sub terminate_process_tree {
+    my ($pid, $exitCode) = @_;
+
+    # v0.70: use system "TASKKILL" command only if we can't terminate
+    # the processes through WMI or through the Win32 API.
+
+    my $children = _find_child_processes($pid);
+    if ($children && ref $children) {
+	terminate_process($_, $exitCode) for @$children;
+	return terminate_process($pid, $exitCode);
+    }
+    return _terminate_process_tree_with_taskkill( $pid );
+}
+
+sub _find_child_processes {
+    my ($pid) = @_;
+    my %child_map = _process_tree_map();
+    if (!%child_map) {
+	return;
+    }
+    my @c = @{$child_map{$pid} || []};
+    for (my $i=0; $i<@c; $i++) {
+	push @c, @{$child_map{$c[$i]} || []};
+    }
+    return [ @c ];
+}
+
+sub _process_tree_map {
+    # create a map of processes to all their direct child processes
+    # try to do this with WMI or with the Win32 API
+    my %child_map;
+    if (CONFIG('DBD::WMI')) {
+	my $dbh = DBI->connect('dbi:WMI:');
+	my $sth = $dbh->prepare("SELECT * FROM Win32_Process");
+	$sth->execute;
+	while (my $proc = $sth->fetchrow) {
+	    my $pid = $proc->{ProcessId};
+	    my $ppid = $proc->{ParentProcessId};
+	    if ($pid && $ppid) {
+		push @{$child_map{$ppid}}, $pid;
+	    }
+	}
+	$dbh->disconnect;
+    } elsif (CONFIG('Win32::API')) {
+	# TH32CS_PROCESS: 0x00000002
+	my $snapshot = win32api('CreateSnapshot', 0x00000002, 0);
+	if (!$snapshot) {
+	    carp "No process snapshot available (",
+		    win32api('GetLastError'), ")\n$^E\n";
+	    return;
+	}
+
+	my $process_entry = Win32::API::Struct->new('PROCESSENTRY32');
+	$process_entry->{dwSize} = 304;
+	$process_entry->{$_} = '0000'
+	    for qw(cntUsage th32ProcessID th32DefaultHeapID th32ModuleID 
+		   cntThreads th32ParentProcessID dwFlags th32MemoryBase 
+		   th32AccessKey pcPriClassBase);
+	$process_entry->{szExeFile} = "\0";
+	$process_entry->{th32ParentProcessID} = 0;
+
+	my $z = win32api('Process32First', $snapshot, $process_entry);
+	if (!$z) {
+	    carp $^E;
+	    return;
+	}
+	while ($z) {
+	    my $pid = $process_entry->{th32ProcessID};
+	    my $ppid = $process_entry->{th32ParentProcessID};
+	    if ($pid && $ppid) {
+		push @{$child_map{$ppid}}, $pid;
+	    }
+	    $z = win32api('Process32Next', $snapshot, $process_entry);
+	}
+    }
+    return %child_map;
+}
+
+sub _terminate_process_tree_with_taskkill {
+    my $pid = shift;
+    my $c1 = system "TASKKILL /T /F /PID $pid >nul 2>&1";
+    return !$c1;
 }
 
 sub _enumerate_threads_for_process {
@@ -596,9 +709,22 @@ sub sigzero_thread {
 }
 
 sub sigkill_process {
-    my ($signal, $pid) = @_;
+    my ($signal, $pid, $kill_proc_group) = @_;
     my $signo =  Forks::Super::Util::signal_number($signal);
     my $result;
+
+    if (0 && $kill_proc_group) {
+	my $children = _find_child_processes($pid);
+	if ($children && ref $children) {
+	    $result = [ 
+		map { 
+		    my $x = sigkill_process($signal, $_, 0);
+		    $x ? @$x : ()
+		} @$children, $pid
+		];
+	    return $result;
+	}
+    }
 
     if ($signal eq 'INT' || $signal eq 'QUIT' || $signal eq 'BREAK') {
 
@@ -944,6 +1070,7 @@ sub system1_win32_process {
 	# system 1, ...  failed. XXX - what should we do?
 	croak "system 1,{@cmd}  call failed: $! $^E";
     }
+    $job->{pgid} = $Forks::Super::Job::WIN32_PROC_PID;
     $job->set_signal_pid($Forks::Super::Job::WIN32_PROC_PID);
     if (defined($job->{cpu_affinity}) && CONFIG('Sys::CpuAffinity')) {
 	Sys::CpuAffinity::setAffinity(

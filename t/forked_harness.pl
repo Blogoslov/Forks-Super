@@ -76,7 +76,7 @@ my @env = ();
 my $maxproc = &maxproc_initial;
 my $use_color = $ENV{COLOR} && -t STDOUT &&
     eval { use Term::ANSIColor; $Term::ANSIColor::VERSION >= 3.00 };
-my $timeout = 150;
+my $timeout = $ENV{TEST_TIMEOUT} || 150;
 my $repeat = 1;
 my $xrepeat = 1;
 my $test_verbose = $ENV{TEST_VERBOSE} || 0;
@@ -739,13 +739,7 @@ sub maxproc_initial {
     if (@mask < $n) {
 	$n = @mask || $n;
     }
-    if ($n == 1) {
-	return 4;
-    } elsif ($n == 2) {
-	return 6;
-    } else {
-	return int(2 * $n + 1);
-    }
+    return int(2 * $n + 1);
 }
 
 # if appropriate and suppported, enhance output to STDOUT with color.
@@ -809,7 +803,7 @@ forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.68
+0.70
 
 =head1 SYNOPSIS
 
@@ -1028,6 +1022,9 @@ still running when the timeout expires.
 The default timeout is 150 seconds. Specify a timeout of 0
 (C<-t 0>, C<--timeout 0>) to disable the timeout and give each
 test as long as it needs to complete.
+
+The default timeout can also be overridden by setting the 
+C<TEST_TIMEOUT> environment variable.
 
 =head2 -v, --verbose
 

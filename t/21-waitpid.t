@@ -139,11 +139,12 @@ for (my $i=0; $i<20; $i++) {
 
 $t = Time::HiRes::time();
 SKIP: {
-    if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
+    if (!$Forks::Super::SysInfo::CONFIG{'getpgrp'}
+	    && $^O ne 'MSWin32') {
 	skip "$^O,$]: Can't test waitpid on pgid", 44;
     }
 
-    my $pgid = getpgrp();
+    my $pgid = $^O eq 'MSWin32' ? $$ : getpgrp();
     my $bogus_pgid = $pgid + 175;
     ok(-1 == waitpid (-$bogus_pgid, 0), "bogus pgid");
     ok(-1 == waitpid (-$bogus_pgid, WNOHANG), "bogus pgid");
@@ -166,10 +167,11 @@ SKIP: {
 	}
 	if ($p == -1 && $z <= 0.5) {
 	    ok(0, "waitpid did not block $z");
-	    if ($z > 0.4) { delete $x{(keys%x)[0]}  }
+	    ok(0, "and now we can't retrieve status of pid we didn't retrieve");
 	} elsif (defined $x{$p}) {
 	    ok(isValidPid($p), "Reaped $p");
-	    ok($? >> 8 == $x{$p}, "$p correct exit STATUS $x{$p} == " . ($?>>8));
+	    ok($? >> 8 == $x{$p}, 
+	       "$p correct exit STATUS $x{$p} == " . ($?>>8));
 	    delete $x{$p};
 	} else {
 	    # warn "pid $pid invalid --- trying again\n"; 

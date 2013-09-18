@@ -7,6 +7,25 @@ $| = 1;
 select STDOUT;
 $| = 1;
 
+if ($^O eq 'cygwin') {
+    require Config;
+    if ($Config::Config{"d_flock"} && $Config::Config{"d_fcntl_can_lock"} &&
+	$Config::Config{"d_flock"} eq 'define' &&
+	$Config::Config{"d_fcntl_can_lock"} eq 'define') {
+
+	diag q~
+note for Cygwin users: I believe there is a flaw in recent
+versions of Cygwin's flock implementation. If this test (or
+t/57-sync.t) times out or hangs, you may have better luck
+with a perl build configured *without* flock (e.g., building
+from source after running  ./Configure -Ud_flock ). In that
+case, perl will use  fcntl  to emulate flock.
+
+~;
+
+    }
+}
+
 {
     no warnings 'once';
     mkdir "t/out/07.$$";
@@ -60,7 +79,7 @@ sub test_implementation {
     $z = $sync->acquireAndRelease(0, 10);
     ok($z, "acquired 0 in parent ($impl)")                 ### 8,17,26 ###
 	or diag("error is $! $^E ", 0+$!);
-    $z = $sync->release(0) || 0;
+    $z = $sync->release(0, 10) || 0;
     ok($z <= 0, ' and released 0 in parent');
 
     $sync->release(1);

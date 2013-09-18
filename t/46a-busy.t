@@ -60,7 +60,7 @@ ok(!isValidPid($pid4) && !isValidPid($pid5), "failed forks");
 waitall;
 $t = Time::HiRes::time() - $t;
 
-okl($t >= 2.15 && $t <= 6.75,                    ### 9 ### was 4 obs 6.75!
+okl($t >= 2.15 && $t <= 6.75,                    ### 9 ### was 4 obs 6.75!,1.45
    "Took ${t}s for all jobs to finish; expected 3-4"); 
 
 #######################################################

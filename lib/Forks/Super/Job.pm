@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -64,6 +64,9 @@ sub new {
     $self->{created} = Time::HiRes::time();
     $self->{state} = 'NEW';
     $self->{ppid} = $$;
+    if ($^O eq 'MSWin32') {
+	$self->{pgid} = $self->{ppid};
+    }
     if (!defined $self->{_is_bg}) {
 	$self->{_is_bg} = 0;
     }
@@ -219,7 +222,8 @@ sub toString {
     push @to_display, 
   	grep { defined $job->{$_} } qw(real_pid style cmd exec sub args dir 
                                        start end reaped status closure child_fh
-                                       pgid queue_priority timeout expiration);
+                                       pgid queue_priority timeout expiration
+				       signal_pid);
     my @output = ();
     foreach my $attr (@to_display) {
 	next if ! defined $job->{$attr};
@@ -557,6 +561,11 @@ sub _postlaunch_parent {
     if ($$ != $Forks::Super::MAIN_PID) {
 	# Forks::Super::fork call from a child.
 	$XSIG{CHLD}[-1] ||= \&Forks::Super::handle_CHLD;
+    }
+    if ($^O eq 'MSWin32') {
+	if ($job->{timeout} || $job->{expiration}) {
+	    $job->_read_signal_pid;
+	}
     }
 
     return $OVERLOAD_ENABLED ? $job : $pid;
@@ -1075,6 +1084,9 @@ sub _read_signal_pid {
 		         $job->{signal_ipc}, "! $!";
 		# delete $job->{signal_ipc};
 		($job->{signal_pid}) = $signal_pid =~ /([-\d]*)/;
+		if ($^O eq 'MSWin32') {
+		    $job->{pgid} = $job->{signal_pid};
+		}
 		if ($Forks::Super::Debug::DEBUG) {
 		    debug('parent forwarding signals for ', 
 			  $job->{real_pid}, ' to ', $job->{signal_pid});
@@ -1278,7 +1290,9 @@ sub _preconfig2 {
 	    debug('Job will use ', $job->{daemon_ipc}, ' to get daemon pid.');
 	}
     }
-    if ($job->{style} eq 'cmd' || (&IS_WIN32 && $job->{style} eq 'exec')) {
+    if ($job->{style} eq 'cmd' 
+		|| (&IS_WIN32 && $job->{style} eq 'exec')
+		|| (&IS_WIN32 && ($job->{timeout} || $job->{expiration}))) {
 	$job->{signal_ipc} =
 	    Forks::Super::Job::Ipc::_choose_fh_filename(
 		'.signal', purpose => 'signal ipc', job => $job);
@@ -1981,7 +1995,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.68
+0.70
 
 =head1 SYNOPSIS
 

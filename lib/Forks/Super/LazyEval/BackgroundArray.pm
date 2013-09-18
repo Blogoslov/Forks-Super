@@ -1,16 +1,16 @@
 #
-# Forks::Super::Tie::BackgroundArray - lazy evaluation of a perl
+# Forks::Super::LazyEval::BackgroundArray - lazy evaluation of a perl
 #    expression in list context
 #
 
-package Forks::Super::Tie::BackgroundArray;
+package Forks::Super::LazyEval::BackgroundArray;
 use Forks::Super;
 use Forks::Super::Wait 'WREAP_BG_OK';
 use Carp;
 use strict;
 use warnings;
 
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 # "protocols" for serializing data and the methods used
 # to carry out the serialization
@@ -88,7 +88,7 @@ sub new {
 	};
 
     } elsif ($style eq 'qx') {
-	croak "Always use F::S::Tie::BackgroundScalar with bg_qx\n";
+	croak "Always use F::S::LazyEval::BackgroundScalar with bg_qx\n";
 	$self->{command} = $command_or_code;
 	$self->{delimiter} = $/;
 	$self->{stdout} = '';
@@ -111,7 +111,7 @@ sub _encode {
 	$serialization_dispatch{$protocol}{'require'}->();
 	return $serialization_dispatch{$protocol}{encode}->(@data);
     } else {
-	croak 'Forks::Super::Tie::BackgroundScalar: ',
+	croak 'Forks::Super::LazyEval::BackgroundScalar: ',
 	    'YAML, JSON, or Data::Dumper required to use bg_eval';
     }
 }
@@ -122,7 +122,7 @@ sub _decode {
 	$serialization_dispatch{$protocol}{require}->();
 	return $serialization_dispatch{$protocol}{decode}->($data,$job);
     } else {
-	croak 'Forks::Super::Tie::BackgroundScalar: ',
+	croak 'Forks::Super::LazyEval::BackgroundScalar: ',
 	    'YAML, JSON, or Data::Dumper required to use bg_eval';
     }
 }
@@ -195,7 +195,8 @@ sub _fetch {
 	    }
 	    $self->{value_set} = 1;
 	} else {
-	    croak "expect  style  to be 'eval' in F::S::Tie::BackgroundArray";
+	    croak "expect  style  to be 'eval' in ",
+	    	"Forks::Super::LazyEval::BackgroundArray";
 	}
     }
     my $value = $self->{value};
@@ -204,3 +205,34 @@ sub _fetch {
 }
 
 1;
+
+=head1 NAME
+
+Forks::Super::LazyEval::BackgroundArray
+
+=head1 VERSION
+
+0.70
+
+=head1 DESCRIPTION
+
+An object type used to implement the L<Forks::Super::bg_qx|Forks::Super/bg_qx>
+and L<Forks::Super::bg_eval|Forks::Super/bg_eval> lazy asynchronous
+evaluation functions for list context.
+See L<Forks::Super> and L<Forks::Super::LazyEval> for details.
+
+=head1 AUTHOR
+
+Marty O'Brien, E<lt>mob@cpan.orgE<gt>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2010-2013, Marty O'Brien.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
+
+=cut

@@ -10,13 +10,13 @@ lib/Forks/Super/Job/OS/Cygwin.pm
 lib/Forks/Super/Job/OS/Win32.pm
 lib/Forks/Super/Job/Timeout.pm
 lib/Forks/Super/LazyEval.pm
+lib/Forks/Super/LazyEval/BackgroundArray.pm    # removed v0.52, reintroduced v0.60, renamed v0.69
+lib/Forks/Super/LazyEval/BackgroundScalar.pm
 lib/Forks/Super/Sync.pm
 lib/Forks/Super/Sync/IPCSemaphore.pm
 lib/Forks/Super/Sync/Semaphlock.pm
 lib/Forks/Super/Sync/Win32.pm
 lib/Forks/Super/Sync/Win32Mutex.pm
-lib/Forks/Super/Tie/BackgroundArray.pm    # removed v0.52, reintroduced v0.60
-lib/Forks/Super/Tie/BackgroundScalar.pm
 lib/Forks/Super/Tie/Enum.pm
 lib/Forks/Super/Tie/IPCDupSTDIN.pm
 lib/Forks/Super/Tie/IPCFileHandle.pm
@@ -68,6 +68,7 @@ t/24d-kill.t
 t/24e-kill.t
 t/24f-kill.t
 t/25-open.t
+t/26-waitpid-MSWin32-pgrp.t
 t/30a-fork-from-child.t
 t/30b-fork-from-child.t
 t/31-chld-signal.tt
@@ -219,5 +220,5 @@ bundle/Sys-CpuLoadX/t/00-load.t
 bundle/Sys-CpuLoadX/t/01-get_cpu_load.t
 TODO
 TODO-1.0                                 # roadmap for major release
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

@@ -18,7 +18,7 @@ use warnings;
 use constant FOREVER => 9E9;
 use constant LONG_TIME => 9E8;
 
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 our $MAIN_PID = $$;
 our $DISABLE_INT = 0;
@@ -66,12 +66,6 @@ sub Forks::Super::Job::_config_timeout_child {
     $job->{_timeout} = $timeout;
     $job->{_expiration} = $timeout + Time::HiRes::time();
 
-###  v0.55 can workaround
-#    if (!$Forks::Super::SysInfo::CONFIG{'alarm'}) {
-#	croak 'Forks::Super: alarm() not available on this system. ',
-#	    "timeout,expiration options not allowed.\n";
-#    }
-
     # Un*x systems - try to establish a new process group for
     # this child. If this process times out, we want to have
     # an easy way to kill off all the grandchildren.
@@ -84,7 +78,12 @@ sub Forks::Super::Job::_config_timeout_child {
     # see the END{} block that covers child cleanup below
     #
     if ($Forks::Super::SysInfo::CONFIG{'getpgrp'}) {
-	_change_process_group_child();
+	_change_process_group_child($job);
+    } elsif ($^O eq 'MSWin32') {
+	$job->{pgid} = $$;
+	if ($job->{style} ne 'exec' && $job->{style} ne 'cmd') {
+	    $job->set_signal_pid($$);
+	}
     }
 
     if ($timeout < 1) {
@@ -197,6 +196,9 @@ sub _child_timeout {
 	}
     } elsif (_child_timeout_has_new_process_group()) {
 
+	if ($DEBUG) {
+	    debug("sending SIG$TIMEOUT_SIG to process group");
+	}
 	local $SIG{$TIMEOUT_SIG} = 'IGNORE';
 	$DISABLE_INT = 1;
 	my $SIG = $Forks::Super::Config::SIGNO{$TIMEOUT_SIG} || 15;
@@ -238,38 +240,23 @@ sub _child_timeout_read_procs_to_kill_from_Proc_ProcessTable {
 }
 
 sub _child_timeout_Win32 {
-    my $proc = Forks::Super::Job::get_win32_proc();
+
+    # v0.70: this function has been dramatically simplified
+
     my $pid = Forks::Super::Job::get_win32_proc_pid();
     my $job = Forks::Super::Job->this;
-    if (defined $proc) {
-	if ($proc eq '__open3__' || $proc eq '__system1__') {
-	    # Win32::Process nice to have but not required.
-	    # kill -9, $pid is suitable, right? (see perlport#kill)
-	    my $result = CORE::kill -9, $pid;
+    my $signo = Forks::Super::Util::signal_number('ALRM') || 14;
 
-	} elsif (Forks::Super::Config::CONFIG('Win32::Process')) {
-	    my ($ec,$exitCode);
-	    $ec = $proc->GetExitCode($exitCode);
-	    if ($exitCode == &Win32::Process::STILL_ACTIVE
-		|| $ec == &Win32::Process::STILL_ACTIVE) {
-
-		my $result = system("TASKKILL /F /T /PID $pid > nul");
-
-		$proc->GetExitCode($exitCode);
-		if ($DEBUG) {
-		    debug("Terminating active MSWin32 process result=$result ",
-			  "exitCode=$exitCode");
-		}
-	    }
-	}
-    } elsif (defined($job->{signal_pid}) && $job->{signal_pid} != $$) {
-	# for a cmd-style job, signal the command
-	if ($job->{debug}) {
-	    debug("trying to terminate $job->{signal_pid}");
-	}
-	my $result = system("TASKKILL /F /T /PID $pid > nul");
-	debug("Win32::terminate_process result was $result") 
-	    if $job->{debug};
+    if ($job->{signal_pid}) {
+	my $p = $job->{signal_pid};
+	my $c1 = Forks::Super::Job::OS::Win32::terminate_process_tree(
+	    $p, $signo);
+	$DEBUG && debug("killed process tree for signal pid $p: $c1");
+    }
+    if ($pid && $pid > 0 && $pid != $job->{signal_pid}) {
+	my $c2 = Forks::Super::Job::OS::Win32::terminate_process_tree(
+	    $pid, $signo);
+	$DEBUG && debug("killed process tree for system1 pid $pid: $c2");
     }
     return;
 }

@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -1136,6 +1136,10 @@ sub _ipc_dir_used_by_live_process {
     scalar <$fh>; # localtime 2
     my ($t, $pid) = split /\s+/, <$fh>;
     close $fh;
+    if (!$t || !$pid) {
+	# ipc dir mostly removed, just rmdir operation failed?
+	return 0;
+    }
 
     if ($DEBUG) {
 	print STDERR "pid=$pid, t=$t, age=",time-$t,"\n";

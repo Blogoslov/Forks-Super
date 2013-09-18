@@ -7,7 +7,7 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: 0
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 6.64, CPAN::Meta::Converter version 2.120921'
+generated_by: 'ExtUtils::MakeMaker version 6.66, CPAN::Meta::Converter version 2.120921'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -29,12 +29,9 @@ recommends:
   Sys::CpuAffinity: 0.91
   Sys::CpuLoadX: 0.02
   Win32::API: 0.70
-  Win32::IPC: 0
-  Win32::Process: 0.14
-  Win32::Process::Kill: 2.64
   YAML: 0.62
   YAML::Tiny: 1.39
 requires:
   Test::More: 0
   Time::HiRes: 1.30
-version: 0.68
+version: 0.70

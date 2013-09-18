@@ -14,7 +14,7 @@ use strict;
 use warnings;
 require Forks::Super::Job::OS::Win32 if &IS_WIN32 || &IS_CYGWIN;
 
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 our $CPU_AFFINITY_CALLS = 0;
 our $OS_PRIORITY_CALLS = 0;
@@ -322,7 +322,7 @@ sub _get_number_of_processors_from_dmesg_bsd {
 #   * SIGALRM might not get delivered during a system call
 #   * alarm() and sleep() are not compatible on your system
 #   * you want to timeout a process that you will start with exec()
-#   * the process you are monitoring also wants to use alarm/SIGALRM
+#   * you need to use alarm/SIGALRM for something else in your program
 #
 sub poor_mans_alarm {
     my ($pid, $time) = @_;
@@ -340,7 +340,12 @@ sub poor_mans_alarm {
     # program to monitor a pid:
     my $prog = "\$0='PMA($pid,$time)';sleep 1,kill(0,$pid)||exit for 1..$time;kill -9,$pid";
     if (&IS_WIN32) {
-	return system 1, qq[$^X -e "$prog"];
+	$prog .= ";system 'taskkill /f /pid $pid >nul'";
+	my $pma_pid = system 1, qq[$^X -e "$prog"];
+	if ($Forks::Super::Debug::DEBUG) {
+	    Forks::Super::Debug::DEBUG("set poor man's alarm for $pid/$time in process $pma_pid");
+	}
+	return $pma_pid;
     } else {
 	my $pm_pid = CORE::fork();
 	if (!defined $pm_pid) {

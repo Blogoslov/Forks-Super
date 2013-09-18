@@ -1,22 +1,11 @@
 #
-# Forks::Super::Tie::BackgroundScalar - lazy evaluation of a perl
+# Forks::Super::LazyEval::BackgroundScalar - lazy evaluation of a perl
 #    expression in scalar context or external command
 #
-# Since Forks::Super v0.43, you don't need to dereference the result of 
-# bg_eval.
-#
-# prior to v0.43: 
-#     $x = bg_eval { sub { sleep 3 ; 42 } };
-#     print "Expect $$x == 42\n";
-#
-# since v0.43: 
-#     $x = bg_eval { sub { sleep 3 ; 42 } };
-#     print "Expect $x == 42\n";
-#
-# Also unlike the previous version, you don't actually use 'tie'
-# with this object type.
+# formerly Forks::Super::Tie::BackgroundScalar, but this has not been
+# used with 'tie' since v0.43
 
-package Forks::Super::Tie::BackgroundScalar;
+package Forks::Super::LazyEval::BackgroundScalar;
 use Forks::Super;
 use Forks::Super::Wait 'WREAP_BG_OK';
 use Carp;
@@ -67,7 +56,7 @@ use overload # XXX - what is overloading for? is it necessary?
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
-our $VERSION = '0.68';
+our $VERSION = '0.70';
 
 # "protocols" for serializing data and the methods used
 # to carry out the serialization
@@ -179,7 +168,7 @@ sub _encode {
 	$serialization_dispatch{$protocol}{'require'}->();
 	return $serialization_dispatch{$protocol}{encode}->($data);
     } else {
-	croak 'Forks::Super::Tie::BackgroundScalar: ',
+	croak 'Forks::Super::LazyEval::BackgroundScalar: ',
 	    'YAML, JSON, or Data::Dumper required to use bg_eval';
     }
 }
@@ -190,7 +179,7 @@ sub _decode {
 	$serialization_dispatch{$protocol}{require}->();
 	return $serialization_dispatch{$protocol}{decode}->($data,$job);
     } else {
-	croak 'Forks::Super::Tie::BackgroundScalar: ',
+	croak 'Forks::Super::LazyEval::BackgroundScalar: ',
 	    'YAML, JSON, or Data::Dumper required to use bg_eval';
     }
 }
@@ -274,3 +263,34 @@ sub _fetch {
 }
 
 1;
+
+=head1 NAME
+
+Forks::Super::LazyEval::BackgroundScalar
+
+=head1 VERSION
+
+0.70
+
+=head1 DESCRIPTION
+
+An object type used to implement the L<Forks::Super::bg_qx|Forks::Super/bg_qx>
+and L<Forks::Super::bg_eval|Forks::Super/bg_eval> lazy asynchronous
+evaluation functions for scalar context.
+See L<Forks::Super> and L<Forks::Super::LazyEval> for details.
+
+=head1 AUTHOR
+
+Marty O'Brien, E<lt>mob@cpan.orgE<gt>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2010-2013, Marty O'Brien.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.8 or,
+at your option, any later version of Perl 5 you may have available.
+
+See http://dev.perl.org/licenses/ for more information.
+
+=cut
