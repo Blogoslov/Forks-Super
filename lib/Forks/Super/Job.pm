@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.70';
+our $VERSION = '0.71';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -1995,7 +1995,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.70
+0.71
 
 =head1 SYNOPSIS
 

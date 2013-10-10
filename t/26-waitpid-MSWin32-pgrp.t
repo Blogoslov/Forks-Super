@@ -56,9 +56,6 @@ SKIP: {
     my $job8 = fork { cmd => [ $^X, "t/external-command.pl", "-e=hello" ],
 		      timeout => 10 };
 
-    diag $job8->toString;
-
-
     my $pid8 = waitpid -$pgid, 0, 5;
     my $pid9 = waitpid -$job8, 0, 5;
     my $pid10 = waitpid -$job8->{pgid}, 0, 5;

@@ -75,9 +75,9 @@ $pid = fork {
     child_fh => "out,err,socket",
     sub => sub {
 	print STDERR "foo\n";
-	sleep 7;
+	sleep 6;
 	print STDOUT "bar\n";
-	sleep 7;
+	sleep 12;
 	print STDOUT "baz\n";
 	exit 0;
     }
@@ -88,9 +88,9 @@ $x = $pid->read_stdout(timeout => 1);
 ok(!$x, "read unavail stdout with timeout");
 
 # failure point on openbsd (single cpu?)
-$x = $pid->read_stdout(timeout => 8);
+$x = $pid->read_stdout(timeout => 9);				  ### 17 ###
 ok($x, "read avail stdout with timeout");
-$x = $pid->read_stdout(timeout => 1);
+$x = $pid->read_stdout(timeout => 1);				  ### 18 ###
 ok(!$x, "read unavail stdout with timeout");
 
 $x = $pid->read_stdout(block => 1);

@@ -104,14 +104,6 @@ Possible TODOs:
         _X_ Test F::S as a drop in replacement to a program that
             has a SIGCHLD handler. -- looks good
 
-    ___ Track down, solve 'untie attempted while ... inner references'
-        mystery with FST::IPCFileHandle
-	_X_ helps to explicitly assign (tied *$handle) to lexical
-	___ "untie attempted while inner references ..." is back in socket 0.55
-
-    _X_ Forks::Super::Tie::BackgroundScalar is no longer used with 'tie'
-        (since v0.43). Change the name? 
-
     ___ INET sockets as well as UNIX sockets, if you can commit to a port
         before fork'ing and not bind to it until after fork'ing. Or if you
 	can pass the port from parent to child with a pipe?
@@ -241,3 +233,15 @@ Possible TODOs:
         jobs.
 
     ___ in forked-harness.pl, have option to return tests in order
+
+    ___ alternate ways of invoking fork to support?
+    	___ fork sub { ... }
+    	    fork sub { ... }, %options
+    	    fork sub { ... }, \%options
+	    fork \&code [, %options | \%options ]
+	    These all run the specified Perl code in a bg proc, as if
+	    $options->{sub} = BLOCK  were specified
+	___ fork [ @cmd ]
+            fork [ @cmd ], %options | \%options
+	    Fork and run a command in the background, as if
+	    $options->{cmd} = \@cmd  where specified

@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.70';
+our $VERSION = '0.71';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -643,7 +643,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.70
+Version 0.71
 
 =head1 SYNOPSIS
 
@@ -3053,7 +3053,7 @@ This module always exports the C<fork>, L<"wait">, L<"waitpid">,
 and L<"waitall"> functions, overloading the Perl system calls
 with the same names. Mixing C<Forks::Super> calls with the
 similarly-named Perl calls is strongly discouraged, but you
-can access the original system calls at C<CORE::fork>,
+can access the original builtin functions at C<CORE::fork>,
 C<CORE::wait>, etc.
 
 Functions that can be exported to the caller's package include

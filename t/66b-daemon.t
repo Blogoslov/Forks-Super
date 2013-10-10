@@ -62,9 +62,15 @@ for (1..10) {
     sleep 1;
 }
 
-ok($new_priority == $base_priority + 1,
-   "set os priority on daemon process")
-    or diag("failed to update priority $base_priority => $new_priority");
+SKIP: {
+    if ($base_priority == 19) {
+	# why did it take until 0.70 for this issue to show up?
+	skip "can't lower priority (19) of daemon process any more", 1;
+    }
+    ok($new_priority == $base_priority + 1,
+       "set os priority on daemon process")
+	or diag("failed to update priority $base_priority => $new_priority");
+}
 
 SKIP: {
     if ($np <= 1) {

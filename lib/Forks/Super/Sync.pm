@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.70';
+our $VERSION = '0.71';
 
 sub new {
     my ($pkg, %args) = @_;
@@ -194,7 +194,7 @@ Forks::Super::Sync - portable interprocess synchronization object
 
 =head1 VERSION
 
-0.70
+0.71
 
 =head1 SYNOPSIS
 

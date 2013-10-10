@@ -27,7 +27,7 @@ if (!&Forks::Super::Util::IS_WIN32ish) {
 #   http://msdn.microsoft.com/en-us/library/ms684847(VS.85).aspx
 
 
-our $VERSION = '0.70';
+our $VERSION = '0.71';
 our ($_THREAD_API, $_THREAD_API_INITIALIZED, %SYSTEM_INFO);
 
 ##################################################################
@@ -73,9 +73,8 @@ eval {
     Win32::API::Struct->typedef( PROCESSENTRY32 => @processentry32spec );
 
     if ($Win32::API::VERSION < 0.70) {
-	die "Win32::API >=v0.71 is really really recommended. ",
-	    "In older versions of Win32::API, there is no good way to ",
-	    "emulate signals to a Windows process (your version: ",
+	die "Win32::API >=v0.71 is strongly recommended ",
+	    "(your version: ",
 	    $Win32::API::VERSION, ")";
     }
 
