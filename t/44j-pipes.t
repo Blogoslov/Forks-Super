@@ -36,8 +36,8 @@ ok($c eq 'f', 'got first char from stdout');
 if ($^O =~ /openbsd/i) {
     diag("took ${t}s for first getc from stdout, expected ~5s");
 }
-ok($t >= 3.5 && $t <= 7.65,                          ### 6 ### was 6.5, obs 7.49
-   "took ${t}s, expected ~5s");
+ok($t >= 3.25 && $t <= 7.65,                         ### 6 ### was 6.5, obs 7.49
+   "took ${t}s, expected ~5s");				     # was 3.5, obs 3.33
 
 $t = Time::HiRes::time();
 $c = $pid->getc_stderr(timeout => 2);

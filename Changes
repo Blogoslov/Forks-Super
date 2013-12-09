@@ -1,5 +1,9 @@
 Revision history for Forks-Super
 
+0.72    2013-12-09
+        Support  fork \&code  and  fork \@cmd  syntax.
+        Use 'queue' as default on_busy behavior for jobs with dependencies
+
 0.71    2013-10-10
         test fixes that should help single CPU systems pass timing tests
 

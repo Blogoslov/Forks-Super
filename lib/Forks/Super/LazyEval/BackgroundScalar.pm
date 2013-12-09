@@ -56,7 +56,7 @@ use overload # XXX - what is overloading for? is it necessary?
 		         : atan2($_[0]->_fetch, $_[1]) }
 ;
 
-our $VERSION = '0.71';
+our $VERSION = '0.72';
 
 # "protocols" for serializing data and the methods used
 # to carry out the serialization
@@ -270,7 +270,7 @@ Forks::Super::LazyEval::BackgroundScalar
 
 =head1 VERSION
 
-0.71
+0.72
 
 =head1 DESCRIPTION
 

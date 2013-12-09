@@ -13,10 +13,10 @@ $Forks::Super::MAX_PROC = 2;
 $Forks::Super::ON_BUSY = "queue";
 
 ok(@Forks::Super::Queue::QUEUE == 0, "$$\\initial queue is empty");
-my $pid1 = fork { sub => sub { sleep 5 } };
-my $pid2 = fork { sub => sub { sleep 5 } };
+my $pid1 = fork sub { sleep 5 };
+my $pid2 = fork sub { sleep 5 };
 ok(isValidPid($pid1) && isValidPid($pid2), "two successful fork calls");
-my $pid3 = fork { sub => sub { sleep 5 } };
+my $pid3 = fork sub { sleep 5 };
 ok(@Forks::Super::Queue::QUEUE == 1, "third fork call is deferred")    ### 3 ###
     or diag("script time is ", time-$^T);
 ok($pid3 < -10000, "deferred job has large negative id");
@@ -37,15 +37,15 @@ ok(isValidPid($j->{real_pid}), "real_pid is valid pid");
 $Forks::Super::MAX_PROC = 2;
 $Forks::Super::ON_BUSY = "queue";
 
-my $pid = fork { sub => sub { sleep 5 } };
-$pid2 = fork { sub => sub { sleep 4 } };
+my $pid = fork sub { sleep 5 };
+$pid2 = fork sub { sleep 4 };
 ok(isValidPid($pid) && isValidPid($pid2), "two successful fork calls");
 
-my $ordinary = fork { sub => sub { sleep 3 }, queue_priority => 0 };
+my $ordinary = fork sub { sleep 3 }, queue_priority => 0 ;
 $^O eq 'MSWin32' ? Forks::Super::pause(1) : sleep 1;
-my $mild = fork { sub => sub { sleep 3 }, queue_priority => -1 };
+my $mild = fork sub { sleep 3 }, queue_priority => -1 ;
 $^O eq 'MSWin32' ? Forks::Super::pause(1) : sleep 1;
-my $urgent = fork { sub => sub { sleep 3 } , queue_priority => 1 };
+my $urgent = fork sub { sleep 3 } , queue_priority => 1 ;
 
 ok(!isValidPid($ordinary) && !isValidPid($mild) && !isValidPid($urgent),
    "three deferred jobs created");

@@ -21,7 +21,7 @@ my $command2 = "$^X t/external-command.pl -y=10 -y=4";
 my $cmd = "$command1 | $command2";
 my $msg = sprintf "%x", rand() * 99999999;
 
-my $pid = fork { cmd => $cmd, timeout => 10, child_fh => "all" };
+my $pid = fork [$cmd], timeout => 10, child_fh => "all";
 
 ok(isValidPid($pid), "$$\\fork successful");
 ok(defined $Forks::Super::CHILD_STDIN{$pid},  "\%CHILD_STDIN defined");

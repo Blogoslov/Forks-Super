@@ -27,6 +27,11 @@ a Windows system will be interpreted as waiting
 on a single child process with the specified 
 pseudo-process ID.
 
+Since v0.70 there is an experimental emulation of 
+process groups on Windows, which may or may not have
+any relation to how Windows actually thinks of the
+relationships between processes.
+
 See the  perlfork  POD for more information about
 how  CORE::fork  is emulated on Windows.
 

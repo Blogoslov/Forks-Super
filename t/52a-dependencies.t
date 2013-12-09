@@ -17,7 +17,7 @@ our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 1.0E-6;
 # dependency with queue
 
 $Forks::Super::MAX_PROC = 20;
-$Forks::Super::ON_BUSY = "queue";
+$Forks::Super::ON_BUSY = "fail"; # jobs with dependencies should 'queue'
 
 my $pid1 = fork { sub => sub { sleep 5 } };
 my $t = Time::HiRes::time();

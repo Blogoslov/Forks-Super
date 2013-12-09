@@ -23,8 +23,7 @@ my (@cmd,$pid,$fh_in,$z,$t,@out,@err,$msg);
 
 # test read_stderr
 
-$pid = fork { cmd => [ @cmd , "-y=3" ], timeout => 6,
-		child_fh => "in,err" };
+$pid = fork [ @cmd , "-y=3" ], timeout => 6, child_fh => "in,err" ;
 ok(isValidPid($pid), "started job with join");
 
 $msg = sprintf "the message is %x", rand() * 99999999;

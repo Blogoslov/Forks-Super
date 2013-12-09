@@ -90,12 +90,13 @@ my $debug = '';
 my $use_socket = '';
 my $help = '';
 my $pause = 0;
+my $inorder = 0;
 $::fail35584 = '';
 
 # [-h] [-c] [-v] [-I lib [-I lib [...]]] [-p xxx [-p xxx [...]]] [-s]
 # [-t nnn] [-r nnn] [-x nnn] [-m nnn] [-q] [-a]
 # abcdefghijklmnopqrstuvwxyz
-# x s @  x@   i  @xixi x i x
+# x s @  x@   i x@xixi x i x
 my $result = GetOptions(
     'h|harness' => \$use_harness,
     'C|color'   => \$use_color,
@@ -114,6 +115,7 @@ my $result = GetOptions(
     'z|socket'  => \$use_socket,
     'abort-on-fail' => \$abort_on_first_error,
     'pause=s'   => \$pause,
+    'O|order'   => \$inorder,
     'help'      => \$help,
     );
 
@@ -199,7 +201,7 @@ if ($debug) {
     color_print(DEBUG => "There are $ntests tests to run (",
 		scalar @ARGV, " x $xrepeat)\n");
 }
-my (%j,$jcount);
+my (%j,$jcount,@j);
 
 &main;
 &summarize;
@@ -253,11 +255,14 @@ sub main {
 	    }
 
 	    # see if any tests have finished lately
-	    my $reap = waitpid -1, WNOHANG;
+	    my $waitproc = $inorder ? $j[0] : -1;
+	    my $reap = waitpid $waitproc, WNOHANG;
 	    while (Forks::Super::Util::isValidPid($reap)) {
 		return if process_test_output($reap) eq 'ABORT';
 		$reap = -1;
-		$reap = waitpid -1, WNOHANG;
+		shift @j;
+		$waitproc = $inorder ? $j[0] : -1;
+		$reap = waitpid $waitproc, WNOHANG;
 	    }
 	}
 
@@ -269,10 +274,19 @@ sub main {
 			"waiting for results.\n");
 	}
 
-	my $pid = wait;
-	while (Forks::Super::Util::isValidPid($pid)) {
-	    return if process_test_output($pid) eq 'ABORT';
-	    $pid = wait;
+	if ($inorder) {
+	    my $pid = waitpid $j[0], 0;
+	    while (Forks::Super::Util::isValidPid($pid)) {
+		shift @j;
+		return if process_test_output($pid) eq 'ABORT';
+		$pid = waitpid $j[0], 0;
+	    }
+	} else {
+	    my $pid = wait;
+	    while (Forks::Super::Util::isValidPid($pid)) {
+		return if process_test_output($pid) eq 'ABORT';
+		$pid = wait;
+	    }
 	}
 	if ($total_status > 0) {
 	    last;
@@ -350,6 +364,7 @@ sub launch_test_file {
     $j{"$test_file:pid"} = $pid;
     $j{"$pid:count"} = ++$jcount;
     $j{"$test_file:iteration"} = $iteration;
+    push @j,$pid;
     return;
 }
 
@@ -784,6 +799,7 @@ Recognized options:
     -a,--abort-on-fail   stop immediately after any test failure
     -C,--color           colorize output (requires Term::ANSIColor >= 3.00)
     -E,--env var=value   pass environment variable to the tests
+    -O,--order           return test results in order
 
 ENVIRONMENT
 
@@ -803,7 +819,7 @@ forked_harness.pl - run tests in parallel with Forks::Super
 
 =head1 VERSION
 
-0.71
+0.72
 
 =head1 SYNOPSIS
 

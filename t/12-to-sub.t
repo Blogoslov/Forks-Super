@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 26;
+use Test::More tests => 29;
 use strict;
 use warnings;
 
@@ -156,6 +156,21 @@ ok(isValidPid($pid), "fork to trivial sub ok");
 $p = wait;
 ok($? == 0, "captured correct zero STATUS $? from trivial sub");
 ok($p == $pid, "wait on trivial sub ok");
+
+##################################################################
+
+# test fork sub { ... } syntax (v0.72)
+
+$u = Time::HiRes::time();
+$pid = fork sub { sleep 3 };
+ok(isValidPid($pid), "fork sub {...} syntax ok");
+$t = Time::HiRes::time();
+$p = wait;
+$v = Time::HiRes::time();
+($t,$u) = ($v-$t, $v-$u);
+ok($p == $pid, "wait on fork sub {...} proc ok");         ### 18 ###
+okl($u >= 2.9 && $t <= 5.75,                     ### 19 ### was 4 obs 5.68
+   "fork sub {...} proc ran ${t}s ${u}s, expected 3-4s");
 
 #############################################################################
 

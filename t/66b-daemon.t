@@ -28,13 +28,12 @@ if ($^O eq 'MSWin32') {
     exit;
 }
 
-my $pid = fork { sub => sub { sleep 5 } };
+my $pid = fork sub { sleep 5 };
 my $base_priority = get_os_priority($pid);
 my $np = Forks::Super::Config::CONFIG_module("Sys::CpuAffinity")
     ? Sys::CpuAffinity::getNumCpus() : 0;
 
-my $daemon = fork {
-    sub => sub { sleep 10 },
+my $daemon = fork sub { sleep 10 }, {
     daemon => 1,
     os_priority => $base_priority + 1,
     cpu_affinity => $np > 1 ? 2 : 1
@@ -67,7 +66,7 @@ SKIP: {
 	# why did it take until 0.70 for this issue to show up?
 	skip "can't lower priority (19) of daemon process any more", 1;
     }
-    ok($new_priority == $base_priority + 1,
+    ok($new_priority == $base_priority + 1,		        ### 1 ###
        "set os priority on daemon process")
 	or diag("failed to update priority $base_priority => $new_priority");
 }
@@ -79,7 +78,7 @@ SKIP: {
     if (!Forks::Super::Config::CONFIG('Sys::CpuAffinity')) {
 	skip 'Sys::CpuAffinity not avail. Skip CPU affinity test', 1;
     }
-    ok($affinity == 2, "set CPU affinity on daemon process")
+    ok($affinity == 2, "set CPU affinity on daemon process")    ### 2 ###
 	or diag("affinity of $daemon was $affinity, expected 2; ",
 	        "Sys::CpuAffinity v. $Sys::CpuAffinity::VERSION");
 }
@@ -87,28 +86,26 @@ $daemon->kill('KILL');
 
 
 my $t = Time::HiRes::time();
-my $d1 = fork {
+my $d1 = fork sub { sleep 5 }, {
     daemon => 1,
-    sub => sub { sleep 5 },
     delay => 3
 };
-ok($d1->{state} eq 'DEFERRED', 'daemon job was delayed');
+ok($d1->{state} eq 'DEFERRED', 'daemon job was delayed');	### 3 ###
 for (1..5) {
     Forks::Super::pause(1) while $d1->{state} eq 'DEFERRED';
 }
-ok($d1->{state} ne 'DEFERRED', 'daemon job was started');
+ok($d1->{state} ne 'DEFERRED', 'daemon job was started');	### 4 ###
 ok(!Forks::Super::Util::isValidPid($d1->{pid}),"pid is for deferred job");
 ok(Forks::Super::Util::isValidPid($d1->{real_pid}),"real pid is valid");
 
-my $n1 = fork {
-    daemon => 0,
-    sub => sub {
+my $n1 = fork sub {
         print time-$^T," DAEMON 1 MONITOR START\n";
 	sleep 1 while CORE::kill 0, $d1->{real_pid};
         print time-$^T," DAEMON 1 MONITOR COMPLETE\n";
     },
-    name => 'daemon1 monitor'
-};
+    daemon => 0,
+    name => 'daemon1 monitor';
+
 sleep 1;
 
 my $d2 = fork {
@@ -120,7 +117,7 @@ my $d2 = fork {
     debug => 0,
 };
 
-ok($d2->{state} eq 'DEFERRED', '2nd daemon is deferred');
+ok($d2->{state} eq 'DEFERRED', '2nd daemon is deferred');	### 7 ###
 Forks::Super::Util::pause(6);
 
 ok($d1 && $d2, "daemon procs launched") or diag("d1=$d1, d2=$d2");

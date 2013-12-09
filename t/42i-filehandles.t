@@ -17,12 +17,12 @@ if (${^TAINT}) {
 my $prog1 = "$^X -e \"print qq/Hello|world|/.<>\"";
 my $prog2 = "$^X -ne \"print uc\"";
 
-my $pid = fork {
-    cmd => "$prog1 | $prog2",
+my $pid = fork 
+    [ "$prog1 | $prog2" ],
     stdin => "foo\n",
     timeout => 5,
-    child_fh => "all"
-};
+    child_fh => "all" ;
+
 waitall;
 
 my @out = Forks::Super::read_stdout($pid);

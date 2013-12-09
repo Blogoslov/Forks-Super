@@ -29,7 +29,7 @@ use strict;
 use warnings;
 
 our @ISA = qw(Exporter IO::Handle);
-our $VERSION = '0.71';
+our $VERSION = '0.72';
 
 sub TIEHANDLE {
     my ($class, %props) = @_;
@@ -197,7 +197,7 @@ sub Forks::Super::Tie::Delegator::AUTOLOAD {
     my $method = $Forks::Super::Tie::Delegator::AUTOLOAD;
     $method =~ s/.*:://;
     if ($tied) {
-	return eval "\$tied->$method(\@_)" or do {};  ## no critic (StringyEval)
+	return eval "\$tied->$method(\@_)" || do {}; ## no critic (StringyEval)
     }
 
     if ($method eq 'DESTROY') {

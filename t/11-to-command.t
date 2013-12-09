@@ -1,5 +1,5 @@
 use Forks::Super ':test';
-use Test::More tests => 17;
+use Test::More tests => 20;
 use strict;
 use warnings;
 
@@ -81,6 +81,16 @@ ok(isValidPid($pid), "fork to external command");
 $p = wait;
 ok($p == $pid, "wait reaped correct pid");
 ok($? == 0, "captured correct zero STATUS");
+
+#############################################################################
+
+# test fork [@cmd] syntax
+
+$pid = fork [ $^X, "t/external-command.pl", "-x=3" ];
+ok(isValidPid($pid), "fork [\@cmd] syntax ok");
+$p = wait;
+ok($p == $pid, "wait reaped correct pid");
+ok($?>>8 == 3, "captured correct non-zero STATUS");
 
 #############################################################################
 

@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.71';
+our $VERSION = '0.72';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -248,11 +248,20 @@ sub _init {
 sub fork {
     my @fork_args = @_;
 
+    my %fork_argsx;
+
     my $opts;
+    if (ref $fork_args[0] eq 'CODE') {
+	$fork_argsx{"sub"} = shift @fork_args;
+    } elsif (ref $fork_args[0] eq 'ARRAY') {
+	$fork_argsx{"cmd"} = shift @fork_args;
+    }
+
     if (ref $fork_args[0] ne 'HASH') {
-	$opts = { @fork_args };
+	$opts = { @fork_args, %fork_argsx };
     } else {
 	$opts = $fork_args[0];
+	$opts->{$_} = $fork_argsx{$_} for keys %fork_argsx;
     }
 
     $MAIN_PID ||= $$;                         # initialize on first use
@@ -643,7 +652,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.71
+Version 0.72
 
 =head1 SYNOPSIS
 
@@ -670,11 +679,13 @@ Version 0.71
     # fork directly to a shell command. Child doesn't return.
     $pid = fork { cmd => "./myScript 17 24 $n" };
     $pid = fork { exec => [ "/bin/prog" , $file, "-x", 13 ] };
+    $pid = fork [ "./myScript", 17, 24, $n ];    # new syntax in v0.72
 
     # --- fork directly to a Perl subroutine. Child doesn't return.
     $pid = fork { sub => $methodNameOrRef , args => [ @methodArguments ] };
     $pid = fork { sub => \&subroutine, args => [ @args ] };
     $pid = fork { sub => sub { "anonymous sub" }, args => [ @args ] );
+    $pid = fork sub { CODE }, %other_options;    # new syntax in v0.72
 
     # --- impose a time limit on the child process
     $pid = fork { cmd => $command,
@@ -700,7 +711,7 @@ Version 0.71
        if ($i_can_haz_ice_cream !~ /you can have ice cream/ && rand() < 0.5) {
           print STDERR '@#$&#$*&#$*&',"\n";
        }
-      exit 0;
+       exit 0;
     } # else parent process
     $child_stdin = $pid->{child_stdin};
     $child_stdin = $Forks::Super::CHILD_STDIN{$pid}; # alternate, deprecated
@@ -747,7 +758,7 @@ Version 0.71
     $pid = fork { sub => 'MyModule::MyMethod', args => [ @b ], max_proc => 3 };
 
     # --- try to fork no matter how busy the system is
-    $pid = fork { force => 1, sub => \&MyMethod, args => [ @my_args ] };
+    $pid = fork { sub => \&MyMethod, force => 1 }
 
     # when system is busy, queue jobs. When system is not busy,
     #     some jobs on the queue will start.
@@ -756,8 +767,7 @@ Version 0.71
     $pid = fork { cmd => $command };
     $pid = fork { cmd => $useless_command, queue_priority => -5 };
     $pid = fork { cmd => $important_command, queue_priority => 5 };
-    $pid = fork { cmd => $future_job,
-                  delay => 20 }       # force job onto queue for at least 20s
+    $pid = fork { cmd => $future_job, delay => 20 };  # queue job for at least 20s
 
     # --- assign descriptive names to tasks
     $pid1 = fork { cmd => $command, name => "my task" };
@@ -828,7 +838,7 @@ L<Forks::Super::Job|Forks::Super::Job> object with information
 about the background
 task to the calling process. This object is overloaded so that
 in any numeric or string context, it will behave like the process
-id of the new process, and thus C<Forks::Super::fork> can be used
+id of the new process, and let's C<Forks::Super::fork> be used
 as a drop-in replacement for the builtin Perl C<fork> call.
 
 With no arguments, it behaves the same as the Perl
@@ -883,6 +893,9 @@ the parent process. Does not return from the child process, so you
 do not need to check the fork() return value to determine whether
 code is executing in the parent or child process.
 
+See L<"Alternate fork syntax">, below, for an alternate way of
+specifying a command to run in a background process.
+
 =back
 
 =head3 exec
@@ -933,6 +946,9 @@ nor the L<"sub"> option is provided
 to the fork call, then the fork() call behaves like a standard
 Perl C<fork()> call, returning the child PID to the parent and also
 returning zero to a new child process.
+
+See L<"Additional fork syntax">, below, for an alternate way of
+specifying a subroutine to run in the child process.
 
 =back
 
@@ -1568,13 +1584,18 @@ value will be a very negative number (job ID).
 
 =back
 
-On any individual C<fork> call, the default launch failure behavior specified
+On most individual C<fork> call, the default launch failure behavior specified
 by L<$Forks::Super::ON_BUSY|/"ON_BUSY"> can be overridden by specifying a
 C<on_busy> option:
 
     $Forks::Super::ON_BUSY = "fail";
     $pid1 = fork { sub => 'myMethod' };
-    $pid2 = fork { sub => 'yourMethod', on_busy => "queue" }
+    $pid2 = fork { sub => 'yourMethod', on_busy => "queue" }; 
+
+Note that jobs that use any of the L<"delay">, L<"start_after">, L<"depend_on">,
+or L<"depend_start"> options ignore this setting and always put the job
+on the deferred job queue (unless a different C<on_busy> attribute is 
+explicitly provided).
 
 =back
 
@@ -1660,6 +1681,11 @@ jobs, the job will be dependent on B<all> existing jobs with that name:
     $job4 = fork { name => "Ralph", depend_start => "Ralph", ... }; # no dependencies
     $job5 = fork { name => "Ralph", depend_start => "Ralph", ... }; # depends on Job 4
     $job6 = fork { name => "Ralph", depend_start => "Ralph", ... }; # depends on #4 and #5
+
+The default "on_busy" behavior for jobs with dependencies is to go on to
+the job queue, ignoring the value of L<$Forks::Super::ON_BUSY/"ON_BUSY">
+(but not ignoring the L<< C<on_busy>|"on_busy" >> attribute passed to the
+job, if any).
 
 =back
 
@@ -2045,6 +2071,29 @@ a positive number needs to be modified on Windows systems
 by testing whether  C<Forks::Super::isValidPid($pid)> returns
 true, where C<$pid> is the return value from a C<Forks::Super::fork>
 call.
+
+=head1 Alternate fork syntax
+
+Since v0.72, the C<fork> function recognizes these additional
+syntax:
+
+=head2 C<< fork \&code, %options >>
+
+=head2 C<< fork \&code, \%options >>
+
+If the first argument to C<fork> is a code reference, then it is
+treated like a L<"sub"> argument, and is equivalent to the call
+
+    fork { sub => \&code, %options }
+
+=head2 C<< fork \@cmd, %options >>
+
+=head2 C<< fork \@cmd, \%options >>
+
+If the first argument to C<fork> is an array reference, then it is
+treated like a C<"cmd"> argument, and is equivalent to the call
+
+    fork { cmd => \@cmd, %options }
 
 =head1 OTHER FUNCTIONS
 

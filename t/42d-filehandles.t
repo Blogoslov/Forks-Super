@@ -57,11 +57,10 @@ my $error = "overwrite me\n";
 
 $Forks::Super::ON_BUSY = "queue";
 
-my $pid = fork { 
+my $pid = fork \@cmd, { 
 	stdin => $input, 
 	stdout => \$output, 
 	stderr => \$error, 
-        cmd => \@cmd, 
 	delay => 2 
 };
 ok($output eq '' && $error =~ /overwrite/,

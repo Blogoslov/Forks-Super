@@ -153,8 +153,9 @@ Possible TODOs:
 
     _o_ setuid =>  option to fork
 
-    ___ Make forked_harness.pl an application that gets installed
+    _o_ Make forked_harness.pl an application that gets installed
         with Forks::Super
+        _o_ or maybe not, people already use prove
         _X_ put pod in t/forked_harness.pl
 
     ___ daemon support depends on file-based IPC?
@@ -201,11 +202,6 @@ Possible TODOs:
         _X_ get and display stack trace of natural/sub-style children
 	___ measure input and output for IPCxxxHandle classes
 
-    ___ CPAN testers find lots of timeout failures in FreeBSD that I can't
-        reproduce. Are there circumstances/configurations where the
-	SIGALRM isn't sent or received?
-	___ last observed 0.56
-
     ___ CPAN testers find lots of timing errors in openbsd. Is pause(n)
         on openbsd prone to returning significantly more or less than n
 	seconds later? Would a busy wait just for openbsd make things
@@ -234,14 +230,20 @@ Possible TODOs:
 
     ___ in forked-harness.pl, have option to return tests in order
 
-    ___ alternate ways of invoking fork to support?
-    	___ fork sub { ... }
+    _X_ alternate ways of invoking fork to support?
+    	_X_ fork sub { ... }
     	    fork sub { ... }, %options
     	    fork sub { ... }, \%options
 	    fork \&code [, %options | \%options ]
 	    These all run the specified Perl code in a bg proc, as if
 	    $options->{sub} = BLOCK  were specified
-	___ fork [ @cmd ]
+	_X_ fork [ @cmd ]
             fork [ @cmd ], %options | \%options
 	    Fork and run a command in the background, as if
 	    $options->{cmd} = \@cmd  where specified
+
+    _X_ http://stackoverflow.com/questions/20415186
+	on_busy => 'queue' should be the default in many contexts.
+	In some contexts, it is the only sensible value, like
+	_X_ jobs with dependencies
+	_XX_ jobs with delay / start_after

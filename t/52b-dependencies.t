@@ -15,13 +15,12 @@ our $TOL = 1E-4 + ($Forks::Super::SysInfo::TIME_HIRES_TOL || 0.0);
 #
 
 $Forks::Super::MAX_PROC = 20;
-$Forks::Super::ON_BUSY = "block";
 my $pid1 = fork { sub => sub { sleep 5 } };
 ok(isValidPid($pid1), "job 1 started");
 my $j1 = Forks::Super::Job::get($pid1);
 
 my $t = Time::HiRes::time();
-my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1 };
+my $pid2 = fork { sub => sub { sleep 5 } , depend_on => $pid1, on_busy => 'block' };
 my $j2 = Forks::Super::Job::get($pid2);
 ok($j1->{state} eq "COMPLETE", "job 1 complete when job 2 starts");
 my $pid3 = fork { sub => sub { } };

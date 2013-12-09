@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.71';
+our $VERSION = '0.72';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -510,11 +510,14 @@ sub launch {
 }
 
 sub _robust_fork {
-    # the other 13,000 lines in this distro are just a wrapper around this:
-
     my $job = shift;
     my $retries = $job->{retries} || 0;
+
+    # the other 17,000 lines in this distro are just a wrapper around this line:
+
     my $pid = _CORE_fork();
+
+
     while (!defined($pid) && $retries-- > 0) {
 	warn 'Forks::Super::launch: ',
 	    "system fork call returned undef. Retrying ...\n";
@@ -1417,6 +1420,10 @@ sub _preconfig_busy_action {
     } else {
 	no warnings 'once';
 	$job->{_on_busy} = $Forks::Super::ON_BUSY || 'block';
+
+	# may be overridden to 'queue' if  depend_on  or
+	# depend_start  is set. See  _preconfig_dependencies
+
     }
     $job->{_on_busy} = uc $job->{_on_busy};
 
@@ -1470,12 +1477,14 @@ sub _preconfig_dependencies {
 	    $job->{depend_on} = [ $job->{depend_on} ];
 	}
 	$job->{depend_on} = _resolve_names($job, $job->{depend_on});
+	$job->{_on_busy} = 'QUEUE' unless $job->{on_busy};
     }
     if (defined $job->{depend_start}) {
 	if (ref $job->{depend_start} ne 'ARRAY') {
 	    $job->{depend_start} = [ $job->{depend_start} ];
 	}
 	$job->{depend_start} = _resolve_names($job, $job->{depend_start});
+	$job->{_on_busy} = 'QUEUE' unless $job->{on_busy};
     }
     return;
 }
@@ -1995,7 +2004,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.71
+0.72
 
 =head1 SYNOPSIS
 
