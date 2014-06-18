@@ -116,7 +116,12 @@ $LIMITS{version} = $];
 &wait_waitpid_results;
 &explore_sync_options;
 
-&find_max_fork(300);  # run last because it might crash the program
+
+# gnukfreebsd/midnightbsd can see "Maximal count of pending signals 
+# (120) exceeded" messages in t/32.
+&find_max_fork(
+    $^O eq 'gnukfreebsd' || $^O eq 'midnighbsd' ? 110 : 300
+);  # run last because it might crash the program
 print "Created system limitations file in: $limits_file\n";
 
 close LOCK;
@@ -379,7 +384,9 @@ sub explore_sync_options {
 	write_limits( sync_options => join('/', @sync) );
     }
         
-    # advisory file locking ? I expect this to work almost everywhere
+    # advisory file locking ? I expect this to work almost everywhere.
+    # It could be slower than the other methods, though, and it actually
+    # might not work so well on Cygwin, so make this the last option.
     my $file = "foo.$$";
     if (fork() == 0) {
 	open my $fh, ">>", $file;

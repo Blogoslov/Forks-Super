@@ -21,14 +21,6 @@ use warnings;
 $Forks::Super::Sigchld::SIG_DEBUG = 1;
 $Forks::Super::MAX_PROC = 1000;
 
-if ($^O eq 'gnukfreebsd') {
-    # on gnukfreebsd this test can either:
-    #    overload signal handling (>120 pending signals), or
-    #    deliver test output out of order
-    ok(1, 'skip stresstest on gnukfreebsd') for 1..301;
-    exit;
-}
-
 SKIP: {
     if ($ENV{WRONG_MAKEFILE_OK}) {
 	skip "ok to run $0 with inconsistent version of perl", 2;

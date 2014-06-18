@@ -4,6 +4,19 @@ use Carp;
 use strict;
 use warnings;
 
+
+if ($^O eq 'MSWin32') {
+    Forks::Super::Config::CONFIG_module("Win32::API");
+    if ($Win32::API::VERSION && $Win32::API::VERSION < 0.71) {
+	warn qq[
+
+Win32::API v$Win32::API::VERSION found. v>=0.71 may be required
+to pass this test and use the features exercised by this test.
+
+];
+    }
+}
+
 # 
 # test that spawned jobs (grandchild processes)
 # also respect deadlines from the "timeout"

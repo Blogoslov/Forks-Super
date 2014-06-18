@@ -26,7 +26,7 @@ eval "use Devel::GlobalDestruction";
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(@ALL_JOBS %ALL_JOBS);
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 
 our (@ALL_JOBS, %ALL_JOBS, @ARCHIVED_JOBS, $WIN32_PROC, $WIN32_PROC_PID);
 our $OVERLOAD_ENABLED = 0;
@@ -1949,7 +1949,13 @@ sub dispose {
 	delete $Forks::Super::CHILD_STDERR{$pid};
 	delete $Forks::Super::CHILD_STDERR{$real_pid};
 
-	foreach my $attr ('f_in','f_out','f_err') {
+	my @fattr = qw(f_in f_out f_err);
+	if ($job->{fh_config}{stress}) {
+	    push @fattr, "f_stress_$_" 
+		for 1..$Forks::Super::Job::Ipc::_FILEHANDLES_PER_STRESSED_JOB;
+	}
+
+	foreach my $attr (@fattr) {
 	    my $file = $job->{fh_config} && $job->{fh_config}{$attr};
 	    if (defined($file) && -f $file) {
 		$! = 0;
@@ -2004,7 +2010,7 @@ Forks::Super::Job - object representing a background task
 
 =head1 VERSION
 
-0.72
+0.73
 
 =head1 SYNOPSIS
 

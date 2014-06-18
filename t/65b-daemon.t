@@ -7,6 +7,12 @@ use strict;
 use warnings;
 
 
+
+sub diagmidnightbsd {
+    diag @_ if $^O eq 'midnightbsd';
+}
+
+
 our $CWD = &Cwd::getcwd;
 if (${^TAINT}) {
     my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
@@ -17,6 +23,7 @@ if (${^TAINT}) {
     Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
     ($CWD) = $CWD =~ /(.*)/;
 }
+diagmidnightbsd "\$CWD is $CWD";
 
 sub run_simple_daemon {
     my $output = $ENV{output} || "t/out/daemon.out";
@@ -53,18 +60,21 @@ SKIP: {
 ### to sub
 
     my $output = "$CWD/t/out/daemon2.$$.out";
+    diagmidnightbsd "\$output is $output";
     my $pid = fork {
 	daemon => 1,
 	env => { output => $output },
 	name => 'daemon2',
 	sub => \&run_simple_daemon
     };
+    diagmidnightbsd "fork => $pid";
     ok(isValidPid($pid), "fork to sub with daemon opt successful");
     my $t = Time::HiRes::time;
+    diagmidnightbsd "waiting $t";
     my $p2 = wait;
     $t = Time::HiRes::time - $t;
-    ok($p2 == -1 && $t <= 1.0,
-       "wait on daemon not successful");
+    diagmidnightbsd "wait took ${t}s";
+    ok($p2 == -1 && $t <= 1.0, "wait on daemon not successful");
     sleep 4;
 
   SKIP: {

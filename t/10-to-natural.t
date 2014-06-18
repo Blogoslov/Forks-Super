@@ -32,7 +32,7 @@ my $waitpid = waitpid($pid,WNOHANG);
 ok(-1 == $waitpid || 0 == $waitpid, "non-blocking wait succeeds");
 
 ok(! defined $job->{status}, "no job status");
-Forks::Super::pause(4);
+Forks::Super::pause(6);
 ok($job->{state} eq "COMPLETE", "job state " . $job->{state} . "==COMPLETE");
 ok(defined $job->{status}, "job status defined");
 

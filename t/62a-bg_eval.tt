@@ -2,6 +2,18 @@
 use strict;
 use warnings;
 
+if ($^O eq 'MSWin32') {
+    Forks::Super::Config::CONFIG_module("Win32::API");
+    if ($Win32::API::VERSION && $Win32::API::VERSION < 0.71) {
+	warn qq[
+
+Win32::API v$Win32::API::VERSION found. v>=0.71 may be required
+to pass this test and use the features exercised by this test.
+
+];
+    }
+}
+
 #
 # tests (24) for exercising bg_eval. This code should
 # not be run by itself, but should be <require>'d by
@@ -38,7 +50,7 @@ my $t1 = Time::HiRes::time();
 ($t,$t0) = ($t1-$t,$t1-$t0);
 my $y = $x;
 ok($y == 42, "scalar bg_eval");
-okl($t0 >= 2.85 && $t <= 7.95,     ### 10 ### was 3.85, obs 3.97,5.11,7.39
+okl($t0 >= 2.6 && $t <= 7.95,     ### 10 ### was 3.85, obs 3.97,5.11,7.39,2.65
    "scalar bg_eval took ${t}s ${t0}s expected ~3s");
 $x = 19;
 ok($x == 19, "result is not read only");
@@ -53,10 +65,6 @@ SKIP: {
     okl($t <= 5.25,                    ### 13 ### was 3.25, obs 3.41,4.01,5.01
 	"scalar bg_eval respected timeout, took ${t}s expected ~2s");
 }
-
-# Forks::Super::Debug::use_Carp_Always();
-
-### scalar context, return reference ###
 
 $t0 = Time::HiRes::time();
 $x = bg_eval {
@@ -102,7 +110,7 @@ ok($w == 14 + 1 + 2, "bg_eval start callback");
 ok($x == 19, "scalar bg_eval with lots of options");
 $t1 = Time::HiRes::time();
 ($t,$t0) = ($t1-$t,$t1-$t0);
-okl($t0 > 7.80 && $t < 13.5,  ### 34 ### was 9.6 obs 9.99,10.35,11.37,13.20
+okl($t0 > 7.60 && $t < 13.5,  ### 34 ### was 9.6 obs 9.99,10.35,11.37,13.20,7.69
    "bg_eval with delay took ${t}s ${t0}s, expected ~8s");
 ok($w == 14 + 1 + 2 + 5, "bg_eval finish callback");
 

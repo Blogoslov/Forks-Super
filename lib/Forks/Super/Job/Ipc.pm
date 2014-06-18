@@ -33,7 +33,7 @@ $| = 1;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(close_fh);
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 
 our (%FILENO, %SIG_OLD, $IPC_COUNT, $IPC_DIR_DEDICATED,
      @IPC_FILES, %IPC_FILES);
@@ -45,6 +45,7 @@ our $__MAX_OPEN_FH = do {
     $Forks::Super::SysInfo::MAX_OPEN_FH;
 };
 our %__OPEN_FH;
+our $_FILEHANDLES_PER_STRESSED_JOB = 100;   # for t/33
 
 our @SAFEOPENED = ();
 our $USE_TIE_FH = $] >= 5.008;
@@ -147,6 +148,14 @@ sub _safeopen ($*$$;%) {
 	    debug('open mode for ',$open3||'file descriptor'," is $open2");
 	}
     }
+
+    if ($__OPEN_FH > 0.98 * $__MAX_OPEN_FH) {
+	carp sprintf "This program now using %d of ~%d open file handles. Consider closing unused filehandles.", $__OPEN_FH, $__MAX_OPEN_FH;
+	$Forks::Super::Job::Ipc::TOO_MANY_OPEN_FH_WARNINGS++;
+
+	try_to_close_some_open_filehandles();
+    }
+
 
     for my $try (1 .. 10) {
 	if ($try == 10) {
@@ -294,15 +303,89 @@ sub _handle_safeopen_failure {
     return;
 }
 
+sub try_to_close_some_open_filehandles {
+    return if 'rescue' ne $Forks::Super::ON_TOO_MANY_OPEN_FILEHANDLES;
+    my $nclosed = 0;
+
+    # in the child, you can close filehandles from unrelated jobs ...
+    if ($$ != $Forks::Super::MAIN_PID) {
+	use POSIX ();
+	POSIX::close($_) for 3 .. 1000;
+	return;
+    }
+
+    # where are the open filehandles, and which ones should we close?
+    my @open_handles = ();
+    foreach my $handle (@SAFEOPENED) {
+	if (ref $handle eq 'ARRAY') {
+	    my $fh = $handle->[1];
+	    next if $$fh->{closed};
+	    push @open_handles, [ $fh, $$fh->{job} ];
+	} else {
+	    no warnings 'uninitialized';
+	    next if $$handle->{closed};
+	    push @open_handles, [ $handle, $$handle->{job} ];
+	}
+    }
+
+    my @handles_for_finished_jobs =
+	grep { $_->[1]->is_complete } @open_handles;
+    @handles_for_finished_jobs = sort {
+	$b->[1]->is_reaped <=> $a->[1]->is_reaped
+	    ||
+	(${$a->[0]}->{closed} || 9E19) <=> (${$b->[0]}->{closed} || 9E19)
+	    ||
+	(${$a->[0]}->{opened} || 9E19) <=> (${$b->[0]}->{opened} || 9E19)
+    } @handles_for_finished_jobs;
+
+    foreach my $handle (@handles_for_finished_jobs) {
+
+	if ($__OPEN_FH > 0.9 * $__MAX_OPEN_FH) {
+	    while (my ($key,$jobhandle) = each %{$handle->[1]}) {
+		next if $key !~ /^child_/;
+		next if $key eq 'child_fh';
+
+		my $zz = eval { _close($jobhandle) } || 0;
+		carp $@,$key,$jobhandle if $@;
+		if ($zz) {
+		    print STDERR "closed ", $jobhandle, " for $key\n";
+		}
+		$nclosed += $zz;
+	    }
+	}
+    }
+
+
+#   print STDERR "--------------\n";
+
+    # close jobs that are
+    #    * old
+    #    * done (have a status)
+
+    if ($nclosed) {
+	warn "Forks::Super::Job::Ipc: Closed $nclosed open filehandles from jobs that look complete.\n";
+	$__OPEN_FH -= $nclosed;
+    }
+
+    return;
+}
+
 #############################################################################
 
 sub __set_fh_config_from_spec {
     my ($job, $config, $fh_spec) = @_;
-    if ($fh_spec =~ /all/i) {
+    if ($fh_spec =~ /\ball\b/i) {
 	$config->{in} = 1;
 	$config->{out} = 1;
 	$config->{err} = 1;
 	$config->{all} = 1;
+    } elsif ($fh_spec =~ /\bstress\b/) {
+	# for testing -- opens an extra 100 IPC files
+	$config->{in} = 1;
+	$config->{out} = 1;
+	$config->{err} = 1;
+	$config->{all} = 1;
+	$config->{stress} = 1 if $Forks::Super::Config::IS_TEST;
     } else {
 	if ($fh_spec =~ /(?<!jo)in/i) {
 	    $config->{in} = 1;
@@ -620,6 +703,16 @@ sub _preconfig_fh_files {
 					       job => $job);
 	debug("Using $config->{f_err} as shared file for child STDERR")
 	    if $job->{debug} && $config->{f_err};
+    }
+
+    if ($config->{stress}) {
+	for my $n (1 .. $_FILEHANDLES_PER_STRESSED_JOB) {
+	    my $fkey = "f_stress_" . $n;
+	    $config->{$fkey} = _choose_fh_filename(
+		'', purpose => "STRESS FILE " . $n, job => $job);
+	    debug("Using $config->{$fkey} as shared file for child STD$n")
+		if $job->{debug} && $config->{$fkey};
+	}
     }
     return;
 }
@@ -1574,6 +1667,29 @@ sub __config_fh_parent_stdout_pipes {
     return;
 }
 
+sub _config_fh_parent_stress {
+    my $job = shift;
+    my $fh_config = $job->{fh_config};
+    return unless $fh_config->{stress};
+    
+    for my $n (1 .. $_FILEHANDLES_PER_STRESSED_JOB) {
+	my $fh;
+	local $! = 0;
+	my $fkey = "f_stress_" . $n;
+	if (_safeopen($job, $fh, '<', $fh_config->{$fkey}, robust => 1)) {
+	    $job->{"child_stress_$n"} = $fh;
+	} else {
+	    my $_msg = sprintf "%d: %s Failed to open f_stress_%d:%s: %s\n",
+	    	$$, Forks::Super::Util::Ctime(), $n, $fh_config->{$fkey}, $!;
+
+	    warn 'Forks::Super::Job::config_fh_parent(): ',
+	        'could not open filehandle to read child STDOUT (from ',
+	    $fh_config->{$fkey}, "): $!\n";
+	}
+    }
+    return;
+}
+
 sub __config_fh_parent_stdout_file {
     my $job = shift;
     my $fh_config = $job->{fh_config};
@@ -1729,6 +1845,9 @@ sub Forks::Super::Job::_config_fh_parent {
     _config_fh_parent_stdin($job);
     _config_fh_parent_stdout($job);
     _config_fh_parent_stderr($job);
+
+    _config_fh_parent_stress($job);
+
     if ($job->{fh_config}{sockets}) {
 
 	# is it helpful or necessary for the parent to close the
@@ -2027,6 +2146,23 @@ sub __config_fh_child_stdout_file {
     return;
 }
 
+sub _config_fh_child_stress {
+    my $job = shift;
+    my $fh_config = $job->{fh_config};
+    return unless $fh_config->{stress};
+
+    for my $n (1 .. $_FILEHANDLES_PER_STRESSED_JOB) {
+	my $fkey = "f_stress_" . $n;
+	next unless $fh_config->{$fkey};
+	my $fh;
+	if (_safeopen($job,$fh,'>',$fh_config->{$fkey}, no_layers => 1)) {
+	    push @{$job->{child_fh_close}}, $fh;
+#	    my $glob = "main::STD$n";
+#	    _safeopen($job, *$glob, '>&', $fh);
+	}
+    }
+}
+
 sub _config_fh_child_stderr {
     my $job = shift;
     my $fh_config = $job->{fh_config};
@@ -2146,6 +2282,8 @@ sub Forks::Super::Job::_config_fh_child {
     _config_fh_child_stdout($job);
     _config_fh_child_stderr($job);
     _config_fh_child_stdin($job);
+
+    _config_fh_child_stress($job);
 
     if (!$USE_TIE_SH) {
 	if ($job->{fh_config} && $job->{fh_config}{sockets}) {
@@ -2474,7 +2612,9 @@ sub close_fh {
     {
 	local $" = ' ';
 	$modes = "@modes" || 'all';
-	$modes =~ s/all/stdin stdout stderr/i;
+	$modes =~ s/\ball\b/stress/i if $job->{fh_config}{stress};
+	$modes =~ s/\ball\b/stdin stdout stderr/i;
+	$modes =~ s/\bstress\b/stress stdin stdout stderr/i;
     }
     if ($job->{debug}) {
 	debug("closing [$modes] on $job");
@@ -2483,6 +2623,11 @@ sub close_fh {
     if ($modes =~ /stdin/i)  { _close_fh_stdin($job);  }
     if ($modes =~ /stdout/i) { _close_fh_stdout($job); }
     if ($modes =~ /stderr/i) { _close_fh_stderr($job); }
+    if ($modes =~ /stress/i) {
+	for my $n (1 .. $_FILEHANDLES_PER_STRESSED_JOB) {
+	    _close( $job->{"child_stress_$n"} );
+	}
+    }
     return;
 }
 

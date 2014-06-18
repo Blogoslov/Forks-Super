@@ -43,6 +43,7 @@ my $daemon = fork sub { sleep 10 }, {
 # for F::S to update its priority and CPU affinity
 
 my ($new_priority, $affinity);
+$affinity = "<not set>";
 for (1..10) {
 
     $new_priority = get_os_priority($daemon);
@@ -54,7 +55,7 @@ for (1..10) {
 	    last if $new_priority != $base_priority;
 	}
     }
-    if ($_==8) {
+    if ($_ == 8) {
 	warn "priority/affinity $new_priority/$affinity still not ",
 	    "at expected levels after 8 seconds";
     }
@@ -62,10 +63,16 @@ for (1..10) {
 }
 
 SKIP: {
-    if ($base_priority == 19) {
+    if ($base_priority == 19 && $new_priority == 19) {
 	# why did it take until 0.70 for this issue to show up?
 	skip "can't lower priority (19) of daemon process any more", 1;
     }
+
+    # on FreeBSD lowest priority is 20 ?
+    if ($^O =~ /bsd/i && $base_priority == 20 && $new_priority == 20) {
+	skip "can't lower priority (20) of daemon process any more", 1;
+    }
+
     ok($new_priority == $base_priority + 1,		        ### 1 ###
        "set os priority on daemon process")
 	or diag("failed to update priority $base_priority => $new_priority");

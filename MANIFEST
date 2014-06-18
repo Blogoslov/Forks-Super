@@ -73,6 +73,7 @@ t/30a-fork-from-child.t
 t/30b-fork-from-child.t
 t/31-chld-signal.tt
 t/32-stress-test.t
+t/33-too-many-filehandles.t
 t/40a-timeout.t
 t/40b-timeout.t
 t/40c-timeout.t

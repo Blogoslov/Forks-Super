@@ -227,8 +227,9 @@ Possible TODOs:
     ___ RT#78285 - monitor open filehandles. When we approach the
         limit, we may want to close the filehandles from old, finished
         jobs.
+	___ $ON_TOO_MANY_OPEN_FILEHANDLES -- needs test
 
-    ___ in forked-harness.pl, have option to return tests in order
+    _X_ in forked-harness.pl, have option to return tests in order
 
     _X_ alternate ways of invoking fork to support?
     	_X_ fork sub { ... }
@@ -242,8 +243,24 @@ Possible TODOs:
 	    Fork and run a command in the background, as if
 	    $options->{cmd} = \@cmd  where specified
 
-    _X_ http://stackoverflow.com/questions/20415186
-	on_busy => 'queue' should be the default in many contexts.
-	In some contexts, it is the only sensible value, like
-	_X_ jobs with dependencies
-	_XX_ jobs with delay / start_after
+    ___ async  method like threads, forks, Coro?
+
+    ___ $job->{child_stdin}, {child_stdout}, {child_xxx} should be
+        restructured as $job->{child_fh}{stdin}, {stdout}, etc.
+        i.e., a dedicated member that holds a collection of iohandles
+
+    ___ New syntax:
+        PREFORK BLOCK
+        POSTFORK BLOCK
+        POSTFORK_PARENT BLOCK
+        POSTFORK_CHILD BLOCK
+        Specifies code to be executed before and after fork calls.
+	What can this be used for?
+	* closing/opening filehandles
+	* closing/opening database connections
+	* closing/opening anything that doesn't play nice across
+	  a fork
+
+    ___ http://stackoverflow.com/questions/23514242
+        How can bg_eval return a lazy evaluation of a blessed object?
+        Is there a solution with AUTOLOAD ?

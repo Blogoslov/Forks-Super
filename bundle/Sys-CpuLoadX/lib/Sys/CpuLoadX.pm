@@ -6,6 +6,7 @@ package Sys::CpuLoadX;
 # (This copyright notice is from the original Sys::CpuLoad package)
 
 use strict;
+use warnings;
 
 require Exporter;
 require DynaLoader;

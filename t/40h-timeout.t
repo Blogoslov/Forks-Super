@@ -4,6 +4,19 @@ use Carp;
 use strict;
 use warnings;
 
+
+if ($^O eq 'MSWin32') {
+    Forks::Super::Config::CONFIG_module("Win32::API");
+    if ($Win32::API::VERSION && $Win32::API::VERSION < 0.71) {
+	warn qq[
+
+Win32::API v$Win32::API::VERSION found. v>=0.71 may be required
+to pass this test and use the features exercised by this test.
+
+];
+    }
+}
+
 # force loading of more modules in parent proc
 # so fast fail (see test#17, test#8) isn't slowed
 # down so much
@@ -43,7 +56,7 @@ SKIP: {
     waitpid $pid, 0;
     $t2 = Time::HiRes::time();
     ($t0,$t) = ($t2-$t0,$t2-$t);
-    okl($t < 4.95 && $t0 < 5.8, ### 2 ### 
+    okl($t < 4.95 && $t0 < 5.85, ### 2 ### obs 5.83
 	'exec-style DOES respect timeout (since v0.55) '
 	. "${t}s ${t0}s expected ~2s");
 

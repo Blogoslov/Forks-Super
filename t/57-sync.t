@@ -1,15 +1,40 @@
 use Forks::Super ':test';
 use Test::More tests => 14;
+use Config;
 use strict;
 use warnings;
 
-if ($^O eq 'cygwin') {
-    require Config;
+
+
+# exercise synchronization facilities in Forks::Super
+
+my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
+if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
+    $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
+}
+($ipc_dir) = $ipc_dir =~ /(.*)/;
+Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
+
+my $pid = fork { sync => 1, timeout => 10, sync_impl => $ARGV[0] };
+if ($pid == 0) {
+    Time::HiRes::sleep(0.25) while Forks::Super::Job->acquireAndRelease(0,0);
+    Forks::Super::Job->acquire(0);
+    sleep 5;
+    exit;
+}
+
+
+
+
+# alert about Cygwin bug, if applicable
+if ($^O eq 'cygwin' && $pid->{_sync}{implementation} eq 'Semaphlock') {
+
     if ($Config::Config{"d_flock"} && $Config::Config{"d_fcntl_can_lock"} &&
 	$Config::Config{"d_flock"} eq 'define' &&
 	$Config::Config{"d_fcntl_can_lock"} eq 'define') {
 
 	diag q~
+
 note for Cygwin users: I believe there is a flaw in recent
 versions of Cygwin's flock implementation. If this test (or
 t/07-sync.t) times out or hangs, you may have better luck
@@ -21,22 +46,9 @@ case, perl will use  fcntl  to emulate flock.
     }
 }
 
-# exercise synchronization facilities in Forks::Super
 
-my $ipc_dir = Forks::Super::Job::Ipc::_choose_dedicated_dirname();
-if (! eval {$ipc_dir = Cwd::abs_path($ipc_dir)}) {
-    $ipc_dir = Cwd::getcwd() . "/" . $ipc_dir;
-}
-($ipc_dir) = $ipc_dir =~ /(.*)/;
-Forks::Super::Job::Ipc::set_ipc_dir($ipc_dir);
 
-my $pid = fork { sync => 1, timeout => 10 };
-if ($pid == 0) {
-    Time::HiRes::sleep(0.25) while Forks::Super::Job->acquireAndRelease(0,0);
-    Forks::Super::Job->acquire(0);
-    sleep 5;
-    exit;
-}
+
 ok($pid->{_sync} && $pid->{_sync}{count} == 1,
    "job has _sync object, correct count");
 diag("sync implementation is ", $pid->{_sync}{implementation});
@@ -62,13 +74,13 @@ wait;
 
 ##################################################################
 
-$pid = fork { sync => 'PCN', timeout => 10 };
+$pid = fork { sync => 'PCN', timeout => 10, sync_impl => $ARGV[1] || $ARGV[0] };
 if ($pid == 0) {
     Forks::Super::Job->acquire(0);
     Forks::Super::Job->release(1);
     exit;
 }
-ok($pid->{_sync} && $pid->{_sync}{count}==3, 
+ok($pid->{_sync} && $pid->{_sync}{count}==3,
    "job has _sync object, correct count");
 
 ok(0 > $pid->acquire(0), 'job already has resource 0');

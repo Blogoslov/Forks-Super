@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
+use v5.006; # 5.7.1 or better recommended
 
 our %RECOMMENDED
     = ('YAML' => '0.62',
@@ -12,11 +13,11 @@ our %RECOMMENDED
        'PerlIO::gzip' => 0 );
 
 if ($^O eq 'cygwin') {
-    $RECOMMENDED{'Win32::API'} = '0.70';
+    $RECOMMENDED{'Win32::API'} = '0.71';
 }
 if ($^O eq 'MSWin32') {
     %RECOMMENDED = (%RECOMMENDED,
-		    'Win32::API' => '0.70',
+		    'Win32::API' => '0.71',
 		    'Win32::IPC' => 0,
 		    'Win32::Process' => '0.14',
 		    'Win32::Process::Kill' => '2.64',
@@ -71,6 +72,27 @@ v5.7.3. (Your version: $])
 
 };
     sleep 1;
+}
+
+
+# Win32::API v0.71 strongly recommended on Windows
+if ($^O eq 'MSWin32') {
+    my $V = eval 'use Win32::API; $Win32::API::VERSION';
+    if ($@) {
+	warn qq[
+
+Win32::API not found. That module is strongly recommended
+with this distribution on Windows systems (at least v0.71).
+
+];
+    } elsif ($V < 0.71) {
+	warn qq[
+
+Win32::API v$V found. This distribution strongly recommends
+that you upgrade Win32::API to at least v0.71.
+
+];
+    }
 }
 
 if (" @ARGV " =~ / bundle\b/i || " @ARGV " =~ / reinstall\b/i) {

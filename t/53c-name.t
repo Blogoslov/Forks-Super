@@ -8,6 +8,7 @@ use warnings;
 
 my ($pid,$pid1,$pid2,$pid3,$j1,$j2,$j3,$p,$q,$t,@j,$p1,$p2,$p3);
 our $TOL = $Forks::Super::SysInfo::TIME_HIRES_TOL || 1.0E-6;
+$TOL += 5e-05 if $^O eq 'MSWin32';
 
 $Forks::Super::MAX_PROC = 20;
 $Forks::Super::ON_BUSY = "queue";

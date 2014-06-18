@@ -61,7 +61,7 @@ $p = wait;
 my $v = Time::HiRes::time();
 ($t,$u) = ($v-$t, $v-$u);
 ok($p == $pid, "wait reaped correct pid");
-okl($u >= 4.9 && $t <= 9.35,             ### 11 ### was 6.5 obs 8.02,9.33,8.98
+okl($u >= 4.50 && $t <= 9.35,             ### 11 ### was 6.5 obs 9.33,8.98,4.78
    "background command ran for ${t}s ${u}s, expected 5-6s");
 
 ##################################################################

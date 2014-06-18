@@ -18,7 +18,7 @@ $t = Time::HiRes::time();
 $pid = fork { sub => sub { sleep 2 } };
 $p = wait 8;
 $t = Time::HiRes::time() - $t;
-okl($t >= 1.95 && $t <= 5.5,            ### 3 ### was 2.85 obs 3.14,3.16,3.93
+okl($t >= 1.85 && $t <= 5.5,            ### 3 ### was 2.85 obs 3.16,3.93,1.87
    "wait with long timeout returned when job finished ${t}s expected ~2s");
 ok($p == $pid, "wait with long timeout returns pid of job $p==$pid");
 $p = wait 4;

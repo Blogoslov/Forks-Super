@@ -16,7 +16,7 @@ use constant IS_CYGWIN => $^O =~ /cygwin/i;
 use constant IS_WIN32ish => &IS_WIN32 || &IS_CYGWIN;
 
 our @ISA = qw(Exporter);
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 our @EXPORT_OK = qw(Ctime is_number isValidPid pause qualify_sub_name 
 		    is_socket is_pipe IS_WIN32 IS_CYGWIN okl);
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -60,6 +60,13 @@ sub is_number {
     my $a = shift;
     $a =~ s/^\s+//;
     $a =~ s/\s+$//;
+
+    # www.cpantesters.org/cpan/report/dda92dc8-663c-11e3-bd14-e3bee4621ba3:
+    # "Out of memory during ridiculously large request". Does this mean
+    # that $a is too long?
+    if (length($a) > 100) {
+	return 0 if $a =~ /[^0-9eE.+-]/;
+    }
 
     # from Scalar::Util::PP::looks_like_number:
     return $a =~ /^ [+-]? [0-9]+ $/x ||
@@ -359,7 +366,7 @@ Forks::Super::Util - utility routines for Forks::Super module
 
 =head1 VERSION
 
-0.72
+0.73
 
 =head1 SYNOPSIS
 

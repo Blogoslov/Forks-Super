@@ -49,7 +49,7 @@ our %EXPORT_TAGS =
       'filehandles' => [ @export_ok_vars, @EXPORT ],
       'vars'        => [ @export_ok_vars, @EXPORT ],
       'all'         => [ @EXPORT_OK, @EXPORT ] );
-our $VERSION = '0.72';
+our $VERSION = '0.73';
 
 our $SOCKET_READ_TIMEOUT = 0.05;  # seconds
 our $MAIN_PID;
@@ -64,6 +64,7 @@ our $QUEUE_INTERRUPT;
 our $PKG_INITIALIZED;
 our $LAST_JOB;
 our $LAST_JOB_ID;
+our $ON_TOO_MANY_OPEN_FILEHANDLES;
 
 push @Devel::DumpTrace::EXCLUDE_PATTERN, '^Signals::XSIG';
 
@@ -132,7 +133,9 @@ sub _import_common_vars {
 		       [CHILD_FORK_OK => \$CHILD_FORK_OK],
 		       [QUEUE_MONITOR_FREQ
 			=> \$Forks::Super::Queue::QUEUE_MONITOR_FREQ],
-		       [QUEUE_INTERRUPT => \$QUEUE_INTERRUPT] ) {
+		       [QUEUE_INTERRUPT => \$QUEUE_INTERRUPT],
+		       [ON_TOO_MANY_OPEN_FILEHANDLES
+		        => \$ON_TOO_MANY_OPEN_FILEHANDLES] ) {
 
 	if ($arg eq $pair->[0]) {
 	    ${$pair->[1]} = $val;
@@ -237,6 +240,9 @@ sub _init {
 
     tie $ON_BUSY, 'Forks::Super::Tie::Enum', qw(block fail queue);
     $ON_BUSY = 'block';
+
+    tie $ON_TOO_MANY_OPEN_FILEHANDLES, 'Forks::Super::Tie::Enum', qw(fail rescue);
+    $ON_TOO_MANY_OPEN_FILEHANDLES = 'fail';
 
     tie $IPC_DIR, 'Forks::Super::Job::Ipc::Tie';
 
@@ -652,7 +658,7 @@ Forks::Super - extensions and convenience methods to manage background processes
 
 =head1 VERSION
 
-Version 0.72
+Version 0.73
 
 =head1 SYNOPSIS
 
@@ -694,7 +700,7 @@ Version 0.72
                   expiration => 1260000000 }; # complete by 8AM Dec 5, 2009 UTC
     # --- wait and waitpid support timeouts, too
     $pid = wait 3.0;
-    print "No child reaped in 5s" if waitpid 0, 0, 5.0 == &Forks::Super::WAIT_TIMEOUT;
+    print "No child reaped in 5s" if waitpid 0, 0, 5.0 == &Forks::Super::Wait::TIMEOUT;
 
     # --- run a child process starting from a different directory
     $pid = fork { dir => "some/other/directory",

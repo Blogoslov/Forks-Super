@@ -3,6 +3,20 @@ use Test::More tests => 28;
 use strict;
 use warnings;
 
+
+if ($^O eq 'MSWin32') {
+    Forks::Super::Config::CONFIG_module("Win32::API");
+    if ($Win32::API::VERSION && $Win32::API::VERSION < 0.71) {
+	warn qq[
+
+Win32::API v$Win32::API::VERSION found. v>=0.71 may be required
+to pass this test and use the features exercised by this test.
+
+];
+    }
+}
+
+
 if (${^TAINT}) {
     $ENV{PATH} = "";
     ($^X) = $^X =~ /(.*)/;
@@ -111,11 +125,14 @@ sleep 1;
 $msg = sprintf "%05x", rand() * 99999;
 $z = print $fh_in "$msg\n";
 Forks::Super::close_fh($pid,'stdin');
-ok($z > 0, "open3: print to input handle ok = $z");
+ok($z > 0, "open3: print to input handle ok = $z"); 	       ### 25 ###
 
 for (1..30) {
     Forks::Super::Util::pause(1.0);
     last if $job->is_complete;
+    if ($_ == 30) {
+	diag "open3 command still not complete after 30s";
+    }
 }
 
 @out = <$fh_out>;
